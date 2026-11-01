@@ -65,6 +65,17 @@ const dmg = (s) => `<html><body style="margin:0;width:660px;height:400px;backgro
     await svg(fg, path.join(res, `mipmap-${d}/ic_launcher_foreground.png`), Math.round(px * 108 / 48), true);
   }
   await svg(ios, path.join(res, 'drawable-nodpi/app_mark.png'), 256);
+  // Android's widget picker shows this before the widget is added: the small widget at the sample place.
+  await page.setViewportSize({ width: 220, height: 220 });
+  await page.setContent(`<html><body style="margin:0;background:transparent;font-family:Inter,-apple-system,system-ui,sans-serif">
+    <div style="width:220px;height:220px;border-radius:28px;background:#1A1816;color:#fff;box-sizing:border-box;padding:18px 18px 16px;position:relative;overflow:hidden">
+      <div style="position:absolute;inset:0 0 auto;height:4px;background:#990F3D"></div>
+      <div style="font-size:15px;font-weight:600;letter-spacing:-.2px;line-height:19px">Maroon Bells,<br>Colorado</div>
+      <div style="margin-top:16px;font-size:38px;font-weight:600;letter-spacing:-1.5px;line-height:40px">9,587 ft</div>
+      <div style="font-size:17px;color:#B0A898;font-weight:500">2,922 m</div>
+      <div style="position:absolute;left:18px;bottom:16px;font-size:12px;color:#E0D8D0;line-height:16px">39.09898° N<br>106.94117° W</div>
+    </div></body></html>`);
+  await page.screenshot({ path: path.join(res, 'drawable-nodpi/widget_preview.png'), omitBackground: true });
   for (const [s, name] of [[1, 'background.png'], [2, 'background@2x.png']]) {
     await page.setViewportSize({ width: 660 * s, height: 400 * s });
     await page.setContent(dmg(s));
