@@ -94,7 +94,7 @@ fun MapSnippet(
             // Night mode dims the map; the screen's red multiply then does the rest.
             if (night) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
             // Four buttons stack down the right when there's room; on a short map they sit in a row.
-            val tall = maxHeight >= 4 * 44.dp + 8.dp
+            val tall = maxHeight >= 44.dp * 4 + 8.dp
             val buttons: @Composable () -> Unit = {
                 MapButton(Icons.Filled.Add, "Zoom in") { zoom = (zoom + 1).coerceAtMost(19.0) }
                 MapButton(Icons.Filled.Remove, "Zoom out") { zoom = (zoom - 1).coerceAtLeast(3.0) }

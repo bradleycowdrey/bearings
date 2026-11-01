@@ -45,7 +45,7 @@
   .where { flex: 1; min-width: 0; }
   .where h1 { margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -.025em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .where .when { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sample { font-size: 11px; font-weight: 600; color: var(--bg); background: var(--warn); border-radius: 980px; padding: 2px 8px; margin-left: 6px; vertical-align: 2px; letter-spacing: 0; }
+  .sample { font-size: 11px; line-height: 14px; font-weight: 600; color: var(--bg); background: var(--warn); border-radius: 980px; padding: 1px 7px; margin-left: 8px; vertical-align: 1px; letter-spacing: 0; }
   .circle { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer; position: relative;
     background: var(--tile); box-shadow: inset 0 0 0 0.5px var(--border-strong); color: var(--secondary); transition: background .15s, color .15s; }
   .circle::after { content: ""; position: absolute; inset: -4px; }   /* a 44-point target */
@@ -939,14 +939,18 @@
     return m < 60 ? `${m} min ago` : `${Math.round(m / 60)} hr ago`;
   }
 
-  function drawWhen() { const t = new Date(now()); $('#when').textContent = `${fmtDay.format(t)} · ${fmtTime.format(t)}`; }
+  function drawWhen() {
+    const t = new Date(now());
+    // The Sample badge sits on this line, so a long place name above keeps the whole width.
+    $('#when').innerHTML = `${esc(fmtDay.format(t))} · ${esc(fmtTime.format(t))}` + (S.sample ? '<span class="sample" title="No location here, so Bearings shows a sample place">Sample</span>' : '');
+  }
 
   function drawPlace() {
     const f = S.fix;
     const title = S.sample ? 'Maroon Bells, Colorado'
       : f ? (S.place || (S.place === '' ? 'Where you are' : 'Finding the place…'))
       : S.locState === 'asking' ? 'Finding where you are…' : 'Bearings';
-    $('#place').innerHTML = esc(title) + (S.sample ? '<span class="sample" title="No location here, so Bearings shows a sample place">Sample</span>' : '');
+    $('#place').textContent = title;
     $('#place').title = title;
 
     const ask = $('#askLoc'), tiles = $('#tiles');

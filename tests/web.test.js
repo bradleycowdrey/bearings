@@ -157,7 +157,7 @@ async function layout(page) {
     const { context, page, errors } = await open(browser, w, h, `?demo&nomap&heading=228&lock=240&spot&moving&t=${T0}`);
     await page.waitForTimeout(400);
     check(await txt(page, '#deg') === '228°' && await txt(page, '#pt') === 'SW', `${name}: sample heading reads 228° SW`);
-    check((await txt(page, '#place')).startsWith('Maroon Bells, Colorado') && await txt(page, '#when') === 'Sun, Nov 1 · 9:00 AM', `${name}: the place and the time (${await txt(page, '#when')})`);
+    check(await txt(page, '#place') === 'Maroon Bells, Colorado' && (await txt(page, '#when')).startsWith('Sun, Nov 1 · 9:00 AM'), `${name}: the place and the time (${await txt(page, '#when')})`);
     check((await txt(page, '#subline')).includes('Locked 240° · turn 12° right') && (await txt(page, '#subline')).includes('True north · 8° E'), `${name}: true north, declination and the locked bearing`);
     check(await txt(page, '#latV') === MB.dd.split(', ')[0] && await txt(page, '#lonV') === MB.dd.split(', ')[1], `${name}: latitude and longitude`);
     check(await txt(page, '#sunV') === `${hm(sky.sunrise)} – ${hm(sky.sunset)}`, `${name}: sunrise and sunset (${await txt(page, '#sunV')})`);
