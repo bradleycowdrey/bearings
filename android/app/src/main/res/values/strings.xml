@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bearings</string>
+    <string name="widget_description">Where you are, your elevation in feet and metres, and the sun and moon.</string>
+</resources>

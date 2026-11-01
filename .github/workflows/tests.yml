@@ -1,0 +1,28 @@
+name: Tests
+
+# Every push and pull request: the Swift unit tests (coordinate formats against Tests/fixtures/geo.json,
+# units, terms schedule) on a Mac, and the web app's tests at phone, tablet and desktop sizes.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  swift:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: swift test 2>&1 | tail -40; exit ${PIPESTATUS[0]}
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Web tests
+        run: |
+          npm install --no-save playwright@1.56.1 mgrs@2.2.0 proj4@2.22.0 open-location-code@1.0.3 geomagnetism@0.2.0
+          npx playwright install --with-deps chromium
+          scripts/build-web.sh
+          git diff --exit-code docs/ || { echo "::error::docs/ is out of date: run scripts/build-web.sh and commit"; exit 1; }
+          node tests/web.test.js

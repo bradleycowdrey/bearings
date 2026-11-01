@@ -1,0 +1,70 @@
+name: Mac
+
+# Builds the Mac app and its widget on a real Mac, checks the packaged widget (entitlements, App Group,
+# extension point), and runs `Bearings --selftest`: the core's known answers, a live ground elevation
+# from Open-Meteo, naming a place, the update check, the screen drawn with the sample place, and every
+# widget size drawn. The report and pictures go to the ci-shots branch; the job fails if any check fails.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  selftest:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build
+        run: scripts/build-app.sh 0.0.0-selftest
+      - name: Check the packaged widget
+        run: |
+          # What macOS needs to run the widget at all: its sandbox, network, location and App Group
+          # entitlements survive signing, the app shares the group, and it registers as a widget.
+          OUT="$RUNNER_TEMP/shots"; mkdir -p "$OUT"
+          W=dist/Bearings.app/Contents/PlugIns/BearingsWidget.appex
+          {
+            echo "== entitlements"; codesign -d --entitlements - --xml "$W" 2>/dev/null | plutil -convert xml1 -o - - || true
+            echo "== extension point"; plutil -extract NSExtension.NSExtensionPointIdentifier raw "$W/Contents/Info.plist"
+            echo "== places"; ls -l "$W/Contents/Resources/Cities.tsv" dist/Bearings.app/Contents/Resources/Cities.tsv
+          } > "$OUT/widget-package.txt" 2>&1
+          cat "$OUT/widget-package.txt"
+          grep -q 'com.apple.security.app-sandbox' "$OUT/widget-package.txt" || { echo "::error::The widget lost its sandbox entitlement; macOS won't run it"; exit 1; }
+          grep -q 'com.apple.security.network.client' "$OUT/widget-package.txt" || { echo "::error::The widget lost its network entitlement; it can't look up the elevation or the map"; exit 1; }
+          grep -q 'com.apple.security.personal-information.location' "$OUT/widget-package.txt" || { echo "::error::The widget lost its location entitlement"; exit 1; }
+          grep -q '2XV97FZ86G.com.bradcowdrey.bearings' "$OUT/widget-package.txt" || { echo "::error::The widget lost its App Group; it can't read the app's last fix"; exit 1; }
+          codesign -d --entitlements - --xml dist/Bearings.app 2>/dev/null | plutil -convert xml1 -o - - | grep -q '2XV97FZ86G.com.bradcowdrey.bearings' || { echo "::error::The app lost its App Group; widgets can't read its last fix"; exit 1; }
+          grep -q 'com.apple.widgetkit-extension' "$OUT/widget-package.txt" || { echo "::error::The widget isn't declared as a WidgetKit extension"; exit 1; }
+          grep -q 'Cities.tsv' "$OUT/widget-package.txt" && [ -s "$W/Contents/Resources/Cities.tsv" ] || { echo "::error::The place list (Cities.tsv) isn't bundled with the widget"; exit 1; }
+          pluginkit -a "$W" || true
+          sleep 2
+          echo "== pluginkit" >> "$OUT/widget-package.txt"
+          pluginkit -m -v -i com.bradcowdrey.bearings.widget >> "$OUT/widget-package.txt" 2>&1 || true
+          tail -3 "$OUT/widget-package.txt"
+      - name: Run self-test
+        run: |
+          OUT="$RUNNER_TEMP/shots"; mkdir -p "$OUT"
+          dist/Bearings.app/Contents/MacOS/Bearings --selftest "$OUT" > "$OUT/app.log" 2>&1 &
+          PID=$!
+          for i in $(seq 1 120); do [ -f "$OUT/report.txt" ] && break; sleep 1; done
+          sleep 1; kill $PID 2>/dev/null || true
+          cat "$OUT/report.txt" 2>/dev/null || { echo "no report"; tail -30 "$OUT/app.log"; }
+      - name: Publish to ci-shots branch
+        if: always() && github.event_name != 'pull_request'
+        run: |
+          cd "$RUNNER_TEMP/shots"
+          echo "$GITHUB_SHA" > commit.txt
+          git init -q -b ci-shots
+          git config user.name "ci"; git config user.email "ci@users.noreply.github.com"
+          git add -A && git commit -qm "Mac self-test for $GITHUB_SHA"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-shots
+      - name: Fail on any failed check
+        run: |
+          grep -E "^FAIL" "$RUNNER_TEMP/shots/report.txt" | sed 's/^/::error::/' || true
+          head -1 "$RUNNER_TEMP/shots/report.txt" | grep -q "ALL PASSED"

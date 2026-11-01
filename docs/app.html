@@ -1,0 +1,1236 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="icon" href="icon.png"><link rel="apple-touch-icon" href="icon.png"></head><body>
+<title>Bearings</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Bearings: a compass with where you are, your coordinates, elevation, the sun and moon, and a map, on one screen. Free and open source, by Bradley Cowdrey.">
+<meta name="theme-color" content="#1A1816">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  /* One column, one screen (docs/DESIGN.md): header with the place and time, dial, readout, tiles, map.
+     bradcowdrey.com colours: warm near-black, cream, crimson. 4-point grid; 16 margins; 12 gaps. */
+  :root {
+    color-scheme: dark;
+    --bg: #1A1816; --tile: #23201D; --tile-hover: #2A2622; --border: #2A2520; --border-strong: #3A3530;
+    --text: #FFFFFF; --cream: #FFF1E5; --secondary: #E0D8D0; --muted: #B0A898; --faint: #9A9286;
+    --crimson: #990F3D; --accent: #E04A7A; --ok: #8FC89A; --warn: #F2A65A; --sun: #F4B860;
+    --font: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --gap: 12px; --r-tile: 18px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 400 15px/1.4 var(--font); letter-spacing: -.01em; font-feature-settings: "cv11", "ss01";
+    padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+  a { color: inherit; text-decoration: none; }
+  :focus-visible { outline: 2px solid var(--cream); outline-offset: 2px; border-radius: 10px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .panel {
+    position: relative; width: 100%; max-width: 460px; margin: 0 auto;
+    background: var(--bg); border-radius: 28px;
+    box-shadow: 0 0 0 0.5px var(--border-strong), 0 40px 100px rgba(0,0,0,.55);
+    padding: 20px 16px 16px; display: flex; flex-direction: column; gap: var(--gap); overflow: hidden;
+  }
+  .panel::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--crimson); }
+  .embedded .panel { box-shadow: 0 0 0 0.5px var(--border-strong), 0 16px 32px rgba(0,0,0,.4); }
+  /* Header: where and when */
+  .hdr { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+  .where { flex: 1; min-width: 0; }
+  .where h1 { margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -.025em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .where .when { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sample { font-size: 11px; font-weight: 600; color: var(--bg); background: var(--warn); border-radius: 980px; padding: 2px 8px; margin-left: 6px; vertical-align: 2px; letter-spacing: 0; }
+  .circle { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer; position: relative;
+    background: var(--tile); box-shadow: inset 0 0 0 0.5px var(--border-strong); color: var(--secondary); transition: background .15s, color .15s; }
+  .circle::after { content: ""; position: absolute; inset: -4px; }   /* a 44-point target */
+  .circle:hover { background: var(--tile-hover); color: var(--text); }
+  .circle svg { width: 18px; height: 18px; }
+
+  /* Menu */
+  .menu-wrap { position: relative; }
+  .menu { position: absolute; z-index: 30; top: 44px; right: 0; width: 264px; max-height: min(74vh, 620px); overflow: auto;
+    background: #26221F; border-radius: 14px; padding: 6px; box-shadow: 0 0 0 0.5px var(--border-strong), 0 18px 48px rgba(0,0,0,.6); }
+  .menu .sec { padding: 10px 10px 4px; font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+  .menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px 10px; border: 0; border-radius: 8px;
+    background: none; text-align: left; cursor: pointer; font-size: 14px; }
+  .menu button:hover, .menu button:focus-visible { background: var(--border-strong); }
+  .menu button:disabled { color: var(--faint); cursor: default; background: none; }
+  .menu .ck { width: 14px; flex: none; text-align: center; color: var(--cream); }
+  .menu hr { border: 0; border-top: 0.5px solid var(--border-strong); margin: 6px 4px; }
+
+  /* Dial */
+  .compass { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .dial-wrap { position: relative; width: min(100%, 360px, 36vh); aspect-ratio: 1; }
+  .dial { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
+  .dial svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  #card { transform-origin: 200px 200px; will-change: transform; }
+  .dial-note { position: absolute; left: 50%; top: 63%; transform: translateX(-50%); width: 60%; text-align: center; font-size: 12px; line-height: 1.35; color: var(--muted); pointer-events: none; }
+  .dial-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); height: 44px; padding: 0 20px; border: 0; border-radius: 980px;
+    background: var(--cream); color: var(--bg); font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .readout { display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-top: 4px; }
+  .readout .deg { font-size: 56px; font-weight: 600; letter-spacing: -.045em; line-height: 56px; }
+  .readout .pt { font-size: 28px; font-weight: 500; letter-spacing: -.03em; color: var(--muted); line-height: 1; min-width: 2.2em; }
+  .subline { display: flex; justify-content: center; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 18px; font-size: 13px; line-height: 18px; color: var(--muted); text-align: center; }
+  .subline .dot { color: var(--faint); }
+  .subline .lock { color: var(--accent); font-weight: 600; }
+  .subline .bad { color: var(--warn); font-weight: 600; }
+
+  /* Marked spot */
+  .spot { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px 0 14px; border-radius: 980px; background: var(--tile); font-size: 14px; }
+  .spot .pin { width: 14px; height: 14px; flex: none; color: var(--accent); }
+  .spot b { font-weight: 600; }
+  .spot .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--secondary); }
+  .spot .x { width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%; background: var(--border-strong); color: var(--secondary); cursor: pointer; display: grid; place-items: center; position: relative; }
+  .spot .x::after { content: ""; position: absolute; inset: -6px; }
+  .spot .x svg { width: 12px; height: 12px; }
+
+  /* Tiles */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile { position: relative; background: var(--tile); border-radius: var(--r-tile); padding: 12px 14px; min-width: 0; text-align: left; border: 0; }
+  button.tile { cursor: pointer; transition: background .15s; }
+  button.tile:hover { background: var(--tile-hover); }
+  .tile.wide { grid-column: 1 / -1; }
+  .tile .k { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); }
+  .tile .v { font-size: 19px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .tile .v small { font-size: 15px; font-weight: 500; color: var(--muted); letter-spacing: -.01em; margin-left: 6px; }
+  .tile .s { display: flex; align-items: center; gap: 5px; font-size: 12px; line-height: 16px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .tile .s span { overflow: hidden; text-overflow: ellipsis; }
+  .tile .s svg { width: 12px; height: 12px; flex: none; }
+  .stale .v { color: var(--muted); }
+  .ask { background: var(--tile); border-radius: var(--r-tile); padding: 14px; display: flex; align-items: center; gap: 12px; }
+  .ask p { margin: 0; flex: 1; font-size: 13px; color: var(--secondary); line-height: 1.4; }
+  .ask button { flex: none; height: 40px; padding: 0 16px; border: 0; border-radius: 980px; background: var(--cream); color: var(--bg); font-weight: 600; font-size: 14px; cursor: pointer; }
+
+  /* Map */
+  .map { position: relative; min-height: 120px; height: clamp(140px, 22vh, 220px); border-radius: var(--r-tile); overflow: hidden; background: var(--tile); }
+  #mapView { position: absolute; inset: 0; }
+  .map .maplibregl-ctrl-attrib { font-size: 10px; background: rgba(26,24,22,.72); color: var(--secondary); }
+  .map .maplibregl-ctrl-attrib a { color: var(--secondary); }
+  .map .maplibregl-ctrl-attrib-button { filter: invert(1); }
+  .map-msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; font-size: 13px; color: var(--muted); }
+  .map-tools { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
+  .map-tools button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer; position: relative;
+    background: rgba(26,24,22,.88); color: var(--cream); box-shadow: 0 0 0 0.5px var(--border-strong); font-size: 18px; line-height: 1; }
+  .map-tools button::after { content: ""; position: absolute; inset: -3px -6px; }
+  .map-tools button[aria-pressed="true"] { background: var(--cream); color: var(--bg); }
+  .map-tools button svg { width: 15px; height: 15px; }
+  .speed { position: absolute; left: 8px; bottom: 8px; z-index: 2; height: 28px; padding: 0 10px; border-radius: 980px; display: flex; align-items: center;
+    background: rgba(26,24,22,.88); box-shadow: 0 0 0 0.5px var(--border-strong); font-size: 13px; font-weight: 600; }
+  .me { position: relative; width: 18px; height: 18px; }
+  .me i { position: absolute; inset: 0; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(0,0,0,.5); }
+  .me .acc { position: absolute; left: 50%; top: 50%; border-radius: 50%; background: rgba(224,74,122,.16); border: 1px solid rgba(224,74,122,.45); transform: translate(-50%, -50%); pointer-events: none; }
+  .me .cone { position: absolute; left: 50%; top: 50%; width: 70px; height: 70px; margin: -70px 0 0 -35px; transform-origin: 35px 70px; pointer-events: none;
+    background: linear-gradient(to top, rgba(224,74,122,.55), rgba(224,74,122,0)); clip-path: polygon(50% 100%, 18% 0, 82% 0); }
+  .spotmark { width: 14px; height: 14px; border-radius: 50%; background: var(--cream); box-shadow: 0 0 0 3px var(--accent); }
+
+  /* Footer (Mac-sized and wider: on a phone it's in About) */
+  .foot { display: flex; justify-content: flex-end; font-size: 12px; color: var(--muted); padding: 0 2px; }
+  .foot a:hover { color: var(--text); }
+  .toast { position: fixed; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50;
+    background: var(--cream); color: var(--bg); font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 980px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  /* Night mode: everything red, to keep your eyes used to the dark. */
+  .night-filter { position: fixed; inset: 0; z-index: 40; pointer-events: none; background: #FF2E1F; mix-blend-mode: multiply; }
+  .night .map #mapView { filter: brightness(.6); }
+
+  dialog { max-width: min(420px, calc(100vw - 32px)); border: 0; border-radius: 22px; padding: 24px; background: #26221F; color: var(--text);
+    box-shadow: 0 0 0 0.5px var(--border-strong), 0 30px 80px rgba(0,0,0,.6); }
+  dialog::backdrop { background: rgba(0,0,0,.55); }
+  dialog h2 { margin: 12px 0 6px; font-size: 20px; letter-spacing: -.02em; }
+  dialog p { margin: 0 0 10px; color: var(--secondary); font-size: 14px; line-height: 1.5; }
+  dialog u { text-decoration-color: var(--faint); }
+  dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  dialog .row button, dialog .row a { height: 40px; padding: 0 16px; border: 0; border-radius: 980px; cursor: pointer; font-weight: 600; font-size: 14px; display: inline-grid; place-items: center; }
+  dialog .primary { background: var(--cream); color: var(--bg); }
+  dialog .plain { background: var(--border-strong); color: var(--text); }
+
+  /* On a phone the column is the whole screen: no frame, map to the bottom. */
+  @media (max-width: 500px) {
+    body { padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+    html, body { height: 100%; }
+    .panel { box-shadow: none; padding: 0; border-radius: 0; min-height: 100%; }
+    .panel::before, .foot { display: none; }
+    .panel { gap: 10px; }
+    .map { flex: 1 1 0; height: auto; min-height: 110px; }
+    .spot { min-height: 40px; }
+    .dial-wrap { width: min(100%, 360px, 31vh); }
+    .readout .deg { font-size: 52px; line-height: 52px; }
+    .tile { padding: 10px 14px; }
+  }
+
+  /* Short phones (iPhone SE): a smaller dial, readout and map, so it still fits one screen. */
+  @media (max-width: 500px) and (max-height: 700px) {
+    .dial-wrap { width: min(100%, 26vh); }
+    .readout .deg { font-size: 44px; line-height: 44px; } .readout .pt { font-size: 22px; }
+    .tile { padding: 9px 12px; } .tile .v { font-size: 17px; line-height: 22px; }
+    .map { min-height: 96px; }
+    .where h1 { font-size: 18px; line-height: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main class="panel" id="panel">
+  <header class="hdr">
+    <div class="where">
+      <h1 id="place">Bearings</h1>
+      <div class="when num" id="when">&nbsp;</div>
+    </div>
+    <div class="menu-wrap">
+      <button type="button" class="circle" id="moreBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Settings and more" title="Settings and more">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+      </button>
+      <div class="menu" id="menu" role="menu" hidden></div>
+    </div>
+  </header>
+
+  <section class="compass" aria-label="Compass">
+    <div class="dial-wrap">
+      <button type="button" class="dial" id="dial" aria-label="Compass">
+        <svg viewBox="0 0 400 400" id="dialSvg" aria-hidden="true"></svg>
+      </button>
+      <button type="button" class="dial-cta" id="startCompass" hidden>Start Compass</button>
+      <div class="dial-note" id="dialNote" hidden></div>
+    </div>
+    <div class="readout num" aria-hidden="true"><span class="deg" id="deg">—</span><span class="pt" id="pt"></span></div>
+    <div class="subline" id="subline"></div>
+    <span class="sr" id="srHeading" aria-live="polite"></span>
+  </section>
+
+  <div class="spot" id="spotPill" hidden>
+    <svg class="pin" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>
+    <span class="txt num" id="spotText"></span>
+    <button type="button" class="x" id="spotClear" aria-label="Clear the marked spot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+
+  <section aria-label="Where you are">
+    <div class="ask" id="askLoc" hidden>
+      <p>Allow your location to see where you are, your coordinates, elevation and map. It stays on this device.</p>
+      <button type="button" id="useLoc">Use My Location</button>
+    </div>
+    <div class="grid" id="tiles">
+      <button type="button" class="tile" id="latTile"><div class="k">Latitude</div><div class="v" id="latV">—</div><div class="s" id="latS">&nbsp;</div></button>
+      <button type="button" class="tile" id="lonTile"><div class="k">Longitude</div><div class="v" id="lonV">—</div><div class="s" id="lonS">&nbsp;</div></button>
+      <button type="button" class="tile wide" id="gridTile" hidden><div class="k" id="gridK">UTM</div><div class="v" id="gridV">—</div><div class="s" id="gridS">&nbsp;</div></button>
+      <div class="tile" id="eleTile" role="group"><div class="k">Elevation</div><div class="v" id="eleV">—</div><div class="s" id="eleS">&nbsp;</div></div>
+      <div class="tile" id="sunTile" role="group"><div class="k">Sun</div><div class="v" id="sunV">—</div><div class="s" id="sunS">&nbsp;</div></div>
+    </div>
+  </section>
+
+  <section class="map" aria-label="Map of where you are">
+    <div id="mapView"></div>
+    <div class="map-msg" id="mapMsg">The map appears once Bearings knows where you are.</div>
+    <div class="map-tools" id="mapTools" hidden>
+      <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+      <button type="button" id="zoomOut" aria-label="Zoom out">−</button>
+      <button type="button" id="followBtn" aria-pressed="false" aria-label="Follow your heading" title="Follow your heading">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 19 21 12 17 5 21Z"/></svg>
+      </button>
+      <button type="button" id="openMap" aria-label="Open in a full map" title="Open in a full map">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+      </button>
+    </div>
+    <div class="speed num" id="speedChip" hidden></div>
+  </section>
+
+  <footer class="foot">
+    <a href="https://bradcowdrey.com" target="_blank" rel="noopener">Made by Bradley Cowdrey · bradcowdrey.com ↗</a>
+  </footer>
+</main>
+<div class="night-filter" id="nightFilter" hidden></div>
+
+<dialog id="about">
+  <svg width="56" height="56" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#2A2420"/><rect width="64" height="3" fill="#990F3D"/><circle cx="32" cy="33" r="21" fill="none" stroke="#3E3832" stroke-width="1.5"/><path d="M32 17 37 33H27Z" fill="#E04A7A"/><path d="M32 49 27 33h10Z" fill="#FFF1E5"/><circle cx="32" cy="33" r="2" fill="#1A1816"/></svg>
+  <h2>Bearings</h2>
+  <p>Get your bearings: the compass, where you are, your coordinates and elevation, the sun and moon, and a map, on one screen. Free, open source, no ads, no tracking.</p>
+  <p>Made by Bradley Cowdrey · <a href="https://bradcowdrey.com" target="_blank" rel="noopener"><u>bradcowdrey.com</u></a></p>
+  <p style="font-size:12px;color:var(--muted)">Ground elevation: <a href="https://open-meteo.com" target="_blank" rel="noopener"><u>Open-Meteo</u></a> (CC BY 4.0), Copernicus DEM GLO-90 © DLR/ESA.
+    Maps: <a href="https://openfreemap.org" target="_blank" rel="noopener"><u>OpenFreeMap</u></a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"><u>OpenStreetMap contributors</u></a>, <a href="https://maplibre.org" target="_blank" rel="noopener"><u>MapLibre</u></a>.
+    Places: <a href="https://www.geonames.org" target="_blank" rel="noopener"><u>GeoNames</u></a> (CC BY 4.0). Magnetic model: WMM2025 (NOAA, BGS).
+    Not a navigation or safety instrument.</p>
+  <div class="row">
+    <a class="plain" href="https://github.com/bradleycowdrey/bearings" target="_blank" rel="noopener">Source code</a>
+    <button type="button" class="primary" id="aboutClose">Done</button>
+  </div>
+</dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+/* Bearings core: headings, coordinate formats, units, sun and moon, distances. Pure functions, no DOM.
+   The Swift (Sources/BearingsCore) and Kotlin (android/.../Core.kt) versions mirror these one for one,
+   and all three are checked against the same reference values. */
+(function (root) {
+  'use strict';
+
+  const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const NAMES = ['North', 'North-northeast', 'Northeast', 'East-northeast', 'East', 'East-southeast', 'Southeast', 'South-southeast',
+    'South', 'South-southwest', 'Southwest', 'West-southwest', 'West', 'West-northwest', 'Northwest', 'North-northwest'];
+
+  /** 0 ≤ angle < 360. */
+  function normalize(deg) { const d = deg % 360; return d < 0 ? d + 360 : d; }
+  /** The short way from `from` to `to`, in -180…180 (positive is clockwise). */
+  function delta(from, to) { let d = normalize(to - from); if (d > 180) d -= 360; return d; }
+  /** One of the 16 compass points. */
+  function point(deg) { return POINTS[Math.round(normalize(deg) / 22.5) % 16]; }
+  function pointName(deg) { return NAMES[Math.round(normalize(deg) / 22.5) % 16]; }
+
+  /** Smooths headings as a unit vector, so 359° and 1° average to 0°, not 180°.
+      `k` is how much of each new reading to take (0…1). */
+  function smoother(k) {
+    let x = null, y = null;
+    return {
+      push(deg) {
+        const r = deg * Math.PI / 180;
+        if (x === null) { x = Math.cos(r); y = Math.sin(r); }
+        else { x += k * (Math.cos(r) - x); y += k * (Math.sin(r) - y); }
+        return normalize(Math.atan2(y, x) * 180 / Math.PI);
+      },
+      reset() { x = y = null; },
+    };
+  }
+
+  // ---------- Coordinate formats ----------
+
+  function hemi(v, pos, neg) { return v < 0 ? neg : pos; }
+  function fixed(v, n) { return v.toFixed(n); }
+  function pad(v, w) { return String(v).padStart(w, '0'); }
+
+  /** 39.73920° N */
+  function dd(v, isLat) { return `${fixed(Math.abs(v), 5)}° ${isLat ? hemi(v, 'N', 'S') : hemi(v, 'E', 'W')}`; }
+
+  /** 39° 44′ 21.1″ N (seconds to a tenth, about 3 m). */
+  function dms(v, isLat) {
+    const a = Math.abs(v);
+    let tenths = Math.round(a * 36000);            // whole tenths of a second, so 59.95″ never shows as 60.0″
+    const d = Math.floor(tenths / 36000); tenths -= d * 36000;
+    const m = Math.floor(tenths / 600); tenths -= m * 600;
+    return `${d}° ${pad(m, 2)}′ ${pad((tenths / 10).toFixed(1), 4)}″ ${isLat ? hemi(v, 'N', 'S') : hemi(v, 'E', 'W')}`;
+  }
+
+  /** 39° 44.352′ N (minutes to a thousandth, about 2 m). */
+  function ddm(v, isLat) {
+    const a = Math.abs(v);
+    let th = Math.round(a * 60000);
+    const d = Math.floor(th / 60000); th -= d * 60000;
+    return `${d}° ${pad((th / 1000).toFixed(3), 6)}′ ${isLat ? hemi(v, 'N', 'S') : hemi(v, 'E', 'W')}`;
+  }
+
+  // UTM on WGS84 (Snyder's series: well under a metre inside a zone).
+  const A = 6378137, F = 1 / 298.257223563, K0 = 0.9996;
+  const E2 = F * (2 - F), EP2 = E2 / (1 - E2);
+  const BANDS = 'CDEFGHJKLMNPQRSTUVWX';
+
+  function utmZone(lat, lon) {
+    let zone = Math.floor((lon + 180) / 6) + 1;
+    if (lon >= 180) zone = 60;
+    if (lat >= 56 && lat < 64 && lon >= 3 && lon < 12) zone = 32;                  // Norway
+    if (lat >= 72 && lat < 84) {                                                  // Svalbard
+      if (lon >= 0 && lon < 9) zone = 31; else if (lon >= 9 && lon < 21) zone = 33;
+      else if (lon >= 21 && lon < 33) zone = 35; else if (lon >= 33 && lon < 42) zone = 37;
+    }
+    return zone;
+  }
+
+  /** {zone, band, easting, northing} or null near the poles (UTM covers 80° S to 84° N). */
+  function utm(lat, lon) {
+    if (!(lat >= -80 && lat < 84)) return null;
+    const zone = utmZone(lat, lon);
+    const band = BANDS[Math.min(19, Math.floor((lat + 80) / 8))];
+    const phi = lat * Math.PI / 180, lam = lon * Math.PI / 180, lam0 = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+    const s = Math.sin(phi), c = Math.cos(phi), t = Math.tan(phi);
+    const N = A / Math.sqrt(1 - E2 * s * s), T = t * t, C = EP2 * c * c, Aa = c * (lam - lam0);
+    const e4 = E2 * E2, e6 = e4 * E2;
+    const M = A * ((1 - E2 / 4 - 3 * e4 / 64 - 5 * e6 / 256) * phi
+      - (3 * E2 / 8 + 3 * e4 / 32 + 45 * e6 / 1024) * Math.sin(2 * phi)
+      + (15 * e4 / 256 + 45 * e6 / 1024) * Math.sin(4 * phi)
+      - (35 * e6 / 3072) * Math.sin(6 * phi));
+    const easting = K0 * N * (Aa + (1 - T + C) * Aa ** 3 / 6 + (5 - 18 * T + T * T + 72 * C - 58 * EP2) * Aa ** 5 / 120) + 500000;
+    let northing = K0 * (M + N * t * (Aa * Aa / 2 + (5 - T + 9 * C + 4 * C * C) * Aa ** 4 / 24
+      + (61 - 58 * T + T * T + 600 * C - 330 * EP2) * Aa ** 6 / 720));
+    if (lat < 0) northing += 10000000;
+    return { zone, band, easting, northing };
+  }
+
+  /** 13S 500830E 4398757N */
+  function utmText(lat, lon) {
+    const u = utm(lat, lon);
+    if (!u) return null;
+    return `${u.zone}${u.band} ${Math.floor(u.easting)}E ${Math.floor(u.northing)}N`;
+  }
+
+  /** 13S DE 00830 98757 (1 m). */
+  function mgrs(lat, lon) {
+    const u = utm(lat, lon);
+    if (!u) return null;
+    const set = ((u.zone - 1) % 6) + 1;
+    const cols = ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'][(set - 1) % 3];
+    const rows = 'ABCDEFGHJKLMNPQRSTUV';
+    const e100 = Math.floor(u.easting / 100000), n100 = Math.floor(u.northing / 100000);
+    const col = cols[e100 - 1];
+    const row = rows[(n100 + (set % 2 === 0 ? 5 : 0)) % 20];
+    const e = pad(Math.floor(u.easting) % 100000, 5), n = pad(Math.floor(u.northing) % 100000, 5);
+    return `${u.zone}${u.band} ${col}${row} ${e} ${n}`;
+  }
+
+  /** Open Location Code, 10 digits (about 14 m): 85FPQXGV+XX */
+  function plusCode(lat, lon) {
+    const ALPHA = '23456789CFGHJMPQRVWX';
+    let la = Math.min(Math.max(lat, -90), 90), lo = normalize(lon + 180) - 180;
+    // As the current reference does: to whole units of the 15-digit grid first (rounding away float
+    // noise, so 60.39 stays 60.39), then down to 10 digits.
+    let latI = Math.floor(Math.floor(Math.round((la + 90) * 2.5e7 * 1e6) / 1e6) / 3125);
+    let lonI = Math.floor(Math.floor(Math.round((lo + 180) * 8192000 * 1e6) / 1e6) / 1024);
+    latI = Math.min(latI, 180 * 8000 - 1);
+    let code = '';
+    for (let i = 0; i < 5; i++) {
+      code = ALPHA[latI % 20] + ALPHA[lonI % 20] + code;
+      latI = Math.floor(latI / 20); lonI = Math.floor(lonI / 20);
+    }
+    return code.slice(0, 8) + '+' + code.slice(8);
+  }
+
+  const FORMATS = [
+    { id: 'dd', name: 'Decimal Degrees', short: 'Degrees' },
+    { id: 'dms', name: 'Degrees, Minutes, Seconds', short: 'DMS' },
+    { id: 'ddm', name: 'Degrees, Decimal Minutes', short: 'DDM' },
+    { id: 'utm', name: 'UTM', short: 'UTM' },
+    { id: 'mgrs', name: 'MGRS', short: 'MGRS' },
+    { id: 'plus', name: 'Plus Code', short: 'Plus Code' },
+  ];
+
+  /** {lat, lon} strings for the paired formats, or {single} for the grid formats. */
+  function format(id, lat, lon) {
+    switch (id) {
+      case 'dms': return { lat: dms(lat, true), lon: dms(lon, false) };
+      case 'ddm': return { lat: ddm(lat, true), lon: ddm(lon, false) };
+      case 'utm': return { single: utmText(lat, lon) || 'Outside UTM (polar)' };
+      case 'mgrs': return { single: mgrs(lat, lon) || 'Outside MGRS (polar)' };
+      case 'plus': return { single: plusCode(lat, lon) };
+      default: return { lat: dd(lat, true), lon: dd(lon, false) };
+    }
+  }
+
+  /** What Copy puts on the clipboard. */
+  function copyText(id, lat, lon) {
+    const f = format(id, lat, lon);
+    return f.single || `${f.lat}, ${f.lon}`;
+  }
+
+  // ---------- Units ----------
+  const FT = 0.3048;
+  function group(n) { return Math.round(n).toLocaleString('en-US'); }
+  /** {ft, m} as display strings: "5,280 ft", "1,609 m". */
+  function elevation(m) { return { ft: `${group(m / FT)} ft`, m: `${group(m)} m` }; }
+  /** ±12 m or ±39 ft. */
+  function accuracy(m, feet) { return feet ? `±${group(m / FT)} ft` : `±${group(m)} m`; }
+  /** Countries that use feet for elevation. */
+  function prefersFeet(locale) { return /[-_](US|LR|MM)\b/i.test(locale || ''); }
+
+  /** Where Open-Meteo is asked about: rounded to 3 decimals (about 100 m), enough for 90 m terrain data. */
+  function rounded(v) { return Math.round(v * 1000) / 1000; }
+
+
+  // ---------- Sun and moon (after SunCalc by Vladimir Agafonkin, BSD-2-Clause) ----------
+  // Positions to a fraction of a degree and rise/set times to about a minute: plenty for a compass.
+  const RAD = Math.PI / 180, DAY_MS = 86400000, J1970 = 2440588, J2000 = 2451545, OBLIQ = RAD * 23.4397;
+  const toDays = (ms) => ms / DAY_MS - 0.5 + J1970 - J2000;
+  const fromJulian = (j) => (j + 0.5 - J1970) * DAY_MS;
+  const rightAscension = (l, b) => Math.atan2(Math.sin(l) * Math.cos(OBLIQ) - Math.tan(b) * Math.sin(OBLIQ), Math.cos(l));
+  const declination = (l, b) => Math.asin(Math.sin(b) * Math.cos(OBLIQ) + Math.cos(b) * Math.sin(OBLIQ) * Math.sin(l));
+  const azimuthOf = (H, phi, dec) => Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi));
+  const altitudeOf = (H, phi, dec) => Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H));
+  const siderealTime = (d, lw) => RAD * (280.16 + 360.9856235 * d) - lw;
+  const solarMeanAnomaly = (d) => RAD * (357.5291 + 0.98560028 * d);
+  function eclipticLongitude(M) {
+    const C = RAD * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+    return M + C + RAD * 102.9372 + Math.PI;
+  }
+  function sunCoords(d) { const L = eclipticLongitude(solarMeanAnomaly(d)); return { dec: declination(L, 0), ra: rightAscension(L, 0) }; }
+  function astroRefraction(h) { if (h < 0) h = 0; return 0.0002967 / Math.tan(h + 0.00312536 / (h + 0.08901179)); }
+
+  /** The sun's direction: {azimuth (degrees from north, clockwise), altitude (degrees above the horizon)}. */
+  function sunPosition(ms, lat, lon) {
+    const lw = RAD * -lon, phi = RAD * lat, d = toDays(ms), c = sunCoords(d), H = siderealTime(d, lw) - c.ra;
+    return { azimuth: normalize(azimuthOf(H, phi, c.dec) / RAD + 180), altitude: altitudeOf(H, phi, c.dec) / RAD };
+  }
+
+  /** Sunrise, sunset and solar noon for the day containing `ms` (UTC milliseconds; null rise/set when the
+      sun doesn't rise or set that day). Also golden hour's start (sun 6° up) in the evening. */
+  function sunTimes(ms, lat, lon) {
+    const J0 = 0.0009, lw = RAD * -lon, phi = RAD * lat, d = toDays(ms);
+    const n = Math.round(d - J0 - lw / (2 * Math.PI));
+    const ds = J0 + (0 + lw) / (2 * Math.PI) + n;
+    const M = solarMeanAnomaly(ds), L = eclipticLongitude(M), dec = declination(L, 0);
+    const transit = (a) => J2000 + a + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L);
+    const Jnoon = transit(ds);
+    const setFor = (h) => {
+      const w = Math.acos((Math.sin(h) - Math.sin(phi) * Math.sin(dec)) / (Math.cos(phi) * Math.cos(dec)));
+      if (Number.isNaN(w)) return null;
+      return transit(J0 + (w + lw) / (2 * Math.PI) + n);
+    };
+    const out = { noon: fromJulian(Jnoon), sunrise: null, sunset: null, goldenHour: null };
+    const set = setFor(-0.833 * RAD);
+    if (set !== null) { out.sunset = fromJulian(set); out.sunrise = fromJulian(Jnoon - (set - Jnoon)); }
+    const golden = setFor(6 * RAD);
+    if (golden !== null) out.goldenHour = fromJulian(golden);
+    // Midnight sun or polar night: which one, from the sun at noon.
+    if (set === null) out.polar = altitudeOf(0, phi, dec) > 0 ? 'day' : 'night';
+    return out;
+  }
+
+  function moonCoords(d) {
+    const L = RAD * (218.316 + 13.176396 * d), M = RAD * (134.963 + 13.064993 * d), F = RAD * (93.272 + 13.229350 * d);
+    const l = L + RAD * 6.289 * Math.sin(M), b = RAD * 5.128 * Math.sin(F), dist = 385001 - 20905 * Math.cos(M);
+    return { ra: rightAscension(l, b), dec: declination(l, b), dist };
+  }
+
+  /** The moon's direction, like sunPosition (altitude corrected for refraction). */
+  function moonPosition(ms, lat, lon) {
+    const lw = RAD * -lon, phi = RAD * lat, d = toDays(ms), c = moonCoords(d), H = siderealTime(d, lw) - c.ra;
+    let h = altitudeOf(H, phi, c.dec);
+    h += astroRefraction(h);
+    return { azimuth: normalize(azimuthOf(H, phi, c.dec) / RAD + 180), altitude: h / RAD };
+  }
+
+  const PHASES = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
+  /** {fraction lit (0–1), phase (0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter), name}. */
+  function moonPhase(ms) {
+    const d = toDays(ms), s = sunCoords(d), m = moonCoords(d), sdist = 149598000;
+    const phi = Math.acos(Math.sin(s.dec) * Math.sin(m.dec) + Math.cos(s.dec) * Math.cos(m.dec) * Math.cos(s.ra - m.ra));
+    const inc = Math.atan2(sdist * Math.sin(phi), m.dist - sdist * Math.cos(phi));
+    const angle = Math.atan2(Math.cos(s.dec) * Math.sin(s.ra - m.ra), Math.sin(s.dec) * Math.cos(m.dec) - Math.cos(s.dec) * Math.sin(m.dec) * Math.cos(s.ra - m.ra));
+    const fraction = (1 + Math.cos(inc)) / 2, phase = 0.5 + 0.5 * inc * (angle < 0 ? -1 : 1) / Math.PI;
+    return { fraction, phase, name: PHASES[Math.round(phase * 8) % 8] };
+  }
+
+  // ---------- Distance and bearing (a marked spot) ----------
+  const EARTH_R = 6371008.8;
+  /** Great-circle distance in metres. */
+  function distance(lat1, lon1, lat2, lon2) {
+    const p1 = lat1 * RAD, p2 = lat2 * RAD, dp = (lat2 - lat1) * RAD, dl = (lon2 - lon1) * RAD;
+    const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+    return 2 * EARTH_R * Math.asin(Math.min(1, Math.sqrt(a)));
+  }
+  /** Initial bearing from the first point to the second, degrees from true north. */
+  function bearing(lat1, lon1, lat2, lon2) {
+    const p1 = lat1 * RAD, p2 = lat2 * RAD, dl = (lon2 - lon1) * RAD;
+    return normalize(Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / RAD);
+  }
+  /** "350 ft", "0.4 mi", "12 mi" or "120 m", "1.3 km", "12 km". */
+  function distanceText(m, feet) {
+    if (feet) {
+      const ft = m / FT;
+      if (ft < 1000) return `${group(Math.round(ft / 10) * 10)} ft`;
+      const mi = m / 1609.344;
+      return mi < 9.95 ? `${mi.toFixed(1)} mi` : `${group(mi)} mi`;
+    }
+    if (m < 1000) return `${group(Math.round(m / 5) * 5)} m`;
+    const km = m / 1000;
+    return km < 9.95 ? `${km.toFixed(1)} km` : `${group(km)} km`;
+  }
+
+  // ---------- Speed and pressure ----------
+  /** "3.2 mph" or "5.1 km/h" (metres per second in). */
+  function speedText(mps, feet) { const v = feet ? mps * 2.2369363 : mps * 3.6; return `${v < 9.95 ? v.toFixed(1) : group(v)} ${feet ? 'mph' : 'km/h'}`; }
+  /** "29.92 inHg" or "1,013 hPa" (hectopascals in). */
+  function pressureText(hpa, feet) { return feet ? `${(hpa * 0.0295299830714).toFixed(2)} inHg` : `${group(hpa)} hPa`; }
+
+  // ---------- The nearest place (offline naming, from the bundled GeoNames list) ----------
+  /** Parses Resources/Cities.tsv lines: name, ASCII name, region, country code, latitude, longitude. */
+  function parseCities(text) {
+    const out = [];
+    for (const line of text.split('\n')) {
+      const c = line.split('\t');
+      if (c.length < 6) continue;
+      const lat = Number(c[4]), lon = Number(c[5]);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) out.push({ name: c[0], region: c[2], country: c[3], lat, lon });
+    }
+    return out;
+  }
+  /** The listed place nearest a point, within 200 km: {name, region, country, km, from} where `from` is the
+      bearing from the place to the point. */
+  function nearestPlace(lat, lon, list) {
+    const k = Math.cos(lat * RAD);
+    let best = null, bestD = Infinity;
+    for (const e of list) {
+      const dy = e.lat - lat; let dx = Math.abs(e.lon - lon); if (dx > 180) dx = 360 - dx;
+      const d = dy * dy + (dx * k) * (dx * k);
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    if (!best) return null;
+    const km = distance(lat, lon, best.lat, best.lon) / 1000;
+    return km <= 200 ? { name: best.name, region: best.region, country: best.country, km, from: bearing(best.lat, best.lon, lat, lon) } : null;
+  }
+  /** "Denver, Colorado" within 5 km; otherwise "28 mi SW of Glenwood Springs, Colorado". */
+  function placeText(p, feet) {
+    if (!p) return null;
+    const where = [p.name, p.region].filter(Boolean).join(', ');
+    if (p.km <= 5) return where;
+    const km = p.km;
+    const dist = feet ? `${group(km / 1.609344)} mi` : `${group(km)} km`;
+    return `${dist} ${point(p.from)} of ${where}`;
+  }
+
+
+  // ---------- Magnetic declination (World Magnetic Model 2025, NOAA/NCEI and BGS, public domain) ----------
+  // The web has only magnetic headings, while the sun, moon and a marked spot are true bearings; this
+  // turns one into the other. Valid 2025–2030; within about half a degree almost everywhere.
+  const WMM = { epoch: 2025,
+    g: [0,-29351.8,-1410.8,-2556.6,2951.1,1649.3,1361,-2404.1,1243.8,453.6,895,799.5,55.7,-281.1,12.1,-233.2,368.9,187.2,-138.7,-142,20.9,64.4,63.8,76.9,-115.7,-40.9,14.9,-60.7,79.5,-77,-8.8,59.3,15.8,2.5,-11.1,14.2,23.2,10.8,-17.5,2,-21.7,16.9,15,-16.8,0.9,4.6,7.8,3,-0.2,-2.5,-13.1,2.4,8.6,-8.7,-12.9,-1.3,-6.4,0.2,2,-1,-0.6,-0.9,1.5,0.9,-2.7,-3.9,2.9,-1.5,-2.5,2.4,-0.6,-0.1,-0.6,-0.1,1.1,-1,-0.2,2.6,-2,-0.2,0.3,1.2,-1.3,0.6,0.6,0.5,-0.1,-0.4,-0.2,-1.3,-0.7],
+    h: [0,0,4545.4,0,-3133.6,-815.1,0,-56.6,237.5,-549.5,0,278.6,-133.9,212,-375.6,0,45.4,220.2,-122.9,43,106.1,0,-18.4,16.8,48.8,-59.8,10.9,72.7,0,-48.9,-14.4,-1,23.4,-7.4,-25.1,-2.3,0,7.1,-12.6,11.4,-9.7,12.7,0.7,-5.2,3.9,0,-24.8,12.2,8.3,-3.3,-5.2,7.2,-0.6,0.8,10,0,3.3,0,2.4,5.3,-9.1,0.4,-4.2,-3.8,0.9,-9.1,0,0,2.9,-0.6,0.2,0.5,-0.3,-1.2,-1.7,-2.9,-1.8,-2.3,0,-1.3,0.7,1,-1.4,0,0.6,-0.1,0.8,0.1,-1,0.1,0.2],
+    gd: [0,12,9.7,-11.6,-5.2,-8,-1.3,-4.2,0.4,-15.6,-1.6,-2.4,-6,5.6,-7,0.6,1.4,0,0.6,2.2,0.9,-0.2,-0.4,0.9,1.2,-0.9,0.3,0.9,0,-0.1,-0.1,0.5,-0.1,-0.8,-0.8,0.8,-0.1,0.2,0,0.5,-0.1,0.3,0.2,0,0.2,0,-0.1,0.1,0.3,-0.3,0,0.3,-0.1,0.1,-0.1,0.1,0,0.1,0.1,0,-0.3,0,-0.1,-0.1,0,0,0,0,0,0,0,-0.1,0,0,-0.1,-0.1,-0.1,-0.1,0,0,0,0,0,0,0.1,0,0,0,-0.1,0,-0.1],
+    hd: [0,0,-21.5,0,-27.7,-12.1,0,4,-0.3,-4.1,0,-1.1,4.1,1.6,-4.4,0,-0.5,2.2,0.4,1.7,1.9,0,0.3,-1.6,-0.4,0.9,0.7,0.9,0,0.6,0.5,-0.8,0,-1,0.6,-0.2,0,-0.2,0.5,-0.4,0.4,-0.5,-0.6,0.3,0.2,0,-0.3,0.3,-0.3,0.3,0.2,-0.1,-0.2,0.4,0.1,0,0,0,-0.2,0.1,-0.1,0.1,0,-0.1,0.2,0,0,0,0.1,0,0.1,0,0,0.1,0,0,0,0,0,0,0,-0.1,0.1,0,0,0,0,0,0,0,-0.1] };
+
+  /** Degrees east of true north that a compass points, at a place, height (metres) and time (UTC ms). */
+  function magneticDeclination(lat, lon, heightM, ms) {
+    const t = 2025 + (ms - Date.UTC(2025, 0, 1)) / (365.25 * DAY_MS) - WMM.epoch;
+    const A = 6378.137, F = 1 / 298.257223563, e2 = F * (2 - F), h = (heightM || 0) / 1000;
+    const phi = lat * RAD, lam = lon * RAD;
+    const Rc = A / Math.sqrt(1 - e2 * Math.sin(phi) ** 2);
+    const p = (Rc + h) * Math.cos(phi), z = (Rc * (1 - e2) + h) * Math.sin(phi);
+    const r = Math.hypot(p, z), phiC = Math.asin(z / r);
+    const x = Math.sin(phiC), s = Math.max(Math.cos(phiC), 1e-12);   // cos and sin of the colatitude
+    const N = 12, P = [], dP = [];
+    for (let n = 0; n <= N; n++) { P.push(new Array(N + 1).fill(0)); dP.push(new Array(N + 1).fill(0)); }
+    P[0][0] = 1;
+    for (let n = 1; n <= N; n++) {
+      for (let m = 0; m <= n; m++) {
+        if (n === m) {
+          const k = n === 1 ? 1 : Math.sqrt((2 * n - 1) / (2 * n));
+          P[n][n] = k * s * P[n - 1][n - 1];
+          dP[n][n] = k * (s * dP[n - 1][n - 1] + x * P[n - 1][n - 1]);
+        } else {
+          const a1 = 2 * n - 1, a2 = n >= 2 ? Math.sqrt((n - 1) ** 2 - m * m) : 0, b = Math.sqrt(n * n - m * m);
+          const p2 = n - 2 >= m ? P[n - 2][m] : 0, d2 = n - 2 >= m ? dP[n - 2][m] : 0;
+          P[n][m] = (a1 * x * P[n - 1][m] - a2 * p2) / b;
+          dP[n][m] = (a1 * (x * dP[n - 1][m] - s * P[n - 1][m]) - a2 * d2) / b;
+        }
+      }
+    }
+    let X = 0, Y = 0, Z = 0;
+    for (let n = 1; n <= N; n++) {
+      const ar = (6371.2 / r) ** (n + 2);
+      for (let m = 0; m <= n; m++) {
+        const i = n * (n + 1) / 2 + m;
+        const g = WMM.g[i] + t * WMM.gd[i], hh = WMM.h[i] + t * WMM.hd[i];
+        const c = Math.cos(m * lam), sn = Math.sin(m * lam);
+        X += ar * (g * c + hh * sn) * dP[n][m];
+        Y += ar * m * (g * sn - hh * c) * P[n][m] / s;
+        Z -= ar * (n + 1) * (g * c + hh * sn) * P[n][m];
+      }
+    }
+    const psi = phiC - phi;
+    const Xg = X * Math.cos(psi) - Z * Math.sin(psi);
+    return Math.atan2(Y, Xg) / RAD;
+  }
+
+  const api = { normalize, delta, point, pointName, smoother, dd, dms, ddm, utm, utmText, mgrs, plusCode, FORMATS, format, copyText,
+    elevation, accuracy, prefersFeet, rounded, FT,
+    sunPosition, sunTimes, moonPosition, moonPhase, distance, bearing, distanceText, speedText, pressureText, parseCities, nearestPlace, placeText, group, magneticDeclination };
+  if (typeof module === 'object' && module.exports) module.exports = api; else root.TN = api;
+})(typeof self !== 'undefined' ? self : this);
+
+</script>
+<script>
+(() => {
+  'use strict';
+  const T = window.TN;
+  const $ = (s) => document.querySelector(s);
+  const params = new URLSearchParams(location.search);
+  if (params.has('embed') || window.self !== window.top) document.documentElement.classList.add('embedded');
+
+  // ---------- Settings (this browser only) ----------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('bearings.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('bearings.' + k, JSON.stringify(v)); } catch {} },
+  };
+  const settings = {
+    format: store.get('format', 'dd'),
+    feet: store.get('feet', T.prefersFeet(navigator.language)),
+    trueNorth: store.get('trueNorth', true),
+    follow: store.get('follow', false),
+    night: store.get('night', false),
+  };
+  if (!T.FORMATS.some((f) => f.id === settings.format)) settings.format = 'dd';
+
+  // ---------- State ----------
+  const S = {
+    magnetic: null,         // smoothed magnetic heading
+    heading: null,          // shown heading: true (magnetic + declination) or magnetic
+    headingAcc: null,       // degrees (iOS Safari reports it)
+    usingTrue: false,
+    decl: null,             // declination here, degrees east
+    shown: 0,               // the card's rotation, unwrapped so it turns the short way
+    tilt: null,             // {beta, gamma}
+    lock: null,             // locked bearing (in the shown reference)
+    fix: null,              // {lat, lon, acc, alt, altAcc, speed, time}
+    ground: null, groundState: 'idle',
+    place: null, placeAt: null, placeInfo: null,
+    spot: store.get('spot', null),  // {lat, lon}
+    sample: params.has('demo'),
+    compassState: 'waiting', // waiting | needs-tap | live | none | denied
+    locState: 'idle',        // idle | asking | live | denied | unavailable
+  };
+  const smooth = T.smoother(0.18);
+  const zone = S.sample ? { timeZone: 'America/Denver' } : {};   // the sample place's own clock
+  const fmtTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', ...zone });
+  const fmtDay = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', ...zone });
+  /** "6:42" (no AM/PM: sunrise is the morning one) or "06:42" on a 24-hour clock. */
+  const shortTime = (t) => fmtTime.formatToParts(t).filter((p) => p.type !== 'dayPeriod').map((p) => p.value).join('').trim();
+  const now = () => (S.sample && params.get('t') ? Number(params.get('t')) : Date.now());
+  const vis = (el, on) => el.toggleAttribute('hidden', !on);   // works for SVG too
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---------- Glyphs ----------
+  /** The moon as it looks: the lit part for the phase (0 new … 0.5 full … 1 new), radius r, centred on 0,0. */
+  function moonPath(phase, r) {
+    const k = Math.cos(2 * Math.PI * phase), rx = (r * Math.abs(k)).toFixed(2), waxing = phase < 0.5, crescent = k > 0;
+    const outer = waxing ? 1 : 0, inner = waxing ? (crescent ? 0 : 1) : (crescent ? 1 : 0);
+    return `M0 ${-r} A${r} ${r} 0 0 ${outer} 0 ${r} A${rx} ${r} 0 0 ${inner} 0 ${-r}Z`;
+  }
+  function sunGlyph(r) {
+    let s = `<circle r="${r}" fill="#F4B860"/>`;
+    for (let i = 0; i < 8; i++) s += `<line x1="0" y1="${-(r + 3)}" x2="0" y2="${-(r + 7)}" stroke="#F4B860" stroke-width="2" stroke-linecap="round" transform="rotate(${i * 45})"/>`;
+    return s;
+  }
+  function moonGlyph(phase, r) { return `<circle r="${r}" fill="#4A433C"/><path d="${moonPath(phase, r)}" fill="#FFF1E5"/>`; }
+
+  // ---------- Dial ----------
+  function buildDial() {
+    let s = '<circle cx="200" cy="200" r="196" fill="#201D1A"/><circle cx="200" cy="200" r="196" fill="none" stroke="#3A3530" stroke-width="1"/>';
+    s += '<g id="card">';
+    for (let d = 0; d < 360; d += 2) {
+      const major = d % 30 === 0, mid = d % 10 === 0, len = major ? 18 : mid ? 12 : 6, w = major ? 2.4 : mid ? 1.4 : 1;
+      const col = d === 0 ? '#E04A7A' : major ? '#FFF1E5' : mid ? '#B0A898' : '#5A534B';
+      s += `<line x1="200" y1="12" x2="200" y2="${12 + len}" stroke="${col}" stroke-width="${w}" stroke-linecap="round" transform="rotate(${d} 200 200)"/>`;
+    }
+    const F = 'font-family="Inter, system-ui, sans-serif"';
+    for (let d = 30; d < 360; d += 30) if (d % 90) s += `<text x="200" y="56" transform="rotate(${d} 200 200)" text-anchor="middle" font-size="15" font-weight="500" fill="#B0A898" ${F}>${d}</text>`;
+    for (const [l, d, c] of [['N', 0, '#E04A7A'], ['E', 90, '#FFF1E5'], ['S', 180, '#FFF1E5'], ['W', 270, '#FFF1E5']]) s += `<text x="200" y="${d ? 62 : 64}" transform="rotate(${d} 200 200)" text-anchor="middle" font-size="${d ? 26 : 30}" font-weight="600" fill="${c}" ${F}>${l}</text>`;
+    for (const [l, d] of [['NE', 45], ['SE', 135], ['SW', 225], ['NW', 315]]) s += `<text x="200" y="58" transform="rotate(${d} 200 200)" text-anchor="middle" font-size="13" font-weight="600" fill="#9A9286" ${F}>${l}</text>`;
+    s += '<g id="sunG" hidden></g><g id="moonG" hidden></g>';
+    s += '<g id="spotG" hidden><circle r="9" fill="#FFF1E5" stroke="#E04A7A" stroke-width="4"/></g>';
+    s += '<path id="lockArc" fill="none" stroke="#E04A7A" stroke-width="6" stroke-linecap="round" opacity=".85"/>';
+    s += '<g id="lockMark" hidden><path d="M200 10 207 0H193Z" fill="#E04A7A"/></g>';
+    s += '</g>';
+    s += '<path d="M200 0 209 16H191Z" fill="#FFF1E5"/>';
+    s += '<line x1="200" y1="88" x2="200" y2="312" stroke="#2E2A26"/><line x1="88" y1="200" x2="312" y2="200" stroke="#2E2A26"/>';
+    s += '<circle cx="200" cy="200" r="40" fill="none" stroke="#3A3530" stroke-width="1.5"/><circle cx="200" cy="200" r="13" fill="none" stroke="#5A534B" stroke-width="1.5"/>';
+    s += '<circle id="bubble" cx="200" cy="200" r="11" fill="#8FC89A" opacity="0"/>';
+    $('#dialSvg').innerHTML = s;
+  }
+
+  function arcPath(fromDeg, toDeg, r) {
+    const p = (d) => { const a = (d - 90) * Math.PI / 180; return [200 + r * Math.cos(a), 200 + r * Math.sin(a)]; };
+    const sweep = T.delta(fromDeg, toDeg);
+    if (Math.abs(sweep) < 0.5) return '';
+    const [x1, y1] = p(fromDeg), [x2, y2] = p(fromDeg + sweep);
+    return `M${x1.toFixed(2)} ${y1.toFixed(2)} A${r} ${r} 0 ${Math.abs(sweep) > 180 ? 1 : 0} ${sweep > 0 ? 1 : 0} ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+  }
+
+  /** True bearings (sun, moon, a spot) placed on the card, which shows true or magnetic north. */
+  const onCard = (trueBearing) => T.normalize(trueBearing - (S.usingTrue || S.decl === null ? 0 : S.decl));
+  function placeOnCard(el, bearingDeg, radius, glyph) {
+    el.setAttribute('transform', `rotate(${onCard(bearingDeg).toFixed(2)} 200 200) translate(200 ${200 - radius})`);
+    if (glyph !== undefined) el.innerHTML = glyph;
+  }
+
+  let lastSpoken = null, lastCardinal = null;
+  function drawHeading() {
+    const card = $('#card');
+    if (S.heading === null) {
+      $('#deg').textContent = '—'; $('#pt').textContent = '';
+    } else {
+      const h = S.heading;
+      S.shown += T.delta(S.shown, -h);
+      card.style.transform = `rotate(${S.shown}deg)`;
+      $('#deg').textContent = `${Math.round(h) % 360}°`;
+      $('#pt').textContent = T.point(h);
+      const spoken = `${Math.round(h / 5) * 5 % 360} degrees, ${T.pointName(h).toLowerCase()}`;
+      $('#dial').setAttribute('aria-label', `Heading ${Math.round(h) % 360} degrees, ${T.pointName(h).toLowerCase()}. ${S.lock === null ? 'Tap to lock this bearing.' : 'Tap to clear the locked bearing.'}`);
+      if (spoken !== lastSpoken) { lastSpoken = spoken; clearTimeout(drawHeading.t); drawHeading.t = setTimeout(() => { $('#srHeading').textContent = `Heading ${spoken}`; }, 2500); }
+      // A light tick as you pass north, east, south or west (where the browser can vibrate).
+      const c = Math.round(h / 90) % 4, near = Math.abs(T.delta(h, c * 90)) < 2;
+      if (near && c !== lastCardinal) { if (lastCardinal !== null && navigator.vibrate) try { navigator.vibrate(8); } catch {} lastCardinal = c; }
+    }
+    const mark = $('#lockMark'), arc = $('#lockArc');
+    if (S.lock !== null && S.heading !== null) { vis(mark, true); mark.setAttribute('transform', `rotate(${S.lock} 200 200)`); arc.setAttribute('d', arcPath(S.lock, S.heading, 190)); }
+    else { vis(mark, false); arc.setAttribute('d', ''); }
+    const b = $('#bubble');
+    if (S.tilt) {
+      const x = Math.max(-1, Math.min(1, -S.tilt.gamma / 30)), y = Math.max(-1, Math.min(1, -S.tilt.beta / 30));
+      const len = Math.hypot(x, y), sc = len > 1 ? 1 / len : 1;
+      b.setAttribute('cx', (200 + x * sc * 40).toFixed(1)); b.setAttribute('cy', (200 + y * sc * 40).toFixed(1));
+      b.setAttribute('fill', Math.hypot(S.tilt.beta, S.tilt.gamma) < 2 ? '#8FC89A' : '#FFF1E5'); b.setAttribute('opacity', '1');
+    } else b.setAttribute('opacity', '0');
+    drawSubline(); drawSpot();
+  }
+
+  function drawSubline() {
+    const parts = [];
+    if (S.compassState === 'live' || S.sample) {
+      let north = S.usingTrue ? 'True north' : 'Magnetic north';
+      if (S.usingTrue && S.decl !== null && Math.abs(S.decl) >= 0.5) north += ` · ${Math.round(Math.abs(S.decl))}° ${S.decl >= 0 ? 'E' : 'W'}`;
+      parts.push(`<span>${north}</span>`);
+      if (S.headingAcc !== null && S.headingAcc >= 0) {
+        if (S.headingAcc > 25) parts.splice(0, parts.length, '<span class="bad">Low accuracy: move your phone in a figure 8</span>');
+        else parts.push(`<span>±${Math.round(S.headingAcc)}°</span>`);
+      }
+      if (S.lock !== null && S.heading !== null) {
+        const d = Math.round(T.delta(S.heading, S.lock));
+        parts.push(`<span class="lock">Locked ${Math.round(S.lock) % 360}° · ${d === 0 ? 'on bearing' : `turn ${Math.abs(d)}° ${d > 0 ? 'right' : 'left'}`}</span>`);
+      }
+    }
+    $('#subline').innerHTML = parts.join('<span class="dot">·</span>');
+  }
+
+  // ---------- Sky ----------
+  function drawSky() {
+    const f = S.fix, sun = $('#sunG'), moon = $('#moonG');
+    if (!f) { vis(sun, false); vis(moon, false); $('#sunV').textContent = '—'; $('#sunS').innerHTML = '&nbsp;'; return; }
+    const t = now();
+    const sp = T.sunPosition(t, f.lat, f.lon), mp = T.moonPosition(t, f.lat, f.lon), ph = T.moonPhase(t);
+    vis(sun, true); placeOnCard(sun, sp.azimuth, 118, sunGlyph(7)); sun.setAttribute('opacity', sp.altitude > -0.833 ? '1' : '.35');
+    vis(moon, true); placeOnCard(moon, mp.azimuth, 118, moonGlyph(ph.phase, 8)); moon.setAttribute('opacity', mp.altitude > 0 ? '1' : '.35');
+    const times = T.sunTimes(t, f.lat, f.lon);
+    const v = times.sunrise === null ? (times.polar === 'day' ? 'Sun up all day' : 'Sun down all day')
+      : `${shortTime(times.sunrise)} – ${shortTime(times.sunset)}`;
+    $('#sunV').textContent = v;
+    $('#sunS').innerHTML = `<svg viewBox="-10 -10 20 20" aria-hidden="true">${moonGlyph(ph.phase, 9)}</svg><span>${ph.name} · ${Math.round(ph.fraction * 100)}%</span>`;
+    $('#sunTile').setAttribute('aria-label', `Sun. ${times.sunrise === null ? v : `Sunrise ${fmtTime.format(times.sunrise)}, sunset ${fmtTime.format(times.sunset)}`}. Moon: ${ph.name}, ${Math.round(ph.fraction * 100)} percent lit.`);
+  }
+
+  // ---------- Marked spot ----------
+  function drawSpot() {
+    const f = S.fix, pill = $('#spotPill'), g = $('#spotG');
+    if (!S.spot || !f) { pill.hidden = true; vis(g, false); return; }
+    const m = T.distance(f.lat, f.lon, S.spot.lat, S.spot.lon), b = T.bearing(f.lat, f.lon, S.spot.lat, S.spot.lon);
+    const here = m <= Math.max(10, f.acc), shown = onCard(b);
+    pill.hidden = false;
+    $('#spotText').innerHTML = here ? '<b>Marked spot</b> · You’re here' : `<b>Marked spot</b> · ${T.distanceText(m, settings.feet)} · ${Math.round(shown) % 360}° ${T.point(shown)}`;
+    vis(g, !here); if (!here) placeOnCard(g, b, 176);
+  }
+  function markSpot() {
+    if (!S.fix) return;
+    S.spot = { lat: S.fix.lat, lon: S.fix.lon }; store.set('spot', S.spot);
+    toast('Spot marked'); drawSpot(); updateMap();
+  }
+  function clearSpot() { S.spot = null; store.set('spot', null); toast('Marked spot cleared'); drawSpot(); updateMap(); }
+
+  // ---------- Compass input ----------
+  let gotEvent = false;
+  function onOrientation(e) {
+    let h = null;
+    if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) {
+      h = e.webkitCompassHeading;   // iPhone and iPad: clockwise from magnetic north, for the top of the screen
+      S.headingAcc = typeof e.webkitCompassAccuracy === 'number' ? e.webkitCompassAccuracy : null;
+    } else if ((e.absolute || e.type === 'deviceorientationabsolute') && typeof e.alpha === 'number') {
+      h = 360 - e.alpha;
+    }
+    if (typeof e.beta === 'number' && typeof e.gamma === 'number') S.tilt = { beta: e.beta, gamma: e.gamma };
+    if (h === null) return;
+    const angle = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
+    gotEvent = true;
+    if (S.compassState !== 'live') { S.compassState = 'live'; drawCompassState(); }
+    S.magnetic = smooth.push(T.normalize(h + angle));
+    updateHeading();
+  }
+  function updateHeading() {
+    if (S.magnetic === null) return;
+    S.usingTrue = settings.trueNorth && S.decl !== null;
+    S.heading = T.normalize(S.magnetic + (S.usingTrue ? S.decl : 0));
+    requestDraw();
+  }
+  let drawQueued = false;
+  function requestDraw() { if (!drawQueued) { drawQueued = true; requestAnimationFrame(() => { drawQueued = false; drawHeading(); drawSky(); updateCone(); }); } }
+
+  const canAsk = () => { const D = window.DeviceOrientationEvent; return !!(D && typeof D.requestPermission === 'function' && navigator.maxTouchPoints > 0); };
+  let listening = false;
+  function listenCompass() {
+    if (listening) return;
+    listening = true;
+    if ('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute', onOrientation);
+    else window.addEventListener('deviceorientation', onOrientation);
+    setTimeout(() => { if (!gotEvent && !S.sample) { S.compassState = canAsk() ? 'needs-tap' : 'none'; drawCompassState(); } }, canAsk() ? 1000 : 2500);
+  }
+  function askForCompass() {
+    window.DeviceOrientationEvent.requestPermission().then((r) => {
+      if (r !== 'granted') { S.compassState = 'denied'; drawCompassState(); return; }
+      S.compassState = 'waiting'; drawCompassState();
+      setTimeout(() => { if (!gotEvent) { S.compassState = 'none'; drawCompassState(); } }, 2500);
+    }).catch(() => { S.compassState = 'denied'; drawCompassState(); });
+  }
+  function drawCompassState() {
+    const note = $('#dialNote'), cta = $('#startCompass');
+    cta.hidden = S.compassState !== 'needs-tap';
+    const msg = { none: 'No compass on this device. Open Bearings on a phone or tablet to use it.',
+      denied: 'Motion & Orientation access is off. Allow it in your browser’s settings, then reload.' }[S.compassState];
+    note.hidden = !msg; note.textContent = msg || '';
+    drawSubline();
+  }
+
+  // ---------- Location ----------
+  function startLocation() {
+    if (!('geolocation' in navigator)) { S.locState = 'unavailable'; drawPlace(); return; }
+    S.locState = 'asking'; drawPlace();
+    navigator.geolocation.watchPosition((p) => {
+      const c = p.coords;
+      S.fix = { lat: c.latitude, lon: c.longitude, acc: c.accuracy, alt: c.altitude, altAcc: c.altitudeAccuracy, speed: c.speed, time: p.timestamp || Date.now() };
+      S.locState = 'live';
+      store.set('located', true);
+      onFix();
+    }, (err) => {
+      S.locState = err.code === 1 ? 'denied' : 'unavailable';
+      if (err.code === 1) store.set('located', false);
+      drawPlace();
+    }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  }
+  function onFix() {
+    const f = S.fix;
+    S.decl = T.magneticDeclination(f.lat, f.lon, f.alt || 0, now());
+    updateHeading(); nameThePlace(); lookupGround(); drawPlace(); drawSky(); drawSpot(); updateMap();
+  }
+
+  // The place's name, from the bundled GeoNames list: no service learns where you are.
+  let cities = null, citiesLoading = null;
+  function loadCities() {
+    if (cities) return Promise.resolve(cities);
+    if (!citiesLoading) citiesLoading = fetch('cities.tsv').then((r) => r.ok ? r.text() : Promise.reject(r.status)).then((t) => (cities = T.parseCities(t)));
+    return citiesLoading;
+  }
+  function nameThePlace() {
+    const f = S.fix; if (!f || S.sample) return;
+    if (S.placeAt && S.place !== null && T.distance(f.lat, f.lon, S.placeAt.lat, S.placeAt.lon) < 500) return;
+    S.placeAt = { lat: f.lat, lon: f.lon };
+    loadCities().then((list) => {
+      const p = T.nearestPlace(f.lat, f.lon, list);
+      S.placeInfo = p;
+      S.place = p ? T.placeText(p, settings.feet) : 'Far from any town';
+      drawPlace();
+    }).catch(() => { S.place = ''; drawPlace(); });
+  }
+
+  // Ground elevation from Open-Meteo (Copernicus DEM, 90 m). Asked again only after moving about 100 m.
+  function lookupGround() {
+    const f = S.fix; if (!f) return;
+    const lat = T.rounded(f.lat), lon = T.rounded(f.lon);
+    if (S.ground && S.ground.lat === lat && S.ground.lon === lon) return;
+    if (S.groundState === 'loading') return;
+    S.groundState = 'loading';
+    fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`)
+      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+      .then((j) => {
+        const m = Array.isArray(j.elevation) ? j.elevation[0] : null;
+        if (typeof m !== 'number' || Number.isNaN(m)) throw new Error('no elevation');
+        S.ground = { m, lat, lon }; S.groundState = 'ok'; drawPlace();
+      })
+      .catch(() => { S.groundState = 'failed'; drawPlace(); });
+  }
+
+  function ago(t) {
+    const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (s < 10) return 'Just now';
+    if (s < 60) return `${s} s ago`;
+    const m = Math.round(s / 60);
+    return m < 60 ? `${m} min ago` : `${Math.round(m / 60)} hr ago`;
+  }
+
+  function drawWhen() { const t = new Date(now()); $('#when').textContent = `${fmtDay.format(t)} · ${fmtTime.format(t)}`; }
+
+  function drawPlace() {
+    const f = S.fix;
+    const title = S.sample ? 'Maroon Bells, Colorado'
+      : f ? (S.place || (S.place === '' ? 'Where you are' : 'Finding the place…'))
+      : S.locState === 'asking' ? 'Finding where you are…' : 'Bearings';
+    $('#place').innerHTML = esc(title) + (S.sample ? '<span class="sample" title="No location here, so Bearings shows a sample place">Sample</span>' : '');
+    $('#place').title = title;
+
+    const ask = $('#askLoc'), tiles = $('#tiles');
+    const needAsk = !f && (S.locState === 'idle' || S.locState === 'denied' || S.locState === 'unavailable');
+    ask.hidden = !needAsk;
+    if (needAsk) {
+      ask.querySelector('p').textContent = S.locState === 'denied'
+        ? 'Location access is off for this site. Allow it in your browser’s settings to see where you are.'
+        : S.locState === 'unavailable' ? 'Your location isn’t available right now (indoors, or location is off). Try again.'
+        : 'Allow your location to see where you are, your coordinates, elevation and map. It stays on this device.';
+      $('#useLoc').textContent = S.locState === 'unavailable' ? 'Try Again' : 'Use My Location';
+      $('#useLoc').hidden = S.locState === 'denied';
+    }
+    tiles.hidden = needAsk;
+
+    const fmt = T.FORMATS.find((x) => x.id === settings.format);
+    const out = f ? T.format(settings.format, f.lat, f.lon) : null;
+    const paired = !out || !out.single;
+    const accLine = f ? `${T.accuracy(f.acc, settings.feet)} · ${S.sample ? 'Sample' : ago(f.time)}` : (S.locState === 'asking' ? 'Finding you…' : ' ');
+    $('#latTile').hidden = !paired; $('#lonTile').hidden = !paired; $('#gridTile').hidden = paired;
+    if (paired) {
+      $('#latV').textContent = out ? out.lat : '—'; $('#lonV').textContent = out ? out.lon : '—';
+      $('#latS').textContent = accLine; $('#lonS').textContent = fmt.name;
+      $('#latTile').setAttribute('aria-label', `Latitude ${out ? out.lat : 'unknown'}, accuracy ${accLine}. Tap to change the format; touch and hold to copy.`);
+      $('#lonTile').setAttribute('aria-label', `Longitude ${out ? out.lon : 'unknown'}, ${fmt.name}. Tap to change the format; touch and hold to copy.`);
+    } else {
+      $('#gridK').textContent = fmt.name; $('#gridV').textContent = out.single; $('#gridS').textContent = accLine;
+      $('#gridTile').setAttribute('aria-label', `${fmt.name} ${out.single}. Tap to change the format; touch and hold to copy.`);
+    }
+
+    // Elevation: a browser's GPS height is above the ellipsoid, not sea level, so terrain data comes first.
+    let ev = '—', es = ' ', spoken = 'unknown';
+    if (f) {
+      const val = S.ground ? S.ground.m : typeof f.alt === 'number' ? f.alt : null;
+      if (val !== null) {
+        const e = T.elevation(val);
+        ev = settings.feet ? `${e.ft}<small>${e.m}</small>` : `${e.m}<small>${e.ft}</small>`;
+        es = S.ground ? 'Terrain data' : `GPS${typeof f.altAcc === 'number' ? ' ' + T.accuracy(f.altAcc, settings.feet) : ''}`;
+        spoken = `${e.ft.replace(' ft', ' feet')}, ${e.m.replace(' m', ' metres')}, from ${es.toLowerCase()}`;
+      } else es = S.groundState === 'failed' ? 'Needs a connection' : 'Looking it up…';
+    }
+    $('#eleV').innerHTML = ev; $('#eleS').textContent = es;
+    $('#eleTile').setAttribute('aria-label', `Elevation, ${spoken}`);
+    const stale = f && !S.sample && Date.now() - f.time > 120000;
+    document.querySelectorAll('#tiles .tile').forEach((t) => t.classList.toggle('stale', !!stale));
+
+    const sp = f && typeof f.speed === 'number' && f.speed >= 0.5 ? T.speedText(f.speed, settings.feet) : null;
+    $('#speedChip').hidden = !sp; $('#speedChip').textContent = sp || '';
+  }
+
+  function cycleFormat() {
+    const i = T.FORMATS.findIndex((x) => x.id === settings.format);
+    settings.format = T.FORMATS[(i + 1) % T.FORMATS.length].id;
+    store.set('format', settings.format);
+    drawPlace();
+    toast(T.FORMATS.find((x) => x.id === settings.format).name);
+  }
+
+  // ---------- Map (MapLibre + OpenFreeMap, loaded only once we have a place) ----------
+  let map = null, marker = null, spotMarker = null, mapLoading = false, zoom = store.get('zoom', 15), lastRotate = 0;
+  function loadMapLib() {
+    if (window.maplibregl) return Promise.resolve(window.maplibregl);
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+      s.onload = () => window.maplibregl ? res(window.maplibregl) : rej(new Error('no maplibre'));
+      s.onerror = rej;
+      document.head.appendChild(s);
+      setTimeout(() => rej(new Error('timeout')), 15000);
+    });
+  }
+  function el(cls, html) { const e = document.createElement('div'); e.className = cls; e.innerHTML = html || ''; return e; }
+  function updateMap() {
+    const f = S.fix; if (!f) return;
+    if (map) {
+      marker.setLngLat([f.lon, f.lat]);
+      if (S.spot) { if (!spotMarker) spotMarker = new window.maplibregl.Marker({ element: el('spotmark') }); spotMarker.setLngLat([S.spot.lon, S.spot.lat]).addTo(map); }
+      else if (spotMarker) { spotMarker.remove(); spotMarker = null; }
+      map.easeTo({ center: [f.lon, f.lat], duration: 400 });
+      updateAccuracyRing(); updateCone();
+      return;
+    }
+    if (mapLoading || params.has('nomap')) return;
+    mapLoading = true;
+    $('#mapMsg').textContent = 'Loading the map…';
+    loadMapLib().then((ml) => {
+      map = new ml.Map({ container: 'mapView', style: 'https://tiles.openfreemap.org/styles/liberty', center: [f.lon, f.lat], zoom,
+        dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: { compact: true } });
+      map.touchZoomRotate.disableRotation();
+      marker = new ml.Marker({ element: el('me', '<span class="acc"></span><span class="cone"></span><i></i>') }).setLngLat([f.lon, f.lat]).addTo(map);
+      map.on('load', () => { $('#mapMsg').hidden = true; $('#mapTools').hidden = false; updateMap(); });
+      map.on('zoomend', () => { zoom = map.getZoom(); store.set('zoom', Math.round(zoom)); updateAccuracyRing(); });
+      map.on('error', () => { if (!map.loaded()) mapFailed(); });
+    }).catch(mapFailed);
+  }
+  function mapFailed() {
+    mapLoading = false;
+    const msg = $('#mapMsg'); msg.hidden = false;
+    msg.textContent = 'The map can’t load right now. Your compass, coordinates and elevation still work offline.';
+  }
+  function updateAccuracyRing() {
+    if (!map || !S.fix) return;
+    const mpp = 40075016.686 * Math.cos(S.fix.lat * Math.PI / 180) / (512 * 2 ** map.getZoom());
+    const d = Math.max(0, Math.min(400, 2 * S.fix.acc / mpp));
+    const r = marker.getElement().querySelector('.acc'); r.style.width = r.style.height = `${d}px`;
+  }
+  /** The cone points along your heading; with Follow Heading the map turns instead, so the cone points up. */
+  function updateCone() {
+    if (!marker) return;
+    const c = marker.getElement().querySelector('.cone');
+    c.style.display = S.heading === null ? 'none' : '';
+    if (S.heading === null) return;
+    const trueHeading = S.usingTrue ? S.heading : S.heading + (S.decl || 0);
+    if (settings.follow && performance.now() - lastRotate > 250) { lastRotate = performance.now(); map.rotateTo(trueHeading, { duration: 240 }); }
+    c.style.transform = `rotate(${trueHeading - map.getBearing()}deg)`;
+  }
+  function setFollow(on) {
+    settings.follow = on; store.set('follow', on);
+    $('#followBtn').setAttribute('aria-pressed', String(on));
+    if (map && !on) map.rotateTo(0, { duration: 300 });
+    updateCone();
+  }
+  function openFullMap() {
+    const f = S.fix; if (!f) return;
+    const z = map ? Math.round(map.getZoom()) : 15;
+    window.open(`https://www.openstreetmap.org/?mlat=${f.lat.toFixed(5)}&mlon=${f.lon.toFixed(5)}#map=${z}/${f.lat.toFixed(5)}/${f.lon.toFixed(5)}`, '_blank', 'noopener');
+  }
+
+  // ---------- Night mode ----------
+  function setNight(on) {
+    settings.night = on; store.set('night', on);
+    $('#nightFilter').hidden = !on; document.documentElement.classList.toggle('night', on);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', on ? '#1A0503' : '#1A1816');
+  }
+
+  // ---------- Menu ----------
+  function menuHTML() {
+    const ck = (on) => `<span class="ck">${on ? '✓' : ''}</span>`;
+    const item = (attrs, label, on, disabled) => `<button type="button" ${attrs} ${disabled ? 'disabled' : ''}>${ck(on)}<span>${label}</span></button>`;
+    let h = '<div class="sec">Coordinates</div>';
+    for (const f of T.FORMATS) h += item(`role="menuitemradio" aria-checked="${settings.format === f.id}" data-fmt="${f.id}"`, f.name, settings.format === f.id);
+    h += '<div class="sec">Units</div>';
+    h += item(`role="menuitemradio" aria-checked="${settings.feet}" data-feet="1"`, 'Feet First', settings.feet);
+    h += item(`role="menuitemradio" aria-checked="${!settings.feet}" data-feet="0"`, 'Metres First', !settings.feet);
+    h += '<div class="sec">North</div>';
+    h += item(`role="menuitemradio" aria-checked="${settings.trueNorth}" data-north="true"`, 'True North', settings.trueNorth);
+    h += item(`role="menuitemradio" aria-checked="${!settings.trueNorth}" data-north="magnetic"`, 'Magnetic North', !settings.trueNorth);
+    h += '<div class="sec">Map</div>';
+    h += item(`role="menuitemcheckbox" aria-checked="${settings.follow}" data-act="follow"`, 'Follow Heading', settings.follow);
+    h += '<hr>';
+    h += item(`role="menuitemcheckbox" aria-checked="${settings.night}" data-act="night"`, 'Night Mode', settings.night);
+    h += '<hr>';
+    const has = !!S.fix;
+    h += item('role="menuitem" data-act="spot"', S.spot ? 'Clear Marked Spot' : 'Mark This Spot', false, !S.spot && !has);
+    h += item('role="menuitem" data-act="lock"', S.lock === null ? 'Lock This Bearing' : 'Clear Locked Bearing', false, S.heading === null);
+    h += item('role="menuitem" data-act="copy"', 'Copy Coordinates', false, !has);
+    h += item('role="menuitem" data-act="shareLoc"', 'Share My Location…', false, !has);
+    h += '<hr>';
+    h += item('role="menuitem" data-act="share"', 'Share Bearings…');
+    h += item('role="menuitem" data-act="terms"', 'Terms &amp; Privacy');
+    h += item('role="menuitem" data-act="about"', 'About Bearings');
+    return h;
+  }
+  function toggleMenu(open) {
+    const m = $('#menu'), b = $('#moreBtn');
+    open = open ?? m.hidden;
+    if (open) { m.innerHTML = menuHTML(); m.hidden = false; b.setAttribute('aria-expanded', 'true'); m.querySelector('button:not(:disabled)')?.focus(); }
+    else { m.hidden = true; b.setAttribute('aria-expanded', 'false'); }
+  }
+  $('#moreBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
+  document.addEventListener('click', (e) => { if (!$('#menu').hidden && !e.target.closest('.menu-wrap')) toggleMenu(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#menu').hidden) { toggleMenu(false); $('#moreBtn').focus(); } });
+  $('#menu').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    if (b.dataset.fmt) { settings.format = b.dataset.fmt; store.set('format', settings.format); drawPlace(); }
+    if (b.dataset.feet) { settings.feet = b.dataset.feet === '1'; store.set('feet', settings.feet); if (S.placeInfo) S.place = T.placeText(S.placeInfo, settings.feet); drawPlace(); drawSpot(); }
+    if (b.dataset.north) { settings.trueNorth = b.dataset.north === 'true'; store.set('trueNorth', settings.trueNorth); S.lock = null; updateHeading(); }
+    const act = b.dataset.act;
+    toggleMenu(false);
+    if (act === 'follow') setFollow(!settings.follow);
+    if (act === 'night') setNight(!settings.night);
+    if (act === 'spot') { if (S.spot) clearSpot(); else markSpot(); }
+    if (act === 'lock') toggleLock();
+    if (act === 'copy') copyCoords();
+    if (act === 'shareLoc') shareLocation();
+    if (act === 'share') shareApp();
+    if (act === 'terms') window.open('https://bradcowdrey.com/legal', '_blank', 'noopener');
+    if (act === 'about') $('#about').showModal();
+  });
+  $('#aboutClose').addEventListener('click', () => $('#about').close());
+
+  function toast(text) {
+    const t = $('#toast'); t.textContent = text; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 1600);
+  }
+  function copy(text, done) {
+    const ok = () => toast(done);
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(ok, () => fallbackCopy(text, ok));
+    else fallbackCopy(text, ok);
+  }
+  function fallbackCopy(text, ok) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); ok(); } catch { toast('Couldn’t copy'); }
+    ta.remove();
+  }
+  function copyCoords() { if (S.fix) copy(T.copyText(settings.format, S.fix.lat, S.fix.lon), 'Coordinates copied'); }
+  function shareLocation() {
+    const f = S.fix; if (!f) return;
+    const text = `${S.place && !S.sample ? S.place + '\n' : ''}${T.copyText(settings.format, f.lat, f.lon)}\nhttps://www.openstreetmap.org/?mlat=${f.lat.toFixed(5)}&mlon=${f.lon.toFixed(5)}#map=16/${f.lat.toFixed(5)}/${f.lon.toFixed(5)}`;
+    if (navigator.share && window.self === window.top) navigator.share({ title: 'My location', text }).catch(() => {});
+    else copy(text, 'Location copied');
+  }
+  const SHARE_TEXT = 'Bearings: a compass with where you are, your coordinates, elevation, the sun and moon, and a map, on one screen. Free and open source, by Bradley Cowdrey.';
+  function shareApp() {
+    const url = 'https://bradcowdrey.com/bearings';
+    if (navigator.share && window.self === window.top) navigator.share({ title: 'Bearings', text: SHARE_TEXT, url }).catch(() => {});
+    else copy(`${SHARE_TEXT} ${url}`, 'Link copied');
+  }
+  function toggleLock() {
+    if (S.heading === null) return;
+    S.lock = S.lock === null ? Math.round(S.heading) % 360 : null;
+    if (navigator.vibrate) try { navigator.vibrate(12); } catch {}
+    drawHeading();
+    toast(S.lock === null ? 'Bearing cleared' : `Bearing locked at ${S.lock}°`);
+  }
+
+  // ---------- Wiring ----------
+  $('#dial').addEventListener('click', toggleLock);
+  $('#startCompass').addEventListener('click', (e) => { e.stopPropagation(); askForCompass(); });
+  $('#useLoc').addEventListener('click', startLocation);
+  for (const id of ['#latTile', '#lonTile', '#gridTile']) {
+    const t = $(id);
+    let timer = null, held = false;   // touch and hold copies; a tap changes the format
+    t.addEventListener('pointerdown', () => { held = false; timer = setTimeout(() => { held = true; copyCoords(); }, 550); });
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) t.addEventListener(ev, () => clearTimeout(timer));
+    t.addEventListener('click', () => { if (held) { held = false; return; } cycleFormat(); });
+  }
+  $('#spotClear').addEventListener('click', clearSpot);
+  $('#zoomIn').addEventListener('click', () => map && map.zoomIn());
+  $('#zoomOut').addEventListener('click', () => map && map.zoomOut());
+  $('#followBtn').addEventListener('click', () => setFollow(!settings.follow));
+  $('#openMap').addEventListener('click', openFullMap);
+  document.addEventListener('keydown', (e) => {
+    if (e.target.closest('input, textarea, dialog')) return;
+    if (e.key === 'c' && (e.metaKey || e.ctrlKey) && !getSelection().toString()) { copyCoords(); e.preventDefault(); }
+  });
+  setInterval(() => { drawWhen(); if (S.fix && !S.sample) { drawPlace(); drawSky(); } }, 15000);
+
+  buildDial();
+  setNight(settings.night);
+  $('#followBtn').setAttribute('aria-pressed', String(settings.follow));
+  drawWhen(); drawHeading(); drawPlace(); drawSky();
+
+  // A sample place for screenshots, previews without location, and the product page's demo.
+  function startSample() {
+    S.sample = true; S.compassState = 'live';
+    S.fix = { lat: 39.09898, lon: -106.94117, acc: 5, alt: 2925, altAcc: 4, speed: params.has('moving') ? 1.43 : 0, time: Date.now() };
+    S.ground = { m: 2922, lat: T.rounded(S.fix.lat), lon: T.rounded(S.fix.lon) }; S.groundState = 'ok';
+    if (params.has('spot')) S.spot = { lat: 39.1911, lon: -106.8175 };
+    S.headingAcc = 8; S.tilt = { beta: 1.2, gamma: -0.8 };
+    S.decl = T.magneticDeclination(S.fix.lat, S.fix.lon, 2925, now());
+    if (params.has('night')) setNight(true);
+    const t0 = performance.now(), fixed = params.get('heading');
+    const step = (t) => {
+      const h = fixed !== null ? Number(fixed) : 228 + 14 * Math.sin((t - t0) / 2600);
+      S.magnetic = smooth.push(T.normalize(h - (settings.trueNorth ? S.decl : 0)));
+      updateHeading();
+      if (fixed === null) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    if (params.has('lock')) setTimeout(() => { S.lock = Number(params.get('lock')) || 0; drawHeading(); }, 50);
+    drawPlace(); drawCompassState(); drawSky(); drawSpot(); updateMap();
+  }
+
+  window.Bearings = { state: S, settings, drawPlace, drawHeading, onOrientation, startSample };
+
+  if (S.sample) { startSample(); return; }
+  listenCompass();
+  const auto = () => { if (store.get('located', false)) startLocation(); };
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then((p) => { if (p.state === 'granted') startLocation(); else if (p.state === 'denied') { S.locState = 'denied'; drawPlace(); } }).catch(auto);
+  } else auto();
+})();
+</script>
+
+</body></html>

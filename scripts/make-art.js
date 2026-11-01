@@ -1,0 +1,76 @@
+// Draws Bearings' icons and DMG background with Playwright (Chromium), in the style of Two Degrees:
+// warm near-black with a soft glow, a crimson band, cream and pink. Writes:
+//   Resources/AppIcon.png (Mac, 1024, rounded with margin)  Resources/iOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png (full bleed)
+//   docs/icon.png (512)  Resources/dmg/background.png and background@2x.png  android/.../mipmap-*/ic_launcher*.png
+// Usage: node scripts/make-art.js
+const path = require('path');
+const fs = require('fs');
+let playwright;
+try { playwright = require('playwright'); } catch { playwright = require(path.join(require('child_process').execSync('npm root -g').toString().trim(), 'playwright')); }
+const root = path.resolve(__dirname, '..');
+
+// The compass needle on a ring of ticks, in a 1024 box, centred at (cx, cy) with radius r.
+function needle(cx, cy, r) {
+  let ticks = '';
+  for (let d = 0; d < 360; d += 15) {
+    const major = d % 90 === 0;
+    ticks += `<line x1="${cx}" y1="${cy - r}" x2="${cx}" y2="${cy - r + (major ? r * 0.16 : r * 0.08)}" stroke="${d === 0 ? '#E04A7A' : major ? '#FFF1E5' : '#6A6158'}" stroke-width="${major ? r * 0.045 : r * 0.022}" stroke-linecap="round" transform="rotate(${d} ${cx} ${cy})"/>`;
+  }
+  const w = r * 0.24, len = r * 0.74;
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#3E3832" stroke-width="${r * 0.03}"/>${ticks}
+    <path d="M${cx} ${cy - len} L${cx + w} ${cy} L${cx - w} ${cy} Z" fill="#E04A7A"/>
+    <path d="M${cx} ${cy + len} L${cx - w} ${cy} L${cx + w} ${cy} Z" fill="#FFF1E5"/>
+    <circle cx="${cx}" cy="${cy}" r="${r * 0.07}" fill="#1A1816"/>`;
+}
+
+const glow = `<defs>
+  <radialGradient id="g" cx="0.68" cy="0.3" r="0.85"><stop offset="0" stop-color="#463A2A"/><stop offset="0.55" stop-color="#2A2420"/><stop offset="1" stop-color="#181615"/></radialGradient>
+  <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+  <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-opacity=".35"/></filter></defs>`;
+
+const mac = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${glow}
+  <g filter="url(#sh)"><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/></g>
+  <g clip-path="url(#sq)"><rect x="100" y="100" width="824" height="28" fill="#990F3D"/></g>
+  ${needle(512, 526, 300)}</svg>`;
+const ios = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${glow}
+  <rect width="1024" height="1024" fill="url(#g)"/><rect width="1024" height="34" fill="#990F3D"/>
+  ${needle(512, 522, 370)}</svg>`;
+const fg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${needle(512, 512, 250)}</svg>`;
+const dmg = (s) => `<html><body style="margin:0;width:660px;height:400px;background:#1A1816;font-family:Inter,-apple-system,system-ui,sans-serif;color:#fff;position:relative;overflow:hidden;zoom:${s}">
+  <div style="position:absolute;inset:0 0 auto;height:4px;background:#990F3D"></div>
+  <div style="position:absolute;top:44px;width:100%;text-align:center;font-size:28px;font-weight:600;letter-spacing:-.5px">Bearings</div>
+  <div style="position:absolute;top:88px;width:100%;text-align:center;font-size:15px;color:#B0A898">A compass with your coordinates, elevation and a map.</div>
+  <div style="position:absolute;left:92px;top:121px;width:176px;height:188px;border-radius:22px;background:#23201D"></div>
+  <div style="position:absolute;left:392px;top:121px;width:176px;height:188px;border-radius:22px;background:#23201D"></div>
+  <div style="position:absolute;left:280px;top:176px;width:100px;text-align:center;font-size:13px;color:#E0D8D0">Drag to install</div>
+  <div style="position:absolute;left:286px;top:204px;width:80px;height:1.5px;background:#8E857B"></div>
+  <div style="position:absolute;left:364px;top:199px;border-left:10px solid #8E857B;border-top:6px solid transparent;border-bottom:6px solid transparent"></div>
+  <div style="position:absolute;top:366px;width:100%;text-align:center;font-size:13px;color:#8E857B">Bradley Cowdrey · bradcowdrey.com</div></body></html>`;
+
+(async () => {
+  const browser = await playwright.chromium.launch();
+  const page = await browser.newPage();
+  async function svg(markup, out, size, transparent) {
+    await page.setViewportSize({ width: size, height: size });
+    await page.setContent(`<html><body style="margin:0;background:transparent">${markup.replace('width="1024" height="1024"', `width="${size}" height="${size}"`)}</body></html>`);
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    await page.screenshot({ path: out, omitBackground: !!transparent });
+  }
+  await svg(mac, path.join(root, 'Resources/AppIcon.png'), 1024, true);
+  await svg(ios, path.join(root, 'Resources/iOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png'), 1024);
+  await svg(ios, path.join(root, 'docs/icon.png'), 512);
+  const res = path.join(root, 'android/app/src/main/res');
+  for (const [d, px] of [['mdpi', 48], ['hdpi', 72], ['xhdpi', 96], ['xxhdpi', 144], ['xxxhdpi', 192]]) {
+    await svg(ios, path.join(res, `mipmap-${d}/ic_launcher.png`), px);
+    await svg(fg, path.join(res, `mipmap-${d}/ic_launcher_foreground.png`), Math.round(px * 108 / 48), true);
+  }
+  await svg(ios, path.join(res, 'drawable-nodpi/app_mark.png'), 256);
+  for (const [s, name] of [[1, 'background.png'], [2, 'background@2x.png']]) {
+    await page.setViewportSize({ width: 660 * s, height: 400 * s });
+    await page.setContent(dmg(s));
+    fs.mkdirSync(path.join(root, 'Resources/dmg'), { recursive: true });
+    await page.screenshot({ path: path.join(root, 'Resources/dmg', name) });
+  }
+  await browser.close();
+  console.log('Drew the icons and the DMG background');
+})();

@@ -1,0 +1,93 @@
+name: iPhone
+
+# Builds the iPhone and iPad app with its widget, checks the packaged widget, and runs the app in the
+# iOS Simulator: --selftest with the Simulator placed at Maroon Bells, Colorado (location fix, live
+# ground elevation, naming the place, the compass's "no compass" state, every widget size drawn), then
+# photographs the terms, the live screen, and the sample place on iPhone and iPad. Results go to the
+# ci-shots-ios branch; the job fails if any check fails.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build for the Simulator
+        run: scripts/build-ios.sh 0.0.0-ci
+      - name: Check the packaged widget
+        run: |
+          A=dist/ios/Bearings.app; W="$A/PlugIns/BearingsWidget.appex"
+          plutil -extract NSExtension.NSExtensionPointIdentifier raw "$W/Info.plist" | grep -q com.apple.widgetkit-extension \
+            || { echo "::error::The iPhone widget isn't declared as a WidgetKit extension"; exit 1; }
+          plutil -extract NSWidgetWantsLocation raw "$W/Info.plist" | grep -q true \
+            || { echo "::error::The iPhone widget doesn't ask for its own location (NSWidgetWantsLocation)"; exit 1; }
+          [ -s "$W/Cities.tsv" ] && [ -s "$A/Cities.tsv" ] || { echo "::error::The place list (Cities.tsv) isn't bundled"; exit 1; }
+          for X in "$A" "$W"; do
+            codesign -d --entitlements - --xml "$X" 2>/dev/null | plutil -convert xml1 -o - - | grep -q 'group.com.bradcowdrey.bearings' \
+              || echo "::warning::$(basename "$X") has no App Group in its Simulator signature"
+          done
+          test -f "$A/Assets.car" || { echo "::error::The iPhone app has no asset catalog (icon)"; exit 1; }
+      - name: Run in the Simulator
+        run: |
+          OUT="$RUNNER_TEMP/shots"; mkdir -p "$OUT"
+          ID=com.bradcowdrey.bearings
+          pick() {   # newest iOS runtime's device whose name starts with $1
+            xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          xs=[(r,x) for r,xs in d.items() if "iOS" in r for x in xs if x["name"].startswith(sys.argv[1])]
+          xs.sort(key=lambda p:(p[0], "Pro" in p[1]["name"] and "Max" not in p[1]["name"]))
+          print(xs[-1][1]["udid"])' "$1"
+          }
+          run_on() {   # $1 = device, $2 = prefix
+            local DEVICE="$1" P="$2"
+            xcrun simctl list devices | grep "$DEVICE" | tee -a "$OUT/device.txt"
+            xcrun simctl boot "$DEVICE"; xcrun simctl bootstatus "$DEVICE" -b
+            xcrun simctl status_bar "$DEVICE" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 || true
+            xcrun simctl install "$DEVICE" dist/ios/Bearings.app
+            xcrun simctl privacy "$DEVICE" grant location $ID || true
+            xcrun simctl location "$DEVICE" set 39.09898,-106.94117 || true
+            xcrun simctl launch "$DEVICE" $ID --show-terms; sleep 6
+            xcrun simctl io "$DEVICE" screenshot "$OUT/$P-1-terms.png"; xcrun simctl terminate "$DEVICE" $ID || true
+            xcrun simctl launch "$DEVICE" $ID --sample; sleep 6
+            xcrun simctl io "$DEVICE" screenshot "$OUT/$P-2-sample.png"; xcrun simctl terminate "$DEVICE" $ID || true
+            xcrun simctl launch "$DEVICE" $ID --sample --format mgrs; sleep 6
+            xcrun simctl io "$DEVICE" screenshot "$OUT/$P-3-mgrs.png"; xcrun simctl terminate "$DEVICE" $ID || true
+          }
+          PHONE=$(pick iPhone)
+          run_on "$PHONE" iphone
+          # The self-test, with a real location fix and network.
+          DOCS="$(xcrun simctl get_app_container "$PHONE" $ID data)/Documents"; mkdir -p "$DOCS"; rm -f "$DOCS/report.txt"
+          xcrun simctl launch "$PHONE" $ID --selftest
+          for i in $(seq 1 150); do [ -f "$DOCS/report.txt" ] && break; sleep 1; done
+          sleep 2; xcrun simctl io "$PHONE" screenshot "$OUT/iphone-4-live.png"
+          cp "$DOCS/report.txt" "$OUT/report.txt" 2>/dev/null || echo "FAILED (no report)" > "$OUT/report.txt"
+          cp "$DOCS"/*.png "$OUT/" 2>/dev/null || true
+          xcrun simctl terminate "$PHONE" $ID || true
+          xcrun simctl shutdown "$PHONE" || true
+          IPAD=$(pick iPad)
+          run_on "$IPAD" ipad
+          cat "$OUT/report.txt"
+      - name: Publish to ci-shots-ios branch
+        if: always() && github.event_name != 'pull_request'
+        run: |
+          cd "$RUNNER_TEMP/shots"
+          echo "$GITHUB_SHA" > commit.txt
+          git init -q -b ci-shots-ios
+          git config user.name "ci"; git config user.email "ci@users.noreply.github.com"
+          git add -A && git commit -qm "iPhone self-test for $GITHUB_SHA"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-shots-ios
+      - name: Fail on any failed check
+        run: |
+          grep -E "^FAIL" "$RUNNER_TEMP/shots/report.txt" | sed 's/^/::error::/' || true
+          head -1 "$RUNNER_TEMP/shots/report.txt" | grep -q "ALL PASSED"

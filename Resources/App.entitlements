@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Shares the last fix, place and settings with the widget. The team ID prefix lets a Developer ID
+         app use the group without a provisioning profile. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>2XV97FZ86G.com.bradcowdrey.bearings</string>
+    </array>
+    <!-- Location: the hardened runtime blocks Location Services without this. -->
+    <key>com.apple.security.personal-information.location</key>
+    <true/>
+</dict>
+</plist>

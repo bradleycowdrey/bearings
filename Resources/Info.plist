@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Bearings</string>
+    <key>CFBundleDisplayName</key>
+    <string>Bearings</string>
+    <key>CFBundleExecutable</key>
+    <string>Bearings</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.bradcowdrey.bearings</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.navigation</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSLocationUsageDescription</key>
+    <string>Bearings shows your latitude, longitude, elevation and a map of where you are. Your location stays on your Mac; only a rounded position (about 100 m) goes to Open-Meteo for the ground elevation.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Bearings shows your latitude, longitude, elevation and a map of where you are. Your location stays on your Mac; only a rounded position (about 100 m) goes to Open-Meteo for the ground elevation.</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Bradley Cowdrey · bradcowdrey.com</string>
+</dict>
+</plist>

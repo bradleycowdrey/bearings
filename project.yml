@@ -1,0 +1,115 @@
+# XcodeGen spec: the Mac app and the iPhone/iPad app, each with its WidgetKit extension.
+# scripts/build-app.sh and scripts/build-ios.sh generate Bearings.xcodeproj from this (the project file
+# itself isn't committed).
+name: Bearings
+options:
+  bundleIdPrefix: com.bradcowdrey
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MARKETING_VERSION: "0.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: YES
+    ARCHS: "arm64 x86_64"
+    ONLY_ACTIVE_ARCH: NO
+    GENERATE_INFOPLIST_FILE: NO
+targets:
+  Bearings:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/Bearings
+      - path: Resources/Cities.tsv
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: Bearings
+        PRODUCT_BUNDLE_IDENTIFIER: com.bradcowdrey.bearings
+        INFOPLIST_FILE: Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Resources/App.entitlements
+    dependencies:
+      - target: BearingsWidget
+        embed: true
+    scheme: {}
+
+  # The widget: the core, the shared widget data and views, and the place list. The same sources build
+  # the iPhone and iPad widget below.
+  BearingsWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Sources/BearingsWidget
+      - path: Sources/Bearings/Core/Geo.swift
+      - path: Sources/Bearings/Core/Sky.swift
+      - path: Sources/Bearings/Core/Places.swift
+      - path: Sources/Bearings/Model/WidgetData.swift
+      - path: Sources/Bearings/Views/Palette.swift
+      - path: Sources/Bearings/Views/SkyMarks.swift
+      - path: Sources/Bearings/Views/WidgetViews.swift
+      - path: Resources/Cities.tsv
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: BearingsWidget
+        PRODUCT_BUNDLE_IDENTIFIER: com.bradcowdrey.bearings.widget
+        INFOPLIST_FILE: Resources/Widget-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Resources/Widget.entitlements
+        SKIP_INSTALL: YES
+
+  # iPhone and iPad: the same core, model and screen; the Mac-only files (Sources/Bearings/Mac) stay out.
+  BearingsPhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/BearingsPhone
+      - path: Sources/Bearings/Brand.swift
+      - path: Sources/Bearings/Core
+      - path: Sources/Bearings/Model
+      - path: Sources/Bearings/Views
+      - path: Resources/Cities.tsv
+        buildPhase: resources
+      - path: Resources/iOS/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_NAME: Bearings
+        PRODUCT_BUNDLE_IDENTIFIER: com.bradcowdrey.bearings
+        INFOPLIST_FILE: Resources/iOS/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: Resources/iOS/App.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ARCHS: "$(ARCHS_STANDARD)"
+        ENABLE_HARDENED_RUNTIME: NO
+    dependencies:
+      - target: BearingsPhoneWidget
+        embed: true
+    scheme: {}
+  BearingsPhoneWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/BearingsWidget
+      - path: Sources/Bearings/Core/Geo.swift
+      - path: Sources/Bearings/Core/Sky.swift
+      - path: Sources/Bearings/Core/Places.swift
+      - path: Sources/Bearings/Model/WidgetData.swift
+      - path: Sources/Bearings/Views/Palette.swift
+      - path: Sources/Bearings/Views/SkyMarks.swift
+      - path: Sources/Bearings/Views/WidgetViews.swift
+      - path: Resources/Cities.tsv
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: BearingsWidget
+        PRODUCT_BUNDLE_IDENTIFIER: com.bradcowdrey.bearings.widget
+        INFOPLIST_FILE: Resources/iOS/Widget-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Resources/iOS/Widget.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ARCHS: "$(ARCHS_STANDARD)"
+        ENABLE_HARDENED_RUNTIME: NO
+        SKIP_INSTALL: YES

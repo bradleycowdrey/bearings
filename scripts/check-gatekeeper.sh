@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# CI: what a Mac checks when the app is opened. Developer ID, notarized, ticket stapled to the app,
+# and the widget signed by the same team. The DMG must be signed; its own notarization is submitted
+# without waiting (see make-dmg.sh), so its Gatekeeper check is informational.
+set -euo pipefail
+APP=dist/Bearings.app
+DMG="$(ls dist/Bearings-*.dmg)"
+spctl -a -vv -t exec "$APP" 2>&1 | tee "$RUNNER_TEMP/gk.txt"
+grep -q "source=Notarized Developer ID" "$RUNNER_TEMP/gk.txt" || { echo "::error::Gatekeeper doesn't accept the app as notarized"; exit 1; }
+xcrun stapler validate "$APP"
+codesign --verify --strict "$DMG"
+# Authority lines need -dvv. Read the output whole: grep -q in a pipe under pipefail can SIGPIPE codesign.
+DMG_SIG="$(codesign -dvv "$DMG" 2>&1)"
+grep -q '^Authority=Developer ID Application' <<<"$DMG_SIG" \
+  || { echo "::error::The DMG isn't signed with the Developer ID:%0A${DMG_SIG//$'\n'/%0A}"; exit 1; }
+spctl -a -vv -t open --context context:primary-signature "$DMG" || echo "(DMG notarization still with Apple)"
+APP_TEAM="$(codesign -dv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+WIDGET_TEAM="$(codesign -dv "$APP/Contents/PlugIns/BearingsWidget.appex" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+echo "app team $APP_TEAM, widget team $WIDGET_TEAM"
+[[ -n "$APP_TEAM" && "$APP_TEAM" == "$WIDGET_TEAM" ]] || { echo "::error::The app and its widget aren't signed by the same team"; exit 1; }

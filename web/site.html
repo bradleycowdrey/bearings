@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bearings · Bradley Cowdrey</title>
+<meta name="description" content="Bearings: a compass with where you are, your coordinates, elevation, the sun and moon, and a map, on one screen. Free and open source for iPhone, iPad, Android, Mac and the web. No ads, no tracking.">
+<meta property="og:title" content="Bearings">
+<meta property="og:description" content="A compass with your coordinates, elevation and a map, on one screen. Free and open source, by Bradley Cowdrey.">
+<meta property="og:image" content="https://bradleycowdrey.github.io/bearings/icon.png">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; --bg: #1A1816; --tile: #23201D; --border: #3A3530; --cream: #FFF1E5; --secondary: #E0D8D0; --muted: #B0A898; --faint: #9A9286; --crimson: #990F3D; --accent: #E04A7A;
+    --font: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+  body { margin: 0; background: var(--bg); color: #fff; font: 400 17px/1.5 var(--font); letter-spacing: -.01em; }
+  a { color: inherit; }
+  .bar { height: 4px; background: var(--crimson); }
+  nav { display: flex; align-items: center; gap: 18px; max-width: 1080px; margin: 0 auto; padding: 18px 20px; font-size: 15px; }
+  nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; margin-right: auto; }
+  nav .brand img { width: 30px; height: 30px; border-radius: 7px; }
+  nav a { text-decoration: none; color: var(--secondary); }
+  nav a:hover { color: #fff; }
+  .cta, .pill { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 18px; border-radius: 980px; background: var(--cream); color: var(--bg) !important; font-weight: 600; text-decoration: none; }
+  .ghost { background: transparent; color: #fff !important; box-shadow: inset 0 0 0 1px var(--border); }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 20px 64px; }
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 48px; align-items: center; padding: 32px 0 24px; }
+  .hero h1 { font-size: clamp(44px, 7vw, 72px); line-height: 1; letter-spacing: -.045em; margin: 0 0 16px; }
+  .hero p.lead { font-size: 21px; color: var(--secondary); margin: 0 0 24px; max-width: 30ch; }
+  .hero .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .hero small { display: block; margin-top: 14px; color: var(--muted); font-size: 14px; }
+  .demo iframe { display: block; width: 100%; height: 860px; border: 0; border-radius: 28px; background: var(--bg); color-scheme: dark; }
+  h2 { font-size: clamp(30px, 4vw, 42px); letter-spacing: -.035em; margin: 72px 0 20px; line-height: 1.1; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .card { background: var(--tile); border-radius: 22px; padding: 22px; }
+  .card h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -.02em; }
+  .card p { margin: 0 0 14px; color: var(--secondary); font-size: 15px; }
+  .card p:last-child { margin-bottom: 0; }
+  .card .soon { color: var(--muted); font-size: 14px; }
+  ul.features { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 28px; }
+  ul.features li { color: var(--secondary); font-size: 16px; padding-left: 20px; position: relative; }
+  ul.features li::before { content: ""; position: absolute; left: 0; top: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  ul.features b { color: #fff; font-weight: 600; }
+  footer { max-width: 1080px; margin: 0 auto; padding: 28px 20px 48px; display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; color: var(--muted); font-size: 14px; border-top: 1px solid #2A2520; }
+  @media (max-width: 900px) { .hero { grid-template-columns: 1fr; gap: 28px; } .demo iframe { height: 844px; max-width: 420px; margin: 0 auto; } nav a:not(.brand):not(.cta) { display: none; } }
+</style>
+</head>
+<body>
+<div class="bar"></div>
+<nav>
+  <a class="brand" href="#"><img src="icon.png" alt="">Bearings</a>
+  <a href="#features">Features</a>
+  <a href="https://github.com/bradleycowdrey/bearings">Source</a>
+  <a class="cta" href="#download">Download</a>
+</nav>
+<main>
+  <section class="hero">
+    <div>
+      <h1>Bearings.</h1>
+      <p class="lead">Get your bearings: the compass, where you are, the time, your coordinates and elevation, the sun and moon, and a map. All on one screen.</p>
+      <div class="row">
+        <a class="pill" href="#download">Download</a>
+        <a class="pill ghost" href="app.html">Open in your browser</a>
+      </div>
+      <small>Free and open source. No ads, no account, no tracking. Made by <a href="https://bradcowdrey.com">Bradley Cowdrey</a>.</small>
+    </div>
+    <div class="demo"><iframe id="app" title="Bearings, live" src="app.html?demo&embed&spot&lock=240" allow="geolocation; clipboard-write; web-share; accelerometer; gyroscope; magnetometer" loading="eager"></iframe></div>
+  </section>
+
+  <h2 id="download">Get Bearings.</h2>
+  <div class="grid">
+    <div class="card"><h3>iPhone and iPad</h3><p>The live compass with true north, the level, Apple Maps, and Home Screen and Lock Screen widgets.</p><p class="soon">On the App Store soon; on TestFlight first.</p></div>
+    <div class="card"><h3>Android</h3><p>The same screen and a Home Screen widget, with OpenStreetMap maps. No Google Play services needed.</p><p><a class="pill" href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.apk">Download the APK</a></p></div>
+    <div class="card"><h3>Mac</h3><p>Where you are, the sun and moon, your elevation and map, with desktop widgets. (Macs have no compass.)</p><p><a class="pill" href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.dmg">Download for Mac</a></p></div>
+    <div class="card"><h3>Web</h3><p>Works in your phone’s browser, compass included. Add it to your Home Screen.</p><p><a class="pill" href="app.html">Open Bearings</a></p></div>
+  </div>
+
+  <h2 id="features">Everything on one screen.</h2>
+  <ul class="features">
+    <li><b>A clear compass.</b> 228° SW, true or magnetic north with the declination, turning the short way past north, with a tick at each point.</li>
+    <li><b>Where and when.</b> The town you’re in, or how far you are from the nearest one, with the date and time.</li>
+    <li><b>Six coordinate formats.</b> Decimal degrees, DMS, decimal minutes, UTM, MGRS and Plus Codes. Tap to switch; hold to copy.</li>
+    <li><b>Elevation in feet and metres at once</b>, from GPS or terrain data, with air pressure where your phone has a barometer.</li>
+    <li><b>The sun and moon on the dial</b>, with sunrise, sunset and the moon’s phase.</li>
+    <li><b>Mark a spot, find it again.</b> Where you parked, or camp: its direction on the dial and how far it is.</li>
+    <li><b>Lock a bearing</b> and see how far you’ve turned from it, plus a <b>bubble level</b>.</li>
+    <li><b>A map</b> with your heading, north up or following you. Satellite on Apple devices.</li>
+    <li><b>Honest accuracy.</b> ± for position and heading, a warning near magnets or metal, and speed as you move.</li>
+    <li><b>Night mode and widgets.</b> All red after dark; widgets for your Home Screen, Lock Screen and desktop.</li>
+    <li><b>Private and offline.</b> Your location stays on your device; the compass, coordinates, sun and place names work without a connection.</li>
+  </ul>
+
+  <h2>Not a survey instrument.</h2>
+  <p style="color:var(--secondary);max-width:62ch">Phone compasses are thrown off by metal, magnets, cases and cars, and positions and elevations can be wrong. Where it matters, carry a map and a real compass. See the <a href="https://bradcowdrey.com/legal">Terms of Use and Privacy</a>.</p>
+</main>
+<footer>
+  <span>© 2026 Bradley Cowdrey · <a href="https://bradcowdrey.com">bradcowdrey.com</a></span>
+  <span>Free and open source · <a href="https://github.com/bradleycowdrey/bearings">GitHub</a> · Elevation by <a href="https://open-meteo.com/">Open-Meteo</a> · Places from <a href="https://www.geonames.org">GeoNames</a> · Maps © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> via <a href="https://openfreemap.org">OpenFreeMap</a> · <a href="https://bradcowdrey.com/legal">Terms &amp; Privacy</a></span>
+</footer>
+</body>
+</html>
