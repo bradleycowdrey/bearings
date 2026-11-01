@@ -40,6 +40,8 @@ jobs:
       - name: Run in the Simulator
         run: |
           OUT="$RUNNER_TEMP/shots"; mkdir -p "$OUT"
+          # The app's clock in Colorado, where the Simulator is placed (it runs on UTC otherwise).
+          export SIMCTL_CHILD_TZ=America/Denver
           ID=com.bradcowdrey.bearings
           pick() {   # newest iOS runtime's device whose name starts with $1
             xcrun simctl list devices available -j | python3 -c '

@@ -50,7 +50,7 @@ jobs:
       - name: Run self-test
         run: |
           OUT="$RUNNER_TEMP/shots"; mkdir -p "$OUT"
-          dist/Bearings.app/Contents/MacOS/Bearings --selftest "$OUT" > "$OUT/app.log" 2>&1 &
+          TZ=America/Denver dist/Bearings.app/Contents/MacOS/Bearings --selftest "$OUT" > "$OUT/app.log" 2>&1 &
           PID=$!
           for i in $(seq 1 120); do [ -f "$OUT/report.txt" ] && break; sleep 1; done
           sleep 1; kill $PID 2>/dev/null || true

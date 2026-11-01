@@ -29,8 +29,8 @@ struct MainView: View {
     private static let gap: CGFloat = 12
     private static let tileGap: CGFloat = 8
     private static let headerHeight: CGFloat = 44
-    private static let tileHeight: CGFloat = 80
-    private static let pillHeight: CGFloat = 40
+    private static let tileHeight: CGFloat = 84
+    private static let pillHeight: CGFloat = 46
     private static let mapMinimum: CGFloat = 120
 
     /// The footer under the map: on the Mac and a wide iPad; on a phone it's in About.
@@ -90,7 +90,7 @@ struct MainView: View {
         if nav.spot != nil && nav.fix != nil { rest += Self.pillHeight; gaps += 1 }
         if update != nil { rest += 44; gaps += 1 }
         if showsFooter { rest += 16; gaps += 1 }
-        rest += CGFloat(gaps) * Self.gap + 12
+        rest += CGFloat(gaps) * Self.gap + 24   // text runs a little taller than its point size
         let room = size.height - rest
         return max(140, min(size.width - 2 * Self.margin, size.height * 0.36, 360, room))
     }
@@ -236,8 +236,9 @@ struct MainView: View {
             .accessibilityHint(nav.heading == nil ? "" : (nav.lock == nil ? "Locks this bearing" : "Clears the locked bearing"))
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(nav.heading.map { "\(Int($0.rounded()) % 360)°" } ?? "—")
+                Text(nav.heading.map { "\(Int($0.rounded()) % 360)°" } ?? "–°")
                     .font(.system(size: big, weight: .semibold))
+                    .foregroundStyle(nav.heading == nil ? Palette.textFaint : .white)
                     .tracking(-2)
                 Text(nav.heading.map { Geo.point($0) } ?? "")
                     .font(.system(size: big / 2, weight: .medium))
@@ -421,7 +422,8 @@ struct MainView: View {
         let value: String
         if let times = nav.sunTimes {
             if let rise = times.sunriseDate, let down = times.sunsetDate {
-                value = "\(rise.formatted(date: .omitted, time: .shortened)) – \(down.formatted(date: .omitted, time: .shortened))"
+                let short = Date.FormatStyle().hour(.defaultDigits(amPM: .omitted)).minute()
+                value = "\(rise.formatted(short)) – \(down.formatted(short))"
             } else {
                 value = times.polar == .day ? "Sun up all day" : "Sun down all day"
             }
@@ -556,6 +558,7 @@ struct Tile: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 14).padding(.vertical, 12)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.tile))
         .contentShape(Rectangle())
