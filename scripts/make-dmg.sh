@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="${1:-${VERSION:-0.1.0}}"
+VERSION="${1:-${VERSION:-$(cat VERSION)}}"
 VERSION="${VERSION##*v}"  # "v0.1.0" or "bearings-v0.1.0" -> "0.1.0"
 DMG="dist/Bearings-$VERSION.dmg"
 WORK="$(mktemp -d)"

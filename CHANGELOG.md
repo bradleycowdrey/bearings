@@ -3,9 +3,9 @@
 On a Mac, Bearings shows a banner when a new version is out. Every version is on
 [Releases](https://github.com/bradleycowdrey/bearings/releases).
 
-## [0.1.0] - 2026-11-01
+## [1.18.0] - 2026-11-01
 
-The first version of Bearings: get your bearings, on one screen.
+The first public release of Bearings: get your bearings, on one screen.
 
 - **The compass**: 228° SW under a fixed line, turning the short way past north, with a light tick at N, E,
   S and W. True north by default, with the declination; magnetic north if you prefer.

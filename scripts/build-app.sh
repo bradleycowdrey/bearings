@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="${1:-${VERSION:-0.1.0}}"
+VERSION="${1:-${VERSION:-$(cat VERSION)}}"
 VERSION="${VERSION##*v}"  # "v0.1.0" or "bearings-v0.1.0" -> "0.1.0"
 BUILD="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 APP="dist/Bearings.app"

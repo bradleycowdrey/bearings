@@ -80,8 +80,8 @@ git clone https://github.com/bradleycowdrey/bearings.git
 cd bearings
 swift test                          # the core's unit tests (macOS)
 swift run Bearings                 # the Mac app, in development
-scripts/build-app.sh 0.1.0          # dist/Bearings.app (needs XcodeGen: brew install xcodegen)
-scripts/build-ios.sh 0.1.0          # the iPhone and iPad app for the Simulator
+scripts/build-app.sh 1.18.0         # dist/Bearings.app (needs XcodeGen: brew install xcodegen)
+scripts/build-ios.sh 1.18.0         # the iPhone and iPad app for the Simulator
 scripts/build-web.sh                # docs/app.html and docs/index.html
 node tests/web.test.js              # the web tests (npm install playwright)
 cd android && ./gradlew assembleDebug testDebugUnitTest   # Android (JDK 17 and the Android SDK)
