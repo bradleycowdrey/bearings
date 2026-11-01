@@ -80,8 +80,8 @@ git clone https://github.com/bradleycowdrey/bearings.git
 cd bearings
 swift test                          # the core's unit tests (macOS)
 swift run Bearings                 # the Mac app, in development
-scripts/build-app.sh 1.18.0         # dist/Bearings.app (needs XcodeGen: brew install xcodegen)
-scripts/build-ios.sh 1.18.0         # the iPhone and iPad app for the Simulator
+scripts/build-app.sh 2.0.0          # dist/Bearings.app (needs XcodeGen: brew install xcodegen)
+scripts/build-ios.sh 2.0.0          # the iPhone and iPad app for the Simulator
 scripts/build-web.sh                # docs/app.html and docs/index.html
 node tests/web.test.js              # the web tests (npm install playwright)
 cd android && ./gradlew assembleDebug testDebugUnitTest   # Android (JDK 17 and the Android SDK)
@@ -98,6 +98,18 @@ Every push runs the Swift unit tests and the web tests (phone, small phone, tabl
   [`ci-shots-ios`](https://github.com/bradleycowdrey/bearings/tree/ci-shots-ios).
 - **Android**: builds, runs the unit tests, then the self-test in the emulator:
   [`ci-shots-android`](https://github.com/bradleycowdrey/bearings/tree/ci-shots-android).
+
+## Versions
+
+Bearings follows [semantic versioning](https://semver.org): **major.minor.patch**.
+
+- **Patch** (2.0.1): fixes only; nothing new to learn.
+- **Minor** (2.1.0): new features, and anything else people would notice, that doesn't break what they're used to.
+- **Major** (3.0.0): a big redesign, or a change that takes something away or works differently.
+
+Every release bumps `VERSION` once (every platform reads it) and adds a `CHANGELOG.md` entry written for
+people using the app. A published version is never replaced; the build number counts commits, so each build
+is newer than the last.
 
 ## Releasing
 

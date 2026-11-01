@@ -3,7 +3,7 @@
 On a Mac, Bearings shows a banner when a new version is out. Every version is on
 [Releases](https://github.com/bradleycowdrey/bearings/releases).
 
-## [1.18.0] - 2026-11-01
+## [2.0.0] - 2026-11-01
 
 The first public release of Bearings: get your bearings, on one screen.
 
