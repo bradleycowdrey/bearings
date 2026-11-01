@@ -418,12 +418,24 @@ struct MainView: View {
         }
     }
 
+    /// "6:36" on a 12-hour clock (sunrise is the morning one), "06:36" on a 24-hour one: the system's own
+    /// short time without AM or PM, so both times fit the tile.
+    static func shortTime(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        var text = f.string(from: date)
+        for symbol in [f.amSymbol, f.pmSymbol].compactMap({ $0 }) where !symbol.isEmpty {
+            text = text.replacingOccurrences(of: symbol, with: "")
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{202F}\u{00A0}")))
+    }
+
     private var sunTile: some View {
         let value: String
         if let times = nav.sunTimes {
             if let rise = times.sunriseDate, let down = times.sunsetDate {
-                let short = Date.FormatStyle().hour(.defaultDigits(amPM: .omitted)).minute()
-                value = "\(rise.formatted(short)) – \(down.formatted(short))"
+                value = "\(Self.shortTime(rise)) – \(Self.shortTime(down))"
             } else {
                 value = times.polar == .day ? "Sun up all day" : "Sun down all day"
             }
