@@ -10,8 +10,14 @@ adb wait-for-device
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
+# CI emulators often report their own launcher as not responding; keep those dialogs off the screenshots.
+adb shell settings put global hide_error_dialogs 1 || true
+# Colorado time, where the emulator is placed (it runs on UTC otherwise).
+adb root >/dev/null 2>&1 && sleep 2 && adb wait-for-device
+adb shell setprop persist.sys.timezone America/Denver || true
+adb shell cmd alarm set-timezone America/Denver >/dev/null 2>&1 || true
 adb install -r "$APK"
-shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
+shot() { adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1; sleep 1; adb exec-out screencap -p > "$OUT/$1.png"; }
 launch() { adb shell am start -W -n $ID/.MainActivity "$@" >/dev/null; }
 stop() { adb shell am force-stop $ID; }
 
