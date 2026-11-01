@@ -164,9 +164,9 @@ class Navigator(private val context: Context, private val displayRotation: () ->
         }
     }
 
-    fun setFormat(value: Geo.Format) { format = value; prefs.edit().putString("format", value.id).apply(); WidgetUpdates.redraw(context) }
+    @JvmName("changeFormat") fun setFormat(value: Geo.Format) { format = value; prefs.edit().putString("format", value.id).apply(); WidgetUpdates.redraw(context) }
 
-    fun setFeet(value: Boolean) {
+    @JvmName("changeFeet") fun setFeet(value: Boolean) {
         feet = value; prefs.edit().putBoolean("feet", value).apply()
         // "66 mi NE of Montrose" is in the units too, so name the place again.
         placeAt = null; fix?.let { nameThePlace(it) }
@@ -174,7 +174,7 @@ class Navigator(private val context: Context, private val displayRotation: () ->
     }
 
     fun setTrueNorth(value: Boolean) { preferTrueNorth = value; prefs.edit().putBoolean("trueNorth", value).apply(); smoother.reset() }
-    fun setFollowHeading(value: Boolean) { followHeading = value; prefs.edit().putBoolean("followHeading", value).apply() }
+    @JvmName("changeFollowHeading") fun setFollowHeading(value: Boolean) { followHeading = value; prefs.edit().putBoolean("followHeading", value).apply() }
     /** [save] is false for CI's night-mode screenshot, which shouldn't change the setting. */
     fun setNight(value: Boolean, save: Boolean = true) { night = value; if (save) prefs.edit().putBoolean("night", value).apply() }
     fun cycleFormat() = setFormat(format.next)
