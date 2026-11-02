@@ -506,9 +506,18 @@ class Navigator(private val context: Context, private val displayRotation: () ->
 
     val moonPhase: MoonPhase get() = Sky.moonPhase(now.toDouble())
 
-    /** "6:42 AM – 5:01 PM", or the polar day or night. */
+    /** "6:42 – 5:01" (sunrise is the morning one, so no AM or PM), or the polar day or night. */
     val sunText: String?
-        get() = fix?.let { f -> Sky.sunLine(Sky.sunTimes(now.toDouble(), f.latitude, f.longitude)) { clock(it) } }
+        get() = fix?.let { f -> Sky.sunLine(Sky.sunTimes(now.toDouble(), f.latitude, f.longitude)) { shortClock(it) } }
+
+    /** The phone's own time format without AM or PM: "6:42", or "06:42" on a 24-hour clock. */
+    fun shortClock(ms: Long): String {
+        val format = android.text.format.DateFormat.getTimeFormat(context).apply { timeZone = zone }
+        val symbols = java.text.DateFormatSymbols.getInstance(Locale.getDefault()).amPmStrings
+        var text = format.format(Date(ms))
+        for (s in symbols) if (s.isNotEmpty()) text = text.replace(s, "")
+        return text.replace('\u202F', ' ').replace('\u00A0', ' ').trim()
+    }
 
     /** "9:41 AM" or "09:41", as the phone is set (12- or 24-hour). */
     fun clock(ms: Long): String =

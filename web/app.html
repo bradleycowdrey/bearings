@@ -69,7 +69,8 @@
   .dial { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
   .dial svg { width: 100%; height: 100%; display: block; overflow: visible; }
   #card { transform-origin: 200px 200px; will-change: transform; }
-  .dial-note { position: absolute; left: 50%; top: 63%; transform: translateX(-50%); width: 60%; text-align: center; font-size: 12px; line-height: 1.35; color: var(--muted); pointer-events: none; }
+  /* No compass: said where the heading would be, in the readout's own space, so nothing overlaps the dial. */
+  .dial-note { display: flex; align-items: center; justify-content: center; max-width: 300px; min-height: 82px; margin-top: 4px; text-align: center; font-size: 15px; line-height: 20px; color: var(--muted); }
   .dial-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); height: 44px; padding: 0 20px; border: 0; border-radius: 980px;
     background: var(--cream); color: var(--bg); font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
   .readout { display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-top: 4px; }
@@ -193,8 +194,8 @@
         <svg viewBox="0 0 400 400" id="dialSvg" aria-hidden="true"></svg>
       </button>
       <button type="button" class="dial-cta" id="startCompass" hidden>Start Compass</button>
-      <div class="dial-note" id="dialNote" hidden></div>
     </div>
+    <div class="dial-note" id="dialNote" hidden></div>
     <div class="readout num" aria-hidden="true"><span class="deg" id="deg">—</span><span class="pt" id="pt"></span></div>
     <div class="subline" id="subline"></div>
     <span class="sr" id="srHeading" aria-live="polite"></span>
@@ -496,6 +497,7 @@
     const msg = { none: 'No compass on this device. Open Bearings on a phone or tablet to use it.',
       denied: 'Motion & Orientation access is off. Allow it in your browser’s settings, then reload.' }[S.compassState];
     note.hidden = !msg; note.textContent = msg || '';
+    document.querySelector('.readout').hidden = !!msg; $('#subline').hidden = !!msg;
     drawSubline();
   }
 
@@ -675,7 +677,7 @@
   function mapFailed() {
     mapLoading = false;
     const msg = $('#mapMsg'); msg.hidden = false;
-    msg.textContent = 'The map can’t load right now. Your compass, coordinates and elevation still work offline.';
+    msg.textContent = 'The map can’t load right now. Everything else still works offline.';
   }
   function updateAccuracyRing() {
     if (!map || !S.fix) return;

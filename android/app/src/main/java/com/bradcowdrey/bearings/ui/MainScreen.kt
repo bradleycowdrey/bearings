@@ -144,9 +144,18 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
                 Spacer(Modifier.height(gap))
                 DialBlock(nav, dialSide)
                 Spacer(Modifier.height(4.dp))
-                Readout(nav, readoutSize)
-                Text(subline(nav), style = text(13f, color = Palette.textMuted).copy(lineHeight = 18.sp), textAlign = TextAlign.Center, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().heightIn(min = 18.dp))
+                if (nav.compass == CompassStatus.UNAVAILABLE && nav.heading == null) {
+                    // No compass: say so where the heading would be, so nothing overlaps the dial.
+                    Box(Modifier.fillMaxWidth().height((readoutSize * 1.1f * fs).dp + (18 * fs).dp), contentAlignment = Alignment.Center) {
+                        Text("No compass on this device. Your coordinates, elevation and map still work.",
+                            style = text(15f, color = Palette.textMuted), textAlign = TextAlign.Center, maxLines = 2,
+                            modifier = Modifier.widthIn(max = 300.dp))
+                    }
+                } else {
+                    Readout(nav, readoutSize)
+                    Text(subline(nav), style = text(13f, color = Palette.textMuted).copy(lineHeight = 18.sp), textAlign = TextAlign.Center, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().heightIn(min = 18.dp))
+                }
                 Spacer(Modifier.height(gap))
                 val markText = nav.markText
                 if (markText != null) {
@@ -209,11 +218,6 @@ private fun DialBlock(nav: Navigator, side: Dp) {
                 mark = nav.markBearing?.let { nav.onCard(it) },
             )
             Dial(nav.cardRotation, nav.heading, marks, nav.tilt, Modifier.fillMaxSize())
-            if (nav.compass == CompassStatus.UNAVAILABLE && nav.heading == null) {
-                Text("No compass on this device. Your coordinates, elevation and map still work.",
-                    style = text(12f, color = Palette.textMuted), textAlign = TextAlign.Center,
-                    modifier = Modifier.widthIn(max = side * 0.6f).padding(top = side * 0.32f))
-            }
         }
     }
 }

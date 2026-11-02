@@ -229,12 +229,23 @@ struct MainView: View {
                          moonPhase: nav.moonPhase.phase,
                          spot: nav.spotBearing.map { nav.cardAngle($0) })
                     .frame(width: side, height: side)
-                    .overlay(alignment: .center) { dialNote(side: side) }
             }
             .buttonStyle(.plain)
             .accessibilityLabel(dialLabel)
             .accessibilityHint(nav.heading == nil ? "" : (nav.lock == nil ? "Locks this bearing" : "Clears the locked bearing"))
 
+            if nav.compass == .unavailable && nav.heading == nil {
+                // No compass: say so where the heading would be, in the readout's own space, so nothing
+                // overlaps the dial and the column keeps its rhythm.
+                Text(Self.noCompassText)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Palette.textMuted)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: 300)
+                    .frame(height: big * 1.2 + 4 + 18)
+            } else {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(nav.heading.map { "\(Int($0.rounded()) % 360)°" } ?? "–°")
                     .font(.system(size: big, weight: .semibold))
@@ -255,6 +266,7 @@ struct MainView: View {
                 .minimumScaleFactor(0.8)
                 .multilineTextAlignment(.center)
                 .frame(height: 18)
+            }
         }
     }
 
@@ -271,18 +283,6 @@ struct MainView: View {
         UIAccessibility.post(notification: .announcement, argument: "\(Int(h.rounded()) % 360) degrees, \(Geo.pointName(h).lowercased())")
     }
     #endif
-
-    @ViewBuilder
-    private func dialNote(side: CGFloat) -> some View {
-        if nav.compass == .unavailable && nav.heading == nil {
-            Text(Self.noCompassText)
-                .font(.system(size: 12))
-                .foregroundStyle(Palette.textMuted)
-                .multilineTextAlignment(.center)
-                .frame(width: side * 0.6)
-                .offset(y: side * 0.16)
-        }
-    }
 
     #if os(macOS)
     static let noCompassText = "Macs don’t have a compass. Your coordinates, elevation and map work here."
