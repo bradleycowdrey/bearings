@@ -47,8 +47,9 @@ struct MainView: View {
             let dial = dialSide(for: geo.size)
             // The readout keeps its proportion to the dial, so a smaller dial isn't overpowered.
             let big = min(readoutSize(for: geo.size), max(40, (dial * 0.22).rounded()))
+            let k: CGFloat = Self.isWide(geo.size) ? 1.15 : 1
             VStack(spacing: Self.gap) {
-                header
+                header(k: k)
                 if let update { updateBanner(update) }
                 compass(side: dial, big: big)
                 if nav.spot != nil, nav.fix != nil { spotPill }
@@ -61,6 +62,7 @@ struct MainView: View {
             .padding(.horizontal, Self.margin)
             .padding(.top, 4)
             .padding(.bottom, 8)
+            .environment(\.uiScale, k)
             .frame(maxWidth: Self.isWide(geo.size) ? 560 : 460)
             .frame(maxWidth: .infinity)
         }
@@ -86,7 +88,8 @@ struct MainView: View {
     /// needs the room (an iPhone SE).
     private func dialSide(for size: CGSize) -> CGFloat {
         let readout = readoutSize(for: size) * 1.2 + 4 + 18 + 4
-        var rest = Self.headerHeight + readout + 2 * Self.tileHeight + Self.tileGap + mapMinimum(for: size)
+        let k: CGFloat = Self.isWide(size) ? 1.15 : 1
+        var rest = Self.headerHeight * k + readout + 2 * Self.tileHeight * k + Self.tileGap + mapMinimum(for: size)
         var gaps = 4
         if nav.spot != nil && nav.fix != nil { rest += Self.pillHeight; gaps += 1 }
         if update != nil { rest += 44; gaps += 1 }
@@ -110,17 +113,17 @@ struct MainView: View {
 
     // MARK: Header
 
-    private var header: some View {
+    private func header(k: CGFloat) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(nav.placeTitle)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 20 * k, weight: .semibold))
                     .tracking(-0.3)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 HStack(spacing: 6) {
                     Text(dateLine)
-                        .font(.system(size: 13))
+                        .font(.system(size: 13 * k))
                         .foregroundStyle(Palette.textMuted)
                         .monospacedDigit()
                         .lineLimit(1)
@@ -540,6 +543,15 @@ struct MainView: View {
 
 /// One rounded tile: a small title, a large value (with an optional second unit), and a detail line,
 /// read by VoiceOver as one sentence.
+/// How much larger the column's type is on an iPad or a wide Mac window (1 on a phone).
+private struct UIScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
+extension EnvironmentValues {
+    var uiScale: CGFloat {
+        get { self[UIScaleKey.self] }
+        set { self[UIScaleKey.self] = newValue }
+    }
+}
+
 struct Tile: View {
     var title: String
     var value: String
@@ -550,19 +562,20 @@ struct Tile: View {
     var moonPhase: Double? = nil
     /// What VoiceOver says; the tile's text when nil.
     var spoken: String? = nil
+    @Environment(\.uiScale) private var k
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 2 * k) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12 * k, weight: .semibold))
                 .foregroundStyle(Palette.textMuted)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(value)
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.system(size: 19 * k, weight: .semibold))
                     .foregroundStyle(stale ? Palette.textMuted : .white)
                 if let secondary {
                     Text(secondary)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 14 * k, weight: .medium))
                         .foregroundStyle(Palette.textMuted)
                 }
             }
@@ -570,9 +583,9 @@ struct Tile: View {
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             HStack(spacing: 5) {
-                if let moonPhase { MoonGlyph(phase: moonPhase, size: 12) }
+                if let moonPhase { MoonGlyph(phase: moonPhase, size: 12 * k) }
                 Text(detail)
-                    .font(.system(size: 12))
+                    .font(.system(size: 12 * k))
                     .foregroundStyle(Palette.textMuted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -580,7 +593,7 @@ struct Tile: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .padding(.horizontal, 14).padding(.vertical, 12)
+        .padding(.horizontal, 14 * k).padding(.vertical, 12 * k)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.tile))
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
