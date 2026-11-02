@@ -42,12 +42,15 @@ struct MainView: View {
         #endif
     }
 
+    /// The system's Text Size, as a multiplier on the header and tiles: 1 at the default size, up to 1.3.
+    @ScaledMetric(relativeTo: .body) private var textScale: CGFloat = 1
+
     var body: some View {
         GeometryReader { geo in
             let dial = dialSide(for: geo.size)
             // The readout keeps its proportion to the dial, so a smaller dial isn't overpowered.
             let big = min(readoutSize(for: geo.size), max(40, (dial * 0.22).rounded()))
-            let k: CGFloat = Self.isWide(geo.size) ? 1.15 : 1
+            let k: CGFloat = (Self.isWide(geo.size) ? 1.15 : 1) * min(max(textScale, 1), 1.3)
             VStack(spacing: Self.gap) {
                 header(k: k)
                 if let update { updateBanner(update) }
@@ -88,7 +91,7 @@ struct MainView: View {
     /// needs the room (an iPhone SE).
     private func dialSide(for size: CGSize) -> CGFloat {
         let readout = readoutSize(for: size) * 1.2 + 4 + 18 + 4
-        let k: CGFloat = Self.isWide(size) ? 1.15 : 1
+        let k: CGFloat = (Self.isWide(size) ? 1.15 : 1) * min(max(textScale, 1), 1.3)
         var rest = Self.headerHeight * k + readout + 2 * Self.tileHeight * k + Self.tileGap + mapMinimum(for: size)
         var gaps = 4
         if nav.spot != nil && nav.fix != nil { rest += Self.pillHeight; gaps += 1 }
@@ -109,7 +112,7 @@ struct MainView: View {
 
     private static func isWide(_ size: CGSize) -> Bool { size.width >= 700 && size.height >= 900 }
 
-    private func readoutSize(for size: CGSize) -> CGFloat { size.height < 700 ? 46 : 56 }
+    private func readoutSize(for size: CGSize) -> CGFloat { size.height < 700 ? 46 : Self.isWide(size) ? 64 : 56 }
 
     // MARK: Header
 
