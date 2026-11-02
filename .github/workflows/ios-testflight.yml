@@ -5,7 +5,9 @@ name: iPhone TestFlight
 # (the .p8 file's contents), plus the app created in App Store Connect with bundle ID
 # com.bradcowdrey.bearings. Signing is automatic through the API key: the archive is signed for
 # development (that needs one registered device),
-# then exported and re-signed for App Store Connect. Without the secrets this does nothing.
+# then exported and re-signed for App Store Connect. The throwaway development certificates those builds
+# leave behind are revoked before and after each build (scripts/clear-api-dev-certs.py). Without the
+# secrets this does nothing.
 on:
   push:
     branches: [main]
@@ -47,6 +49,17 @@ jobs:
         run: |
           # The team comes from the secret if set, else from the Developer ID certificate (same team).
           if [[ -n "$NOTARY_TEAM_ID" ]]; then echo "DERIVED_TEAM_ID=$NOTARY_TEAM_ID" >> "$GITHUB_ENV"; else scripts/import-signing-cert.sh; fi
+      - name: Clear leftover API signing certificates
+        if: env.HAS_KEY == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          # Each cloud build makes an "Apple Development: Created via API" certificate whose key dies
+          # with the runner; Apple's per-team limit then blocks signing. Only those are revoked.
+          python3 -m pip install --quiet --break-system-packages "pyjwt[crypto]" 2>/dev/null || python3 -m pip install --quiet "pyjwt[crypto]"
+          python3 scripts/clear-api-dev-certs.py
       - name: Archive and upload
         if: env.HAS_KEY == 'true'
         env:
@@ -81,3 +94,14 @@ jobs:
             || { grep -iE "error" "$RUNNER_TEMP/export.log" | sort -u | head -25 | sed 's/^/::error::/'; tail -40 "$RUNNER_TEMP/export.log"; exit 1; }
           rm -f "$KEY"
           echo "::notice::Uploaded Bearings for iPhone $VERSION (build $BUILD) to App Store Connect. It shows in TestFlight once Apple finishes processing it."
+      - name: Clear this build's signing certificate
+        if: always() && env.HAS_KEY == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          # Each cloud build makes an "Apple Development: Created via API" certificate whose key dies
+          # with the runner; Apple's per-team limit then blocks signing. Only those are revoked.
+          python3 -m pip install --quiet --break-system-packages "pyjwt[crypto]" 2>/dev/null || python3 -m pip install --quiet "pyjwt[crypto]"
+          python3 scripts/clear-api-dev-certs.py
