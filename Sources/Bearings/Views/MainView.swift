@@ -590,7 +590,9 @@ struct Tile: View {
                 Text(detail)
                     .font(.system(size: 12 * k))
                     .foregroundStyle(Palette.textMuted)
-                    .lineLimit(1)
+                    // At a larger Text Size the detail wraps rather than being cut off.
+                    .lineLimit(k > 1.1 ? 2 : 1)
+                    .fixedSize(horizontal: false, vertical: true)
                     .minimumScaleFactor(0.85)
             }
         }
