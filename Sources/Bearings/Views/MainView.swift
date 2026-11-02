@@ -45,7 +45,8 @@ struct MainView: View {
     var body: some View {
         GeometryReader { geo in
             let dial = dialSide(for: geo.size)
-            let big = readoutSize(for: geo.size)
+            // The readout keeps its proportion to the dial, so a smaller dial isn't overpowered.
+            let big = min(readoutSize(for: geo.size), max(40, (dial * 0.22).rounded()))
             VStack(spacing: Self.gap) {
                 header
                 if let update { updateBanner(update) }
@@ -54,13 +55,13 @@ struct MainView: View {
                 tiles
                 MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
                            speed: nav.speed.map { Geo.speedText($0, feet: nav.feet) }, dimmed: nav.nightMode)
-                    .frame(minHeight: Self.mapMinimum * (geo.size.height < 700 ? 0.8 : 1), maxHeight: .infinity)
+                    .frame(minHeight: mapMinimum(for: geo.size), maxHeight: .infinity)
                 if showsFooter { footer }
             }
             .padding(.horizontal, Self.margin)
             .padding(.top, 4)
             .padding(.bottom, 8)
-            .frame(maxWidth: 460)
+            .frame(maxWidth: Self.isWide(geo.size) ? 560 : 460)
             .frame(maxWidth: .infinity)
         }
         .background(Palette.bg.ignoresSafeArea())
@@ -85,15 +86,25 @@ struct MainView: View {
     /// needs the room (an iPhone SE).
     private func dialSide(for size: CGSize) -> CGFloat {
         let readout = readoutSize(for: size) * 1.2 + 4 + 18 + 4
-        var rest = Self.headerHeight + readout + 2 * Self.tileHeight + Self.tileGap + Self.mapMinimum * (size.height < 700 ? 0.8 : 1)
+        var rest = Self.headerHeight + readout + 2 * Self.tileHeight + Self.tileGap + mapMinimum(for: size)
         var gaps = 4
         if nav.spot != nil && nav.fix != nil { rest += Self.pillHeight; gaps += 1 }
         if update != nil { rest += 44; gaps += 1 }
         if showsFooter { rest += 16; gaps += 1 }
-        rest += CGFloat(gaps) * Self.gap + 24   // text runs a little taller than its point size
+        rest += CGFloat(gaps) * Self.gap + 8   // text runs a little taller than its point size
         let room = size.height - rest
-        return max(140, min(size.width - 2 * Self.margin, size.height * 0.36, 360, room))
+        // An iPad or a wide Mac window gets a bigger dial in a wider column.
+        let cap: CGFloat = Self.isWide(size) ? 420 : 360
+        return max(140, min(size.width - 2 * Self.margin, size.height * 0.36, cap, room))
     }
+
+    /// The map gives up a little height before the dial does when a marked spot needs the room.
+    private func mapMinimum(for size: CGSize) -> CGFloat {
+        let base = Self.mapMinimum * (size.height < 700 ? 0.8 : 1)
+        return nav.spot != nil && nav.fix != nil ? base - 20 : base
+    }
+
+    private static func isWide(_ size: CGSize) -> Bool { size.width >= 700 && size.height >= 900 }
 
     private func readoutSize(for size: CGSize) -> CGFloat { size.height < 700 ? 46 : 56 }
 
@@ -483,9 +494,7 @@ struct MainView: View {
 
     private var footer: some View {
         HStack {
-            if nav.sample {
-                Text("Sample: Maroon Bells, Colorado").foregroundStyle(Palette.textMuted)
-            }
+            // The header's Sample badge already says when it's the sample place.
             Spacer()
             Link("Made by Bradley Cowdrey · bradcowdrey.com ↗", destination: Brand.website)
                 .foregroundStyle(Palette.textMuted)
