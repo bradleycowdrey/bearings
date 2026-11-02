@@ -41,6 +41,10 @@ stop
 launch --ez sample true --es format dd; sleep 8; shot android-3-sample; stop
 launch --ez sample true --es format mgrs; sleep 8; shot android-4-mgrs; stop
 launch --ez sample true --es format dd --ez night true; sleep 8; shot android-5-night; stop
+# A larger font size (Settings → Display → Font size): the screen must still fit, with larger type.
+adb shell settings put system font_scale 1.3 || true
+launch --ez sample true --es format dd; sleep 8; shot android-6-large-text; stop
+adb shell settings put system font_scale 1.0 || true
 adb shell getprop ro.build.version.release > "$OUT/device.txt"
 adb shell getprop ro.product.model >> "$OUT/device.txt"
 cat "$OUT/report.txt"

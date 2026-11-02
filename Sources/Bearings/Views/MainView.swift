@@ -462,7 +462,8 @@ struct MainView: View {
         let phase = nav.moonPhase
         let moon = "\(phase.name) · \(Int(Geo.jsRound(phase.fraction * 100)))%"
         return Tile(title: "Sun", value: value, detail: moon, stale: false, moonPhase: phase.phase,
-                    spoken: "Sun, \(value.replacingOccurrences(of: " – ", with: " to ")). Moon, \(moon.replacingOccurrences(of: " · ", with: ", ")) lit")
+                    spoken: "Sun, \(value.replacingOccurrences(of: " – ", with: " to ")). Moon, \(moon.replacingOccurrences(of: " · ", with: ", ")) lit",
+                    detailWraps: false)
     }
 
     private var askForLocation: some View {
@@ -565,6 +566,8 @@ struct Tile: View {
     var moonPhase: Double? = nil
     /// What VoiceOver says; the tile's text when nil.
     var spoken: String? = nil
+    /// Whether the detail may wrap at a larger Text Size (the moon's line reads better shrunk on one line).
+    var detailWraps: Bool = true
     @Environment(\.uiScale) private var k
 
     var body: some View {
@@ -591,9 +594,9 @@ struct Tile: View {
                     .font(.system(size: 12 * k))
                     .foregroundStyle(Palette.textMuted)
                     // At a larger Text Size the detail wraps rather than being cut off.
-                    .lineLimit(k > 1.1 ? 2 : 1)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .minimumScaleFactor(0.85)
+                    .lineLimit(k > 1.1 && detailWraps ? 2 : 1)
+                    .fixedSize(horizontal: false, vertical: detailWraps)
+                    .minimumScaleFactor(detailWraps ? 0.85 : 0.7)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
