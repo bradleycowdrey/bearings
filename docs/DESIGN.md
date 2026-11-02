@@ -62,7 +62,7 @@ radius 18 for tiles and the map, 28 for the panel on the web. Every control is a
    - **Sun**: "6:42 AM – 5:01 PM" (sunrise–sunset); detail "Waxing Gibbous · 82%" with the moon glyph.
      Polar day or night: "Sun up all day" / "Sun down all day".
 7. **Map**: fills the rest (at least 120). Controls top right in 32 circles: +, −, the heading button
-   (north up ↔ follow heading), and open in Maps. Bottom left, a chip with the speed when moving faster
+   (north up ↔ follow heading), and open in Maps. A chip with the speed (top left on Apple devices, clear of the Apple Maps label; bottom left elsewhere) when moving faster
    than 0.5 m/s ("3.2 mph"). Attribution stays visible.
 
 On a Mac and on the web (wider than a phone), the same column in a 460-wide panel, with the footer

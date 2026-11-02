@@ -45,17 +45,38 @@ struct MainView: View {
     /// The system's Text Size, as a multiplier on the header and tiles: 1 at the default size, up to 1.3.
     @ScaledMetric(relativeTo: .body) private var textScale: CGFloat = 1
 
+    /// Text Size alone, capped at 1.3: decides when the subline may take a second line, so an iPad at the
+    /// default size (whose k is 1.15) keeps one.
+    private var textK: CGFloat { min(max(textScale, 1), 1.3) }
+
+    /// Whether the subline under the heading may wrap to a second line (at a larger Text Size).
+    private var sublineWraps: Bool { textK > 1.1 }
+
+    /// Keeps a reading's words and units together ("21.29 inHg", "turn 12° right") and lets a line break
+    /// only after a " · ", never before it, so a dot never starts a line. A long name with a comma
+    /// ("Degrees, Decimal Minutes") may still break after its comma rather than be cut off.
+    static func keepTogether(_ text: String) -> String {
+        text.components(separatedBy: " · ")
+            .map { part in
+                part.components(separatedBy: ", ")
+                    .map { $0.replacingOccurrences(of: " ", with: "\u{00A0}") }
+                    .joined(separator: ", ")
+            }
+            .joined(separator: "\u{00A0}· ")
+    }
+
     var body: some View {
         GeometryReader { geo in
             let dial = dialSide(for: geo.size)
             // The readout keeps its proportion to the dial, so a smaller dial isn't overpowered.
             let big = min(readoutSize(for: geo.size), max(40, (dial * 0.22).rounded()))
-            let k: CGFloat = (Self.isWide(geo.size) ? 1.15 : 1) * min(max(textScale, 1), 1.3)
+            let wide: CGFloat = Self.isWide(geo.size) ? 1.15 : 1
+            let k: CGFloat = wide * textK
             VStack(spacing: Self.gap) {
                 header(k: k)
                 if let update { updateBanner(update) }
-                compass(side: dial, big: big)
-                if nav.spot != nil, nav.fix != nil { spotPill }
+                compass(side: dial, big: big, k: k)
+                if nav.spot != nil, nav.fix != nil { spotPill(k: k) }
                 tiles
                 MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
                            speed: nav.speed.map { Geo.speedText($0, feet: nav.feet) }, dimmed: nav.nightMode)
@@ -66,6 +87,7 @@ struct MainView: View {
             .padding(.top, 4)
             .padding(.bottom, 8)
             .environment(\.uiScale, k)
+            .environment(\.uiWide, wide)
             .frame(maxWidth: Self.isWide(geo.size) ? 560 : 460)
             .frame(maxWidth: .infinity)
         }
@@ -90,8 +112,9 @@ struct MainView: View {
     /// As wide as fits, at most 36% of the height and 360, and smaller still when the rest of the column
     /// needs the room (an iPhone SE).
     private func dialSide(for size: CGSize) -> CGFloat {
-        let readout = readoutSize(for: size) * 1.2 + 4 + 18 + 4
-        let k: CGFloat = (Self.isWide(size) ? 1.15 : 1) * min(max(textScale, 1), 1.3)
+        let k: CGFloat = (Self.isWide(size) ? 1.15 : 1) * textK
+        // The heading, then the subline, which grows with Text Size and may take a second line.
+        let readout = readoutSize(for: size) * 1.2 + 4 + 18 * k + (sublineWraps ? 18 * k : 0) + 4
         var rest = Self.headerHeight * k + readout + 2 * Self.tileHeight * k + Self.tileGap + mapMinimum(for: size)
         var gaps = 4
         if nav.spot != nil && nav.fix != nil { rest += Self.pillHeight; gaps += 1 }
@@ -132,7 +155,8 @@ struct MainView: View {
                         .lineLimit(1)
                     if nav.sample {
                         Text("Sample")
-                            .font(.system(size: 10, weight: .semibold))
+                            // 11 is the smallest text size; it grows with the date beside it.
+                            .font(.system(size: 11 * k, weight: .semibold))
                             .foregroundStyle(Palette.bg)
                             .padding(.horizontal, 6).padding(.vertical, 1)
                             .background(Capsule().fill(Palette.warn))
@@ -144,7 +168,9 @@ struct MainView: View {
             Spacer(minLength: 8)
             menu
         }
-        .frame(height: Self.headerHeight)
+        // Grows with Text Size as its type does (and as dialSide budgets it), so the date keeps its
+        // distance from the dial.
+        .frame(height: Self.headerHeight * k)
     }
 
     /// "Sat, Nov 1 · 9:41 AM", in the device's 12- or 24-hour style.
@@ -237,7 +263,7 @@ struct MainView: View {
 
     // MARK: Compass
 
-    private func compass(side: CGFloat, big: CGFloat) -> some View {
+    private func compass(side: CGFloat, big: CGFloat, k: CGFloat) -> some View {
         VStack(spacing: 4) {
             Button { nav.toggleLock() } label: {
                 DialView(rotation: nav.cardRotation, heading: nav.heading, lock: nav.lock, tilt: nav.tilt,
@@ -261,7 +287,7 @@ struct MainView: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
                     .frame(maxWidth: 300)
-                    .frame(height: big * 1.2 + 4 + 18)
+                    .frame(height: big * 1.2 + 4 + 18 * k)
             } else {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(nav.heading.map { "\(Int($0.rounded()) % 360)°" } ?? "–°")
@@ -277,12 +303,15 @@ struct MainView: View {
             .lineLimit(1)
             .accessibilityHidden(true)
 
+            // Grows with Text Size like the header and tiles; at a larger size it may wrap, but only
+            // after a dot (keepTogether).
             subline
-                .font(.system(size: 13))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .font(.system(size: 13 * k))
+                .lineLimit(sublineWraps ? 2 : 1)
+                .minimumScaleFactor(0.85)
                 .multilineTextAlignment(.center)
-                .frame(height: 18)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 18 * k)
             }
         }
     }
@@ -310,32 +339,33 @@ struct MainView: View {
     /// "True north · 8° E · ±8°", or a warning in its place; then the locked bearing.
     private var subline: Text {
         guard nav.compass == .live, nav.heading != nil else { return Text(" ") }
-        let dot = Text(" · ").foregroundColor(Palette.textFaint)
+        // A non-breaking space before the dot, so a wrapped line never starts with one.
+        let dot = Text("\u{00A0}· ").foregroundColor(Palette.textFaint)
         var t: Text
         if let warning = nav.compassWarning {
             t = Text(warning).fontWeight(.semibold).foregroundColor(Palette.warn)
         } else {
-            t = Text(nav.northLabel).foregroundColor(Palette.textMuted)
+            t = Text(Self.keepTogether(nav.northLabel)).foregroundColor(Palette.textMuted)
             if let acc = nav.headingAccuracy {
                 t = t + dot + Text("±\(Int(acc.rounded()))°").foregroundColor(Palette.textMuted)
             }
         }
         if let lock = nav.lockText {
-            t = t + dot + Text(lock).fontWeight(.semibold).foregroundColor(Palette.accent)
+            t = t + dot + Text(Self.keepTogether(lock)).fontWeight(.semibold).foregroundColor(Palette.accent)
         }
         return t
     }
 
     // MARK: Marked spot
 
-    private var spotPill: some View {
+    private func spotPill(k: CGFloat) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "mappin")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 14 * k, weight: .semibold))
                 .foregroundStyle(Palette.accent)
             (Text("Marked spot").fontWeight(.semibold).foregroundColor(.white)
-             + Text(nav.spotText.map { " · \($0)" } ?? "").foregroundColor(Palette.textSecondary))
-                .font(.system(size: 14))
+             + Text(nav.spotText.map { "\u{00A0}· " + Self.keepTogether($0) } ?? "").foregroundColor(Palette.textSecondary))
+                .font(.system(size: 14 * k))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -344,14 +374,16 @@ struct MainView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Palette.textMuted)
-                    .frame(width: 44, height: Self.pillHeight)
+                    .frame(width: 44)
+                    .frame(minHeight: Self.pillHeight)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Clear Marked Spot")
         }
         .padding(.leading, 14)
-        .frame(height: Self.pillHeight)
+        // At least 46, so the ✕ keeps a full target; taller only if its type needs it.
+        .frame(minHeight: Self.pillHeight)
         .background(Capsule().fill(Palette.tile))
         .overlay(Capsule().stroke(Palette.border, lineWidth: 0.5))
         .accessibilityElement(children: .contain)
@@ -372,7 +404,11 @@ struct MainView: View {
                         elevationTile(stale: stale)
                         sunTile
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
+                // Tiles fill their row's height (Tile), so both in a row match when one wraps; fixed
+                // here, the rows take only the height they need and the map keeps the rest.
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -400,11 +436,13 @@ struct MainView: View {
                 coordinateTile(Tile(title: "Latitude", value: lat, detail: fixDetail(now: now), stale: stale, spoken: "Latitude, \(lat)"))
                 coordinateTile(Tile(title: "Longitude", value: lon, detail: nav.format.name, stale: stale, spoken: "Longitude, \(lon)"))
             }
+            .fixedSize(horizontal: false, vertical: true)
         case .none:
             HStack(spacing: Self.tileGap) {
                 Tile(title: "Latitude", value: "—", detail: nav.locating ? "Finding you…" : " ", stale: false)
                 Tile(title: "Longitude", value: "—", detail: " ", stale: false)
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -545,16 +583,25 @@ struct MainView: View {
     }
 }
 
-/// One rounded tile: a small title, a large value (with an optional second unit), and a detail line,
-/// read by VoiceOver as one sentence.
-/// How much larger the column's type is on an iPad or a wide Mac window (1 on a phone).
+/// How much larger the column's type is: the system's Text Size (up to 1.3) times the wider iPad and Mac
+/// column (1.15). 1 on a phone at the default size.
 private struct UIScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
+/// The wider iPad and Mac column alone (1.15, or 1 on a phone), for spacing that shouldn't grow with
+/// Text Size.
+private struct UIWideKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
 extension EnvironmentValues {
     var uiScale: CGFloat {
         get { self[UIScaleKey.self] }
         set { self[UIScaleKey.self] = newValue }
     }
+    var uiWide: CGFloat {
+        get { self[UIWideKey.self] }
+        set { self[UIWideKey.self] = newValue }
+    }
 }
+
+/// One rounded tile: a small title, a large value (with an optional second unit), and a detail line,
+/// read by VoiceOver as one sentence.
 
 struct Tile: View {
     var title: String
@@ -569,6 +616,7 @@ struct Tile: View {
     /// Whether the detail may wrap at a larger Text Size (the moon's line reads better shrunk on one line).
     var detailWraps: Bool = true
     @Environment(\.uiScale) private var k
+    @Environment(\.uiWide) private var wide
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2 * k) {
@@ -590,7 +638,8 @@ struct Tile: View {
             .minimumScaleFactor(0.6)
             HStack(spacing: 5) {
                 if let moonPhase { MoonGlyph(phase: moonPhase, size: 12 * k) }
-                Text(detail)
+                // Numbers stay with their units, and a wrap comes only after a dot.
+                Text(MainView.keepTogether(detail))
                     .font(.system(size: 12 * k))
                     .foregroundStyle(Palette.textMuted)
                     // At a larger Text Size the detail wraps rather than being cut off.
@@ -601,7 +650,11 @@ struct Tile: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .padding(.horizontal, 14 * k).padding(.vertical, 12 * k)
+        // The spec's 14 × 12 at every Text Size (only the wider iPad and Mac column scales it), so a
+        // larger size doesn't take room from the text.
+        .padding(.horizontal, 14 * wide).padding(.vertical, 12 * wide)
+        // Fills the row's height, so two tiles side by side match when one wraps (rows are fixed in tiles).
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.tile))
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)

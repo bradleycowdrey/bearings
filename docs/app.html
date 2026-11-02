@@ -71,13 +71,15 @@
   .dial svg { width: 100%; height: 100%; display: block; overflow: visible; }
   #card { transform-origin: 200px 200px; will-change: transform; }
   /* No compass: said where the heading would be, in the readout's own space, so nothing overlaps the dial. */
-  .dial-note { display: flex; align-items: center; justify-content: center; max-width: 300px; min-height: 82px; margin-top: 4px; text-align: center; font-size: 15px; line-height: 20px; color: var(--muted); }
+  .dial-note { display: flex; align-items: center; justify-content: center; max-width: 300px; min-height: 82px; margin-top: 4px; text-align: center; font-size: 15px; line-height: 20px; color: var(--muted); text-wrap: balance; }
   .dial-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); height: 44px; padding: 0 20px; border: 0; border-radius: 980px;
     background: var(--cream); color: var(--bg); font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
   .readout { display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-top: 4px; }
   .readout .deg { font-size: 56px; font-weight: 600; letter-spacing: -.045em; line-height: 56px; }
   .readout .pt { font-size: 28px; font-weight: 500; letter-spacing: -.03em; color: var(--muted); line-height: 1; min-width: 2.2em; }
-  .subline { display: flex; justify-content: center; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 18px; font-size: 13px; line-height: 18px; color: var(--muted); text-align: center; }
+  /* Plain centred text, not a flex row: the parts are joined with no-break spaces around the dots (see drawSubline),
+     so a line breaks only after a " · " and a number never ends up apart from its unit. */
+  .subline { min-height: 18px; font-size: 13px; line-height: 18px; color: var(--muted); text-align: center; }
   .subline .dot { color: var(--faint); }
   .subline .lock { color: var(--accent); font-weight: 600; }
   .subline .bad { color: var(--warn); font-weight: 600; }
@@ -114,7 +116,8 @@
   .map .maplibregl-ctrl-attrib { font-size: 10px; background: rgba(26,24,22,.72); color: var(--secondary); }
   .map .maplibregl-ctrl-attrib a { color: var(--secondary); }
   .map .maplibregl-ctrl-attrib-button { filter: invert(1); }
-  .map-msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; font-size: 13px; color: var(--muted); }
+  /* Balanced lines, so a centred message never leaves one word alone on the last line. */
+  .map-msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; font-size: 13px; color: var(--muted); text-wrap: balance; }
   .map-tools { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
   .map-tools button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer; position: relative;
     background: rgba(26,24,22,.88); color: var(--cream); box-shadow: 0 0 0 0.5px var(--border-strong); font-size: 18px; line-height: 1; }
@@ -156,19 +159,18 @@
     html, body { height: 100%; }
     .panel { box-shadow: none; padding: 0; border-radius: 0; min-height: 100%; }
     .panel::before, .foot { display: none; }
-    .panel { gap: 10px; }
     .map { flex: 1 1 0; height: auto; min-height: 110px; }
     .spot { min-height: 40px; }
     .dial-wrap { width: min(100%, 360px, 31vh); }
     .readout .deg { font-size: 52px; line-height: 52px; }
-    .tile { padding: 10px 14px; }
   }
 
   /* Short phones (iPhone SE): a smaller dial, readout and map, so it still fits one screen. */
   @media (max-width: 500px) and (max-height: 700px) {
     .dial-wrap { width: min(100%, 26vh); }
     .readout .deg { font-size: 44px; line-height: 44px; } .readout .pt { font-size: 22px; }
-    .tile { padding: 9px 12px; } .tile .v { font-size: 17px; line-height: 22px; }
+    .panel { gap: 8px; }   /* the compact spacing the Android app uses on short screens */
+    .tile { padding: 8px 14px; } .tile .v { font-size: 17px; line-height: 22px; }
     .map { min-height: 96px; }
     .where h1 { font-size: 18px; line-height: 24px; }
   }
@@ -641,6 +643,7 @@
   'use strict';
   const T = window.TN;
   const $ = (s) => document.querySelector(s);
+  const NB = '\u00a0';   // a no-break space: keeps a number with its unit, and a dot with what comes before it
   const params = new URLSearchParams(location.search);
   if (params.has('embed') || window.self !== window.top) document.documentElement.classList.add('embedded');
 
@@ -774,8 +777,9 @@
   function drawSubline() {
     const parts = [];
     if (S.compassState === 'live' || S.sample) {
-      let north = S.usingTrue ? 'True north' : 'Magnetic north';
-      if (S.usingTrue && S.decl !== null && Math.abs(S.decl) >= 0.5) north += ` · ${Math.round(Math.abs(S.decl))}° ${S.decl >= 0 ? 'E' : 'W'}`;
+      // No-break spaces (NB) keep numbers with their units and phrases whole; a line may break only after a dot.
+      let north = S.usingTrue ? `True${NB}north` : `Magnetic${NB}north`;
+      if (S.usingTrue && S.decl !== null && Math.abs(S.decl) >= 0.5) north += `${NB}· ${Math.round(Math.abs(S.decl))}°${NB}${S.decl >= 0 ? 'E' : 'W'}`;
       parts.push(`<span>${north}</span>`);
       if (S.headingAcc !== null && S.headingAcc >= 0) {
         if (S.headingAcc > 25) parts.splice(0, parts.length, '<span class="bad">Low accuracy: move your phone in a figure 8</span>');
@@ -783,10 +787,10 @@
       }
       if (S.lock !== null && S.heading !== null) {
         const d = Math.round(T.delta(S.heading, S.lock));
-        parts.push(`<span class="lock">Locked ${Math.round(S.lock) % 360}° · ${d === 0 ? 'on bearing' : `turn ${Math.abs(d)}° ${d > 0 ? 'right' : 'left'}`}</span>`);
+        parts.push(`<span class="lock">Locked${NB}${Math.round(S.lock) % 360}°${NB}· ${d === 0 ? `on${NB}bearing` : `turn${NB}${Math.abs(d)}°${NB}${d > 0 ? 'right' : 'left'}`}</span>`);
       }
     }
-    $('#subline').innerHTML = parts.join('<span class="dot">·</span>');
+    $('#subline').innerHTML = parts.join(`${NB}<span class="dot">·</span> `);
   }
 
   // ---------- Sky ----------
@@ -801,7 +805,7 @@
     const v = times.sunrise === null ? (times.polar === 'day' ? 'Sun up all day' : 'Sun down all day')
       : `${shortTime(times.sunrise)} – ${shortTime(times.sunset)}`;
     $('#sunV').textContent = v;
-    $('#sunS').innerHTML = `<svg viewBox="-10 -10 20 20" aria-hidden="true">${moonGlyph(ph.phase, 9)}</svg><span>${ph.name} · ${Math.round(ph.fraction * 100)}%</span>`;
+    $('#sunS').innerHTML = `<svg viewBox="-10 -10 20 20" aria-hidden="true">${moonGlyph(ph.phase, 9)}</svg><span>${ph.name.replace(' ', NB)}${NB}· ${Math.round(ph.fraction * 100)}%</span>`;
     $('#sunTile').setAttribute('aria-label', `Sun. ${times.sunrise === null ? v : `Sunrise ${fmtTime.format(times.sunrise)}, sunset ${fmtTime.format(times.sunset)}`}. Moon: ${ph.name}, ${Math.round(ph.fraction * 100)} percent lit.`);
   }
 

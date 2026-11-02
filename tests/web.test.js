@@ -147,7 +147,9 @@ async function layout(page) {
   const server = await serve();
   PAGE = `http://127.0.0.1:${server.address().port}/app.html`;
   const browser = await playwright.chromium.launch();
-  const txt = (page, sel) => page.$eval(sel, (e) => e.textContent.trim());
+  // No-break spaces (which keep numbers with their units) read as ordinary spaces here; the checks below test them on purpose.
+  const txt = (page, sel) => page.$eval(sel, (e) => e.textContent.replace(/\u00a0/g, ' ').trim());
+  const raw = (page, sel) => page.$eval(sel, (e) => e.textContent);
   const shown = (page, sel) => page.$eval(sel, (e) => !e.hasAttribute('hidden') && !e.hidden);
   const T0 = Date.UTC(2026, 10, 1, 16, 0);   // Sun, Nov 1 2026, 9:00 AM in Colorado
   const sky = T.sunTimes(T0, MB.lat, MB.lon);
@@ -159,6 +161,9 @@ async function layout(page) {
     check(await txt(page, '#deg') === '228°' && await txt(page, '#pt') === 'SW', `${name}: sample heading reads 228° SW`);
     check(await txt(page, '#place') === 'Maroon Bells, Colorado' && (await txt(page, '#when')).startsWith('Sun, Nov 1 · 9:00 AM'), `${name}: the place and the time (${await txt(page, '#when')})`);
     check((await txt(page, '#subline')).includes('Locked 240° · turn 12° right') && (await txt(page, '#subline')).includes('True north · 8° E'), `${name}: true north, declination and the locked bearing`);
+    const sub = await raw(page, '#subline');
+    check(sub.includes('turn\u00a012°\u00a0right') && sub.includes('8°\u00a0E') && !/ ·/.test(sub) && !/·\u00a0/.test(sub), `${name}: the subline breaks only after a dot, never inside a number and its unit`);
+    check((await raw(page, '#sunS')).includes(`${T.moonPhase(T0).name.replace(' ', '\u00a0')}\u00a0· `), `${name}: the moon's phase stays with its percentage`);
     check(await txt(page, '#latV') === MB.dd.split(', ')[0] && await txt(page, '#lonV') === MB.dd.split(', ')[1], `${name}: latitude and longitude`);
     check(await txt(page, '#sunV') === `${hm(sky.sunrise)} – ${hm(sky.sunset)}`, `${name}: sunrise and sunset (${await txt(page, '#sunV')})`);
     check((await txt(page, '#sunS')).startsWith(T.moonPhase(T0).name), `${name}: the moon's phase`);

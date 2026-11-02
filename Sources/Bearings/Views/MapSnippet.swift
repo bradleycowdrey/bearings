@@ -3,7 +3,8 @@ import SwiftUI
 
 /// An Apple Maps view of where you are: a dot with the accuracy circle and a cone toward your heading,
 /// north up or turning with you. +, − and the heading button sit top right with the button that opens
-/// the place in Maps; your speed shows bottom left while you're moving.
+/// the place in Maps; your speed shows top left while you're moving (bottom left is where Apple Maps puts
+/// its logo and Legal link, which must stay visible and reachable).
 struct MapSnippet: View {
     var fix: Fix?
     var heading: Double?
@@ -13,6 +14,8 @@ struct MapSnippet: View {
     var speed: String? = nil
     var dimmed = false
     @Environment(\.openURL) private var openURL
+    /// The column's type scale (Text Size, and the wider iPad and Mac column), so the speed grows with the rest.
+    @Environment(\.uiScale) private var k
     @AppStorage("mapDistance") private var distance: Double = 1600
     @State private var position: MapCameraPosition = .automatic
     /// The heading the camera was last turned to, so it turns in 3° steps rather than on every reading.
@@ -49,18 +52,22 @@ struct MapSnippet: View {
                     VStack(spacing: 0) { controls(fix) }
                     HStack(spacing: 0) { controls(fix) }
                 }
-                .padding(4)
+                // 2 plus the button's 6 inset puts the drawn circles 8 from the edges.
+                .padding(2)
 
                 if let speed {
-                    Text(speed)
-                        .font(.system(size: 13, weight: .semibold))
+                    // A non-breaking space keeps "3.2 mph" on one line.
+                    Text(speed.replacingOccurrences(of: " ", with: "\u{00A0}"))
+                        .font(.system(size: 13 * k, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(Palette.cream)
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .background(Capsule().fill(Palette.bg.opacity(0.86)))
                         .overlay(Capsule().stroke(Palette.border, lineWidth: 0.5))
                         .padding(8)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        // Top left: free in both the column and the row of controls, and clear of the
+                        // map's attribution at the bottom left.
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .accessibilityLabel("Speed, \(speed)")
                 }
             } else {
@@ -108,8 +115,8 @@ private struct MapButton: View {
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(Palette.bg.opacity(0.86)))
                 .overlay(Circle().stroke(Palette.border, lineWidth: 0.5))
-                // 32 drawn, 40 to tap.
-                .frame(width: 40, height: 40)
+                // 32 drawn, 44 to tap.
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

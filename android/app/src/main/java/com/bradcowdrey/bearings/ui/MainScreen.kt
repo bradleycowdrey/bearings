@@ -130,8 +130,9 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
             val readoutSize = if (compact) 44f else 56f
             val tileTall = if (compact) 8.dp else 12.dp
             // What everything but the dial and the map takes, so the dial gets what's left (at most 36% of
-            // the height and 360) and the map keeps at least its minimum.
-            val tileH = (56 * fs).dp + tileTall * 2
+            // the height and 360) and the map keeps at least its minimum. At a larger font size each tile
+            // keeps a second detail line.
+            val tileH = (56 * fs).dp + (if (fs > 1.1f) (16 * fs).dp else 0.dp) + tileTall * 2
             val fixed = 48.dp + gap + 4.dp + (readoutSize * 1.1f * fs).dp + (18 * fs * (if (fs > 1.1f) 2 else 1)).dp + gap +
                 (if (nav.mark != null && nav.fix != null) 44.dp + gap else 0.dp) + tileH * 2 + 8.dp + gap + 12.dp
             val mapMin = if (compact) 96.dp else 120.dp
@@ -249,14 +250,34 @@ private fun subline(nav: Navigator): AnnotatedString = buildAnnotatedString {
         nav.interference -> withStyle(warn) { append("Magnet or metal nearby: move away") }
         (nav.headingAccuracy ?: 0.0) > Navigator.POOR_HEADING_ACCURACY -> withStyle(warn) { append("Low accuracy: move your phone in a figure 8") }
         else -> {
-            append(nav.northLabel)
-            nav.headingAccuracy?.let { append(" · ±${Math.round(it)}°") }
+            append(keepTogether(nav.northLabel))
+            nav.headingAccuracy?.let { append(keepTogether(" · ±${Math.round(it)}°")) }
         }
     }
     nav.lockText?.let {
-        append(" · ")
-        withStyle(SpanStyle(color = Palette.accent, fontWeight = FontWeight.SemiBold)) { append(it) }
+        append(keepTogether(" · "))
+        withStyle(SpanStyle(color = Palette.accent, fontWeight = FontWeight.SemiBold)) { append(keepTogether(it)) }
     }
+}
+
+/**
+ * For a larger font size, where lines wrap: numbers stay with their units ("21.29 inHg", "turn 12° right")
+ * and a " · " never starts a line ("Last Quarter · 53%"), by turning those spaces into no-break spaces
+ * (U+00A0). The space after a dot stays, so that's where a line breaks first. Spaces between words
+ * ("Waxing Crescent") stay too, so a long name can still wrap in a narrow tile instead of mid-word.
+ */
+private fun keepTogether(s: String): String {
+    val out = StringBuilder(s.length)
+    for (i in s.indices) {
+        val c = s[i]
+        if (c != ' ') { out.append(c); continue }
+        val before = s.getOrNull(i - 1)
+        val after = s.getOrNull(i + 1)
+        val glue = before != '·' && (after == '·' || after == '±' || before == '°' ||
+            before?.isDigit() == true || after?.isDigit() == true)
+        out.append(if (glue) '\u00A0' else ' ')
+    }
+    return out.toString()
 }
 
 // ---------- The header and its menu ----------
@@ -434,11 +455,15 @@ private fun SunTile(nav: Navigator, vertical: Dp, modifier: Modifier) {
     val sun = nav.sunText
     Tile("Sun", AnnotatedString(sun ?: "—"), "Moon", vertical, false,
         "Sun, ${sun?.replace("–", "to") ?: "not known yet"}. Moon, ${com.bradcowdrey.bearings.Sky.moonLine(phase)}", modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Canvas(Modifier.size(12.dp)) { moonGlyph(Offset(size.width / 2, size.height / 2), size.minDimension / 2, phase.phase, 1f) }
+        // The same detail lines as the other tiles, with the glyph centred on the first line.
+        val lines = detailLines()
+        Row(verticalAlignment = Alignment.Top) {
+            Box(Modifier.height(with(LocalDensity.current) { 16.sp.toDp() }), contentAlignment = Alignment.Center) {
+                Canvas(Modifier.size(12.dp)) { moonGlyph(Offset(size.width / 2, size.height / 2), size.minDimension / 2, phase.phase, 1f) }
+            }
             Spacer(Modifier.width(5.dp))
-            Text(com.bradcowdrey.bearings.Sky.moonLine(phase), style = text(12f, color = Palette.textMuted).copy(lineHeight = 16.sp),
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(keepTogether(com.bradcowdrey.bearings.Sky.moonLine(phase)), style = text(12f, color = Palette.textMuted).copy(lineHeight = 16.sp),
+                minLines = lines, maxLines = lines, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -465,12 +490,23 @@ private fun Tile(
         .padding(horizontal = 14.dp, vertical = vertical)) {
         Text(title, style = text(12f, FontWeight.SemiBold, Palette.textMuted).copy(lineHeight = 16.sp), maxLines = 1)
         FitText(value, text(19f, FontWeight.SemiBold, if (stale) Palette.textMuted else Color.White).copy(lineHeight = 24.sp, fontFeatureSettings = "tnum"))
-        if (detailContent != null) detailContent()
-        // At a larger font size the detail wraps rather than being cut off, as on the iPhone.
-        else Text(detail, style = text(12f, color = Palette.textMuted).copy(lineHeight = 16.sp),
-            maxLines = if (LocalDensity.current.fontScale > 1.1f) 2 else 1, overflow = TextOverflow.Ellipsis)
+        if (detailContent != null) {
+            detailContent()
+        } else {
+            // At a larger font size the detail wraps rather than being cut off, as on the iPhone. Two lines
+            // are kept for it even when it needs one, so every tile is the same height and the two tiles in
+            // a row always match. (FitText measures with BoxWithConstraints, a SubcomposeLayout, so the row
+            // can't size its tiles with IntrinsicSize.Min; that would throw at runtime.)
+            val lines = detailLines()
+            Text(keepTogether(detail), style = text(12f, color = Palette.textMuted).copy(lineHeight = 16.sp),
+                minLines = lines, maxLines = lines, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
+
+/** The detail lines in every tile: one, or two at a larger font size. */
+@Composable
+private fun detailLines(): Int = if (LocalDensity.current.fontScale > 1.1f) 2 else 1
 
 /** One line of text at its size, or smaller (down to 13) until it fits the width; the line's height stays the same. */
 @Composable

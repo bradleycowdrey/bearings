@@ -288,8 +288,9 @@ private struct LargeWidget: View {
             if let spot = r.spotText {
                 HStack(spacing: 6) {
                     Image(systemName: "mappin").foregroundStyle(Palette.accent)
-                    Text("Marked spot").fontWeight(.semibold).foregroundStyle(.white)
-                    Text("· \(spot)").foregroundStyle(Palette.textSecondary)
+                    // One Text, so the HStack's spacing doesn't open a wider gap before the dot (as in the app's pill).
+                    (Text("Marked spot").fontWeight(.semibold).foregroundColor(.white)
+                     + Text("\u{00A0}· \(spot)").foregroundColor(Palette.textSecondary))
                 }
                 .font(.system(size: 12))
                 .monospacedDigit()
@@ -407,7 +408,8 @@ private struct RectangularAccessory: View {
                     .opacity(0.75)
             }
             .monospacedDigit()
-            Text(r.coordinates.joined(separator: " "))
+            // "39.09898° N, 106.94117° W": the comma keeps latitude and longitude apart.
+            Text(r.coordinates.joined(separator: ",\u{00A0}"))
                 .font(.system(size: 11, weight: .medium))
                 .monospacedDigit()
                 .opacity(0.75)
