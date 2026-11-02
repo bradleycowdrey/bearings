@@ -132,7 +132,7 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
             // What everything but the dial and the map takes, so the dial gets what's left (at most 36% of
             // the height and 360) and the map keeps at least its minimum.
             val tileH = (56 * fs).dp + tileTall * 2
-            val fixed = 48.dp + gap + 4.dp + (readoutSize * 1.1f * fs).dp + (18 * fs).dp + gap +
+            val fixed = 48.dp + gap + 4.dp + (readoutSize * 1.1f * fs).dp + (18 * fs * (if (fs > 1.1f) 2 else 1)).dp + gap +
                 (if (nav.mark != null && nav.fix != null) 44.dp + gap else 0.dp) + tileH * 2 + 8.dp + gap + 12.dp
             val mapMin = if (compact) 96.dp else 120.dp
             val dialSide = minOf(minOf(maxWidth - 32.dp, maxHeight * 0.36f), minOf(360.dp, maxHeight - fixed - mapMin)).coerceAtLeast(120.dp)
@@ -153,7 +153,8 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
                     }
                 } else {
                     Readout(nav, readoutSize)
-                    Text(subline(nav), style = text(13f, color = Palette.textMuted).copy(lineHeight = 18.sp), textAlign = TextAlign.Center, maxLines = 1,
+                    // At a larger font size the subline wraps rather than being cut off.
+                    Text(subline(nav), style = text(13f, color = Palette.textMuted).copy(lineHeight = 18.sp), textAlign = TextAlign.Center, maxLines = if (fs > 1.1f) 2 else 1,
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().heightIn(min = 18.dp))
                 }
                 Spacer(Modifier.height(gap))
@@ -465,7 +466,9 @@ private fun Tile(
         Text(title, style = text(12f, FontWeight.SemiBold, Palette.textMuted).copy(lineHeight = 16.sp), maxLines = 1)
         FitText(value, text(19f, FontWeight.SemiBold, if (stale) Palette.textMuted else Color.White).copy(lineHeight = 24.sp, fontFeatureSettings = "tnum"))
         if (detailContent != null) detailContent()
-        else Text(detail, style = text(12f, color = Palette.textMuted).copy(lineHeight = 16.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // At a larger font size the detail wraps rather than being cut off, as on the iPhone.
+        else Text(detail, style = text(12f, color = Palette.textMuted).copy(lineHeight = 16.sp),
+            maxLines = if (LocalDensity.current.fontScale > 1.1f) 2 else 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
