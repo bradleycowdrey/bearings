@@ -68,6 +68,11 @@ jobs:
           }
           PHONE=$(pick iPhone)
           run_on "$PHONE" iphone
+          # The iPhone's Text Size turned up: the screen must still fit, with larger type.
+          xcrun simctl ui "$PHONE" content_size extra-extra-large || true
+          xcrun simctl launch "$PHONE" $ID --sample; sleep 6
+          xcrun simctl io "$PHONE" screenshot "$OUT/iphone-5-large-text.png"; xcrun simctl terminate "$PHONE" $ID || true
+          xcrun simctl ui "$PHONE" content_size large || true
           # The self-test, with a real location fix and network.
           DOCS="$(xcrun simctl get_app_container "$PHONE" $ID data)/Documents"; mkdir -p "$DOCS"; rm -f "$DOCS/report.txt"
           xcrun simctl launch "$PHONE" $ID --selftest
