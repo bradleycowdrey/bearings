@@ -75,6 +75,8 @@ targets:
       - path: Resources/Cities.tsv
         buildPhase: resources
       - path: Resources/iOS/Assets.xcassets
+      - path: Resources/iOS/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: Bearings
@@ -102,6 +104,8 @@ targets:
       - path: Sources/Bearings/Views/SkyMarks.swift
       - path: Sources/Bearings/Views/WidgetViews.swift
       - path: Resources/Cities.tsv
+        buildPhase: resources
+      - path: Resources/iOS/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:
       base:

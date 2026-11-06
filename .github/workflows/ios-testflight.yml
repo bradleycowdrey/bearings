@@ -79,6 +79,11 @@ jobs:
             DEVELOPMENT_TEAM="$DERIVED_TEAM_ID" CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" \
             "${AUTH[@]}" archive > "$LOG" 2>&1 \
             || { grep -E "(error|fatal):" "$LOG" | sort -u | head -25 | sed 's/^/::error::/'; tail -40 "$LOG"; exit 1; }
+          # Apple drops builds without a privacy manifest in the app and in the widget (ITMS-91053).
+          APP="$RUNNER_TEMP/Bearings.xcarchive/Products/Applications/Bearings.app"
+          for f in "$APP/PrivacyInfo.xcprivacy" "$APP/PlugIns/BearingsWidget.appex/PrivacyInfo.xcprivacy"; do
+            [[ -f "$f" ]] || { echo "::error::Missing privacy manifest: ${f#$RUNNER_TEMP/}"; exit 1; }
+          done
           cat > "$RUNNER_TEMP/export.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
