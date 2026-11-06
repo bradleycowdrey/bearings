@@ -29,6 +29,13 @@ detail = {i["id"]: i["attributes"] for i in builds.get("included", []) if i["typ
 vers = {i["id"]: i["attributes"].get("version") for i in builds.get("included", []) if i["type"] == "preReleaseVersions"}
 if not builds["data"]:
     print("No builds yet.")
+# Uploads, with Apple's errors for ones that failed processing (newer API; skipped if unavailable).
+try:
+    ups = get(f'/v1/apps/{app["id"]}/buildUploads', limit="10")
+    for u in ups.get("data", []):
+        print("upload:", json.dumps(u.get("attributes", {}), indent=1))
+except Exception as e:
+    print(f"(build uploads not available: {e})")
 for b in builds["data"]:
     a, r = b["attributes"], b.get("relationships", {})
     v = vers.get((r.get("preReleaseVersion", {}).get("data") or {}).get("id"), "?")
