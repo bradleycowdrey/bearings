@@ -1,0 +1,106 @@
+# App Store listing for the iPhone and iPad app, run by .github/workflows/app-store.yml with an
+# App Store Connect API key (api_key.json, written by the workflow from GitHub secrets).
+# It uploads the listing text and screenshots and sets content rights, age rating (4+), price (Free)
+# and availability. It never uploads a build or submits for review.
+require "net/http"
+require "json"
+
+default_platform(:ios)
+
+API_KEY = "fastlane/api_key.json"
+BUNDLE_ID = "com.bradcowdrey.bearings"
+
+platform :ios do
+  lane :listing do |options|
+    prepare_app_store
+    upload_to_app_store(
+      api_key_path: API_KEY,
+      app_identifier: BUNDLE_ID,
+      app_version: options[:version],
+      skip_binary_upload: true,
+      metadata_path: "fastlane/metadata",
+      screenshots_path: "fastlane/screenshots",
+      overwrite_screenshots: true,
+      force: true,                        # no HTML preview to confirm on CI
+      run_precheck_before_submit: false,  # precheck can't run with an API key
+      submit_for_review: false,
+      ignore_language_directory_validation: true
+    )
+  end
+
+  def asc(method, path, body = nil)
+    uri = URI("https://api.appstoreconnect.apple.com/#{path}")
+    request = Net::HTTP.const_get(method.to_s.capitalize).new(uri)
+    request["Authorization"] = "Bearer #{Spaceship::ConnectAPI.token.text}"
+    request["Content-Type"] = "application/json"
+    request.body = body.to_json if body
+    response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(request) }
+    [response.code.to_i, (JSON.parse(response.body) rescue {})]
+  end
+
+  def report(label, code, body)
+    if code.between?(200, 299)
+      UI.success("#{label}: done")
+    else
+      UI.important("#{label}: #{code} #{(body["errors"] || []).map { |e| e["detail"] || e["title"] }.join("; ")}")
+    end
+  end
+
+  # Settings the listing upload doesn't cover. Each is reported, and skipped if Apple refuses it
+  # because it's already set.
+  private_lane :prepare_app_store do
+    root = File.basename(Dir.pwd) == "fastlane" ? File.dirname(Dir.pwd) : Dir.pwd
+    key = JSON.parse(File.read(File.join(root, API_KEY)))
+    app_store_connect_api_key(key_id: key["key_id"], issuer_id: key["issuer_id"], key_content: key["key"])
+    _, apps = asc(:get, "v1/apps?filter[bundleId]=#{BUNDLE_ID}")
+    app = apps.dig("data", 0, "id")
+    UI.user_error!("No app with bundle ID #{BUNDLE_ID} in App Store Connect") unless app
+
+    # The built-in list of towns comes from GeoNames (CC BY 4.0), so the app shows third-party content
+    # it has the rights to use.
+    code, body = asc(:patch, "v1/apps/#{app}", { data: { type: "apps", id: app,
+      attributes: { contentRightsDeclaration: "USES_THIRD_PARTY_CONTENT" } } })
+    report("Content rights", code, body)
+
+    _, infos = asc(:get, "v1/apps/#{app}/appInfos")
+    info = (infos["data"] || []).find { |i| i.dig("attributes", "appStoreState") != "READY_FOR_SALE" } || (infos["data"] || []).first
+    if info
+      _, declaration = asc(:get, "v1/appInfos/#{info["id"]}/ageRatingDeclaration")
+      id = declaration.dig("data", "id")
+      present = (declaration.dig("data", "attributes") || {}).keys
+      none = %w[alcoholTobaccoOrDrugUseOrReferences contests gamblingSimulated horrorOrFearThemes
+                matureOrSuggestiveThemes medicalOrTreatmentInformation profanityOrCrudeHumor
+                sexualContentGraphicAndNudity sexualContentOrNudity violenceCartoonOrFantasy
+                violenceRealistic violenceRealisticProlongedGraphicOrSadistic gunsOrOtherWeapons]
+      no = %w[gambling unrestrictedWebAccess lootBox messagingAndChat parentalControls ageAssurance
+              userGeneratedContent healthOrWellnessTopics advertising socialMedia]
+      attributes = none.to_h { |k| [k, "NONE"] }.merge(no.to_h { |k| [k, false] })
+      attributes.select! { |k, _| present.include?(k) } unless present.empty?
+      code, body = asc(:patch, "v1/ageRatingDeclarations/#{id}", { data: { type: "ageRatingDeclarations", id: id, attributes: attributes } })
+      report("Age rating (4+)", code, body)
+    end
+
+    _, points = asc(:get, "v1/apps/#{app}/appPricePoints?filter[territory]=USA&limit=200")
+    free = (points["data"] || []).find { |p| p.dig("attributes", "customerPrice").to_f.zero? }
+    if free
+      code, body = asc(:post, "v1/appPriceSchedules", {
+        data: { type: "appPriceSchedules", relationships: {
+          app: { data: { type: "apps", id: app } },
+          baseTerritory: { data: { type: "territories", id: "USA" } },
+          manualPrices: { data: [{ type: "appPrices", id: "${free}" }] } } },
+        included: [{ type: "appPrices", id: "${free}", attributes: { startDate: nil },
+          relationships: { appPricePoint: { data: { type: "appPricePoints", id: free["id"] } } } }] })
+      report("Price (Free)", code, body)
+    end
+
+    _, territories = asc(:get, "v1/territories?limit=200")
+    ids = (territories["data"] || []).map { |t| t["id"] }
+    code, body = asc(:post, "v2/appAvailabilities", {
+      data: { type: "appAvailabilities", attributes: { availableInNewTerritories: true }, relationships: {
+        app: { data: { type: "apps", id: app } },
+        territoryAvailabilities: { data: ids.map { |t| { type: "territoryAvailabilities", id: "${#{t}}" } } } } },
+      included: ids.map { |t| { type: "territoryAvailabilities", id: "${#{t}}", attributes: { available: true },
+        relationships: { territory: { data: { type: "territories", id: t } } } } } })
+    report("Availability (all countries)", code, body)
+  end
+end

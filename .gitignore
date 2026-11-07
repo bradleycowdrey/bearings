@@ -8,3 +8,9 @@ build/
 node_modules/
 package-lock.json
 build-ios/
+
+# App Store listing (written on CI)
+fastlane/api_key.json
+fastlane/screenshots/
+fastlane/report.xml
+fastlane/README.md

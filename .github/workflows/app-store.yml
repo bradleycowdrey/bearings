@@ -1,0 +1,79 @@
+name: App Store listing
+
+# Takes the App Store screenshots (6.9-inch iPhone and 13-inch iPad) in the Simulator and, if asked,
+# uploads them with the listing in fastlane/metadata: name, subtitle, description, keywords, links,
+# categories, plus content rights, age rating, price (Free) and availability. Never uploads a build
+# and never submits for review. The screenshots also go to the ci-appstore branch for review.
+# Secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8.
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Upload the listing and screenshots to App Store Connect"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  listing:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Newest Xcode
+        run: |
+          XC="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XC"; xcodebuild -version
+      - name: Build for the Simulator
+        run: scripts/build-ios.sh "$(tr -d '[:space:]' < VERSION)"
+      - name: Screenshots
+        run: |
+          SHOTS=fastlane/screenshots/en-US; rm -rf fastlane/screenshots; mkdir -p "$SHOTS"
+          ID=com.bradcowdrey.bearings; export SIMCTL_CHILD_TZ=America/Denver
+          pick() {   # newest runtime's available device whose name matches $1
+            xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          d = json.load(sys.stdin)["devices"]
+          for rt in sorted(d, reverse=True):
+              for dev in d[rt]:
+                  if re.match(sys.argv[1], dev["name"]): print(dev["udid"]); sys.exit()' "$1"
+          }
+          shoot() {   # $1 device, $2 prefix
+            D="$1"; xcrun simctl boot "$D"; xcrun simctl bootstatus "$D" -b
+            xcrun simctl ui "$D" appearance dark
+            xcrun simctl status_bar "$D" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 || true
+            xcrun simctl install "$D" dist/ios/Bearings.app
+            xcrun simctl privacy "$D" grant location $ID || true
+            xcrun simctl location "$D" set 39.09898,-106.94117 || true
+            n=1
+            for args in "--sample" "--sample --format utm" "--sample --satellite" "--sample --night"; do
+              xcrun simctl terminate "$D" $ID 2>/dev/null || true
+              xcrun simctl launch "$D" $ID $args; sleep 8
+              xcrun simctl io "$D" screenshot "$SHOTS/$2-0$n.png"; n=$((n + 1))
+            done
+            xcrun simctl shutdown "$D" || true
+          }
+          shoot "$(pick 'iPhone 1[6-9] Pro Max$')" iphone
+          shoot "$(pick 'iPad Pro 13')" ipad
+          sips -g pixelWidth -g pixelHeight "$SHOTS"/*.png
+          [ "$(ls "$SHOTS"/*.png | wc -l)" -eq 8 ] || { echo "::error::Expected 8 screenshots"; exit 1; }
+      - name: Publish the screenshots for review (ci-appstore branch)
+        run: |
+          D="$RUNNER_TEMP/pub"; mkdir -p "$D"; cp fastlane/screenshots/en-US/*.png "$D/"
+          cd "$D"; git init -q -b ci-appstore; git add .
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "App Store screenshots for ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-appstore
+      - name: Upload the listing to App Store Connect
+        if: inputs.upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          brew install fastlane >/dev/null; export PATH="$(brew --prefix)/bin:$PATH"
+          python3 -c 'import json, os; json.dump({"key_id": os.environ["ASC_KEY_ID"], "issuer_id": os.environ["ASC_ISSUER_ID"], "key": os.environ["ASC_KEY_P8"], "in_house": False}, open("fastlane/api_key.json", "w"))'
+          fastlane listing version:"$(tr -d '[:space:]' < VERSION)" 2>&1 | grep -v -i -E "BEGIN PRIVATE|issuer_id|key_id" ; rc=${PIPESTATUS[0]}
+          rm -f fastlane/api_key.json; exit $rc

@@ -1,0 +1,29 @@
+Get your bearings. The compass, where you are, the time, your coordinates and elevation, the sun and moon, and a map, all on one screen.
+
+A clear compass: your heading in degrees and points (228° SW), true north or magnetic north with the declination, and a light tick as you pass N, E, S and W.
+
+Where and when: the town you’re in, or how far you are from the nearest one (“66 mi NE of Montrose, Colorado”), with today’s date and the time.
+
+Coordinates in six formats: decimal degrees, degrees minutes seconds, decimal minutes, UTM, MGRS and Plus Codes. Tap to switch, hold to copy, or share your location.
+
+Elevation in feet and metres at once, from GPS when it’s accurate, otherwise terrain data, with air pressure on iPhones with a barometer.
+
+The sun and moon on the dial, with sunrise, sunset and the moon’s phase.
+
+Mark a spot and find it again: its direction on the dial and how far away it is.
+
+Lock a bearing and see how far you’ve turned from it. A bubble level sits in the middle of the dial.
+
+A map with your heading, north up or following you, in standard or satellite view.
+
+Honest accuracy: ± for position and heading, a figure-8 hint only when the compass needs it, a warning near magnets and metal, and your speed as you move.
+
+Night mode turns everything red to keep your night vision.
+
+Widgets for the Home Screen in small, medium and large, and for the Lock Screen: your place, elevation, coordinates, and the sun and moon.
+
+Works offline, except the map and terrain elevation.
+
+Your location stays on your iPhone. Bearings sends only a position rounded to about 100 m to look up the ground elevation. No account, no ads, no tracking.
+
+Free. Also on the Mac, Android and the web. Open source.
