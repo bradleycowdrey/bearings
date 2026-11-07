@@ -4,6 +4,7 @@ import com.bradcowdrey.bearings.ui.GridMode
 import com.bradcowdrey.bearings.ui.Layout
 import com.bradcowdrey.bearings.ui.LayoutPlan
 import com.bradcowdrey.bearings.ui.MapMode
+import com.bradcowdrey.bearings.ui.Sixth
 import com.bradcowdrey.bearings.ui.TextFit
 import com.bradcowdrey.bearings.ui.TileKind
 import org.junit.Assert.assertEquals
@@ -12,19 +13,20 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * The layout planner's golden table (docs/REFINE.md C3.3, C3.4's tests; docs/LAYOUTS.md §8): the frozen gaps,
- * the header at safe top + 8, at most 24 empty at the bottom (unless nothing can take it and the stack is
- * centred), nothing cut, every dial at its floor or more (in one portrait column at text sizes up to 1.3, the owner's
- * rule: min(0.40 H, C − 16)), map cards at least 140, rows that add up to the column,
- * four distinct layouts, and text that never ends in "…". The same table runs in the emulator self-test
- * (SelfTest.kt) and, on Apple, in Tests/BearingsTests/LayoutPlanTests.swift.
+ * The layout planner's golden table (docs/REFINE.md "Concept A (chosen)", A.11): dial → readout → status line →
+ * location card → Targets card → tiles or map; the dial's top at safe top + 18; the frozen gaps; at most 24 empty
+ * at the bottom; every dial at least 0.40 H in one portrait column (every layout, state and text size, the list
+ * included); rows that add up to the column; four distinct layouts; and text that never ends in "…". The same
+ * table runs in the emulator self-test (SelfTest.kt) and, on Apple, in Tests/BearingsTests/LayoutPlanTests.swift.
  */
 class LayoutPlanTest {
     private val ks = listOf(1f, 1.15f, 1.3f, 1.5f, 2f)
 
+    private fun device(name: String) = LayoutPlan.devices.first { it.name == name }
+
     private fun everyPlan() = LayoutPlan.devices.flatMap { d ->
         Layout.entries.flatMap { l ->
-            LayoutPlan.State.entries.flatMap { st -> ks.map { k -> "${d.name} ${l.id} ${st.id} k$k" to LayoutPlan.planFor(d, l, k, st) } }
+            LayoutPlan.State.entries.flatMap { st -> ks.map { k -> Triple("${d.name} ${l.id} ${st.id} k$k", d, LayoutPlan.planFor(d, l, k, st)) } }
         }
     }
 
@@ -32,126 +34,229 @@ class LayoutPlanTest {
         assertEquals(emptyList<String>(), LayoutPlan.tableFailures())
     }
 
-    /** C2.2 #1: every row's widths and its 8 dp gaps add up to the column, in every cell of the table. */
+    /** Every row's widths, gaps and insets add up to the column: band 3 columns + 24 + 2 × 8, six 3u + 16, the strip's dividers, two rows. */
     @Test fun rowsAddUpToTheColumn() {
-        val off = everyPlan().flatMap { (name, p) ->
-            p.rows.mapNotNull { r ->
-                val sum = r.widths.sum() + LayoutPlan.ROW_GAP * (r.widths.size - 1)
-                if (abs(sum - p.column) > 0.01f) "$name ${r.tiles}: $sum in ${p.column}" else null
-            }
+        val off = everyPlan().flatMap { (name, _, p) ->
+            p.rows.mapNotNull { r -> if (abs(r.total - p.column) > 0.01f) "$name ${r.tiles}: ${r.total} in ${p.column}" else null }
         }
         assertEquals(emptyList<String>(), off)
+        val band = LayoutPlan.rows(GridMode.BAND, MapMode.CARD, 370f).single()
+        assertEquals(370f, band.widths.sum() + 24f + 2 * 8f, 0.01f)
+        val six = LayoutPlan.rows(GridMode.SIX, MapMode.BUTTON, 370f)
+        assertTrue(six.all { abs(it.widths.sum() + 16f - 370f) < 0.01f })
+        assertEquals(listOf(118f, 118f, 118f), six[0].widths)
+        assertEquals(listOf(181f, 181f), LayoutPlan.rows(GridMode.QUAD, MapMode.TILE, 370f)[0].widths)
+        val strip = LayoutPlan.rows(GridMode.STRIP, MapMode.BUTTON, 370f).single()
+        assertEquals(370f, strip.widths.sum() + 2f, 0.01f)
+        val two = LayoutPlan.rows(GridMode.TWO_ROW, MapMode.BUTTON, 370f)
+        assertEquals(listOf(370f), two[0].widths)
+        assertEquals(listOf(181f, 181f), two[1].widths)
     }
 
-    /** C3.2 #1: every gap is its token × k (only header → dial carries step 4's share), the header at safe top + 8. */
+    /** A.1: the dial's top is safe top + 18 (12 given way), and the other gaps are the frozen tokens. */
     @Test fun frozenGaps() {
-        assertEquals(8f, LayoutPlan.TOP, 0f)
-        val off = everyPlan().mapNotNull { (name, p) ->
-            val k = p.k
-            val ok = abs(p.headerGap - p.topExtra - 12f * k) < 0.01f && abs(p.dialGap - 12f * k) < 0.01f &&
-                abs(p.statusGap - 6f * k) < 0.01f && abs(p.lockGap - 8f * k) < 0.01f && abs(p.spotGap - 8f * k) < 0.01f &&
-                abs(p.gridGap - 8f * k) < 0.01f && abs(p.rowGap - 8f * k) < 0.01f && abs(p.mapGap - 12f * k) < 0.01f
-            if (ok) null else name
+        val off = everyPlan().mapNotNull { (name, _, p) ->
+            val top = p.dialTop == 18f || (p.dialTop == 12f && LayoutPlan.Step.GAPS in p.given)
+            val card = p.cardGap == 12f || (p.cardGap == 8f && LayoutPlan.Step.GAPS in p.given)
+            val ok = top && card && p.dialGap == 12f && abs(p.statusGap - 6f * p.k) < 0.01f && p.targetsGap == 8f &&
+                p.gridGap == 8f && p.rowGap == 8f
+            if (ok) null else "$name: ${p.dialTop} / ${p.cardGap}"
         }
         assertEquals(emptyList<String>(), off)
     }
 
     /**
-     * The owner's rule: the compass takes up at least 40% of the screen. In one portrait column, at text sizes 1.0,
-     * 1.15 and 1.3, in every state, no layout's dial is under min(0.40 H, C − 16), whether the screen is the fixed
-     * panel or the list it falls back to. Accessibility sizes and two panes are exempt.
+     * The owner's rule: the compass takes up at least 40% of the screen. In one portrait column, in every layout,
+     * state and text size, the scrolling list included, no dial is under ceil(0.40 H).
      */
     @Test fun dialIsAtLeastFortyPercentOfTheScreen() {
-        val under = LayoutPlan.devices.filter { it.w < it.h }.flatMap { d ->
-            val c = LayoutPlan.columnWidth(d.w, d.h, false)
-            val floor = minOf(0.40f * d.h, c - 16f)
-            Layout.entries.flatMap { l ->
-                LayoutPlan.State.entries.flatMap { st ->
-                    listOf(1f, 1.15f, 1.3f).mapNotNull { k ->
-                        val p = LayoutPlan.planFor(d, l, k, st)
-                        if (p.dial + 0.5f < floor) "${d.name} ${l.id} ${st.id} k$k: dial ${p.dial} < $floor" else null
-                    }
-                }
-            }
+        val under = everyPlan().mapNotNull { (name, d, p) ->
+            if (d.w < d.h && !p.twoPane && p.dial + 0.5f < LayoutPlan.ownerFloor(d.w, d.h)) "$name: dial ${p.dial} < ${0.40f * d.h}" else null
         }
         assertEquals(emptyList<String>(), under)
     }
 
-    /**
-     * Under pressure the layouts give things up in order rather than shrink the dial: Small's card becomes a map
-     * tile, then the header's button; Medium's 3 columns and Large's 2 × 2 become the compact row; then the lock and
-     * spot rows merge into one 44 row; only then the list (whose dial keeps the floor too).
-     */
-    @Test fun givesThingsUpBeforeTheDial() {
-        fun plan(name: String, l: Layout, st: LayoutPlan.State = LayoutPlan.State.SAMPLE) =
-            LayoutPlan.planFor(LayoutPlan.devices.first { it.name == name }, l, 1f, st)
-        // Pixel 7, sample: Small's card is a map tile; Medium keeps its 3 columns at the floor (C − 16 = 364).
-        plan("Pixel 7", Layout.SMALL).let { assertTrue(it.resultLine, it.mapStrip && it.rung == LayoutPlan.Rung.GIVEN_UP && abs(it.dial - 364f) < 0.5f) }
-        plan("Pixel 7", Layout.MEDIUM).let { assertTrue(it.resultLine, it.grid == GridMode.FULL && it.rung == LayoutPlan.Rung.OWN && abs(it.dial - 364f) < 0.5f) }
-        // iPhone 16, sample (H 852): Medium and Large give up their grids, the rows stay apart.
-        for (l in listOf(Layout.MEDIUM, Layout.LARGE)) plan("iPhone 16", l).let {
-            assertTrue("${l.id}: ${it.resultLine}", it.grid == GridMode.COMPACT && it.rung == LayoutPlan.Rung.GIVEN_UP && it.dial >= 340.8f - 0.5f)
+    /** Option 1: in every portrait plan the location card is the status line's bottom + 12 (8 given way), and nothing sits above the dial. */
+    @Test fun locationCardBelowStatus() {
+        val off = everyPlan().mapNotNull { (name, d, p) ->
+            if (d.w > d.h || p.twoPane || p.list) return@mapNotNull null
+            val gap = p.locationTop - (p.statusTop + p.status)
+            val ok = (abs(gap - 12f) < 0.01f || (abs(gap - 8f) < 0.01f && LayoutPlan.Step.GAPS in p.given)) &&
+                p.dialTop >= 12f && p.locationTop > p.dialTop + p.dial
+            if (ok) null else "$name: card at ${p.locationTop}, status ends ${p.statusTop + p.status}"
         }
-        // iPhone SE, sample: Large merges the lock and spot rows into one 44 row.
-        plan("iPhone SE", Layout.LARGE).let { assertTrue(it.resultLine, it.mergedRows && abs(it.mergedHeight - 44f) < 0.01f && it.dial >= 0.40f * 667f - 0.5f) }
-        // 360 × 640, sample: Extra Large's bigger readout leaves no room even merged: the list, its dial still 0.40 H.
-        plan("Small Android", Layout.EXTRA_LARGE).let { assertTrue(it.resultLine, it.list && abs(it.dial - 256f) < 0.5f) }
-        // Live (no rows to merge) on the same screen: no list.
-        for (l in Layout.entries) assertTrue(l.id, !plan("Small Android", l, LayoutPlan.State.LIVE).list)
+        assertEquals(emptyList<String>(), off)
+    }
+
+    /** The Targets card: 0, 1 or 2 rows by state, 48 (64 Extra Large, 56 tablet; 40 / 48 compact). */
+    @Test fun targetsCardRows() {
+        val pixel = device("Pixel 7")
+        for (st in LayoutPlan.State.entries) {
+            val want = (if (st.locked && !st.noHeading) 1 else 0) + (if (st.spot) 1 else 0)
+            for (l in Layout.entries) assertEquals("${st.id} ${l.id}", want, LayoutPlan.planFor(pixel, l, 1f, st).targetsRows)
+        }
+        assertEquals(48f, LayoutPlan.planFor(pixel, Layout.MEDIUM).targetsRowHeight, 0.01f)
+        assertEquals(64f, LayoutPlan.planFor(pixel, Layout.EXTRA_LARGE).targetsRowHeight, 0.01f)
+        val heights = setOf(48f, 40f, 56f, 64f)
+        for ((name, _, p) in everyPlan()) if (p.targetsRows > 0 && p.k == 1f && !p.list) assertTrue("$name: ${p.targetsRowHeight}", p.targetsRowHeight in heights)
+        // Compact rows come only with the gaps already given (A.6: step 2 before step 3).
+        for ((name, _, p) in everyPlan()) if (LayoutPlan.Step.ROWS in p.given && !p.twoPane) assertTrue(name, LayoutPlan.Step.GAPS in p.given)
+    }
+
+    /** Large's sixth tile is Pressure when still and Speed when moving (0.5 m/s or more), never unrelated data. */
+    @Test fun largeSixthTile() {
+        assertEquals(Sixth.PRESSURE, LayoutPlan.sixth(null))
+        assertEquals(Sixth.PRESSURE, LayoutPlan.sixth(0.49))
+        assertEquals(Sixth.SPEED, LayoutPlan.sixth(0.5))
+        val d = device("Pixel 7")
+        val still = LayoutPlan.planFor(d, Layout.LARGE)
+        val moving = LayoutPlan.planFor(d, Layout.LARGE, moving = true)
+        assertEquals(GridMode.SIX, still.grid)
+        assertEquals(listOf(TileKind.SUN, TileKind.MOON, TileKind.PRESSURE), still.rows[1].tiles)
+        assertEquals(listOf(TileKind.SUN, TileKind.MOON, TileKind.SPEED), moving.rows[1].tiles)
+        assertEquals(listOf(TileKind.LATITUDE, TileKind.LONGITUDE, TileKind.ELEVATION), still.rows[0].tiles)
+        // Other formats: one Position tile across two columns.
+        val dms = LayoutPlan.rows(GridMode.SIX, MapMode.BUTTON, 370f, Sixth.PRESSURE, decimal = false)
+        assertEquals(listOf(TileKind.POSITION, TileKind.ELEVATION), dms[0].tiles)
+        assertEquals(2 * 118f + 8f, dms[0].widths[0], 0.01f)
+    }
+
+    /** A.7: at k 1.3 and 2.0 no three-column compact row, rows of equal height, "6:36 AM" never split, the last row above the safe bottom. */
+    @Test fun largeTextTwoRows() {
+        for (d in LayoutPlan.devices) for (l in Layout.entries) for (st in LayoutPlan.State.entries) for (k in listOf(1.3f, 2f)) {
+            val p = LayoutPlan.planFor(d, l, k, st)
+            val name = "${d.name} ${l.id} ${st.id} k$k: ${p.resultLine}"
+            if (p.list) { assertEquals(name, GridMode.ROWS, p.grid); continue }
+            assertTrue(name, p.grid !in setOf(GridMode.BAND, GridMode.SIX, GridMode.STRIP, GridMode.ROW))
+            if (p.grid != GridMode.QUAD || p.map != MapMode.CARD) assertEquals(name, p.tile, p.tile2, 0.01f)
+            if (!p.twoPane) {
+                val end = if (p.map == MapMode.CARD) p.mapTop + p.mapHeight else p.gridTop + p.gridHeight
+                assertTrue(name, end <= d.s - p.endGap + 0.5f)
+                if (d.android) assertEquals(name, 16f, p.endGap, 0.01f)
+            }
+        }
+        // Times use no-break spaces: "6:36 AM" never splits.
+        val t = TextFit.time("6:36 AM")
+        assertTrue(t, ' ' !in t)
+        assertEquals("6:36\u202FAM", t)
+        assertEquals("↑\u00A06:36\u202FAM", TextFit.sunLine("↑", "6:36 AM"))
+    }
+
+    /** No portrait golden plan leaves an empty band wider than 24. */
+    @Test fun noEmptyBandOver24() {
+        for (name in LayoutPlan.goldenDevices) for (l in Layout.entries) for (st in LayoutPlan.State.entries) {
+            val p = LayoutPlan.planFor(device(name), l, 1f, st)
+            assertTrue("$name ${l.id} ${st.id}: ${p.bottomSpare}", p.bottomSpare <= 24.5f)
+        }
     }
 
     /**
-     * Small ≤ Medium < Large ≤ Extra Large, on every portrait screen in every state at text sizes 1.0, 1.15 and 1.3.
-     * The one tie: where Extra Large is held at the floor (on its row, or as the list it fell back to), Large may not
-     * pass it, so Medium, Large and Extra Large share the floor (360 × 640 with the sample).
+     * A.6: the layouts give way in order rather than shrink the dial: tile growth, the spare gaps, the Targets
+     * rows, Large's grid density, then the map goes to the location card's button with one compact row; only then
+     * the list (whose dial keeps 0.40 H too).
      */
+    @Test fun givesThingsUpBeforeTheDial() {
+        fun plan(name: String, l: Layout, st: LayoutPlan.State = LayoutPlan.State.SAMPLE) = LayoutPlan.planFor(device(name), l, 1f, st)
+        // Pixel 7, sample: everything kept.
+        for (l in Layout.entries) assertTrue(l.id, plan("Pixel 7", l).given.isEmpty())
+        // iPhone 16 (Android type), sample: the gaps and the rows give way; the grids stay.
+        plan("iPhone 16", Layout.MEDIUM).let {
+            assertTrue(it.resultLine, it.grid == GridMode.QUAD && it.given == setOf(LayoutPlan.Step.GAPS, LayoutPlan.Step.ROWS) && it.dial >= 340.8f)
+        }
+        // iPhone SE, sample: Medium's map goes to the button with one compact row, and the gaps and rows come back.
+        plan("iPhone SE", Layout.MEDIUM).let {
+            assertTrue(it.resultLine, it.grid == GridMode.ROW && it.map == MapMode.BUTTON && it.given == setOf(LayoutPlan.Step.BUTTON))
+            assertEquals(18f, it.dialTop, 0f)
+            assertTrue(it.resultLine, it.dial >= 0.40f * 667f)
+        }
+        // iPhone SE, no compass: Large keeps a 2 × 2 compact grid (density) before the button.
+        plan("iPhone SE", Layout.LARGE, LayoutPlan.State.NO_COMPASS).let {
+            assertTrue(it.resultLine, it.grid == GridMode.QUAD_COMPACT && LayoutPlan.Step.DENSITY in it.given)
+        }
+        // 360 × 640, sample: nothing fits at 0.40 H: the list, its dial still 0.40 H.
+        plan("Small Android", Layout.EXTRA_LARGE).let { assertTrue(it.resultLine, it.list && it.dial >= 256f) }
+        // Live (no Targets card) on the same screen: no list for Small to Large.
+        for (l in listOf(Layout.SMALL, Layout.MEDIUM, Layout.LARGE)) assertTrue(l.id, !plan("Small Android", l, LayoutPlan.State.LIVE).list)
+    }
+
+    /** A.4: Small ≤ Medium ≤ Large ≤ Extra Large on every portrait screen in every state at text sizes up to 1.3. */
     @Test fun dialsStepUp() {
         for (d in LayoutPlan.devices.filter { it.w < it.h }) for (st in LayoutPlan.State.entries) for (k in listOf(1f, 1.15f, 1.3f)) {
             val (s, m, l, xl) = Layout.entries.map { LayoutPlan.planFor(d, it, k, st) }
             val name = "${d.name} ${st.id} k$k: ${s.dial} ${m.dial} ${l.dial} ${xl.dial}"
-            val xlHeld = xl.dial <= xl.floor + 0.5f
-            if (!s.list && !m.list) assertTrue(name, s.dial <= m.dial + 0.5f)
-            if (!m.list && !l.list && !xlHeld) assertTrue(name, l.dial > m.dial + 0.5f)
-            if (!l.list) assertTrue(name, xl.dial >= l.dial - 0.5f)
-        }
-        // 360 × 640, sample: Extra Large falls back to the list at the floor, so Large stays at the floor too.
-        val small = LayoutPlan.devices.first { it.name == "Small Android" }
-        val xl = LayoutPlan.planFor(small, Layout.EXTRA_LARGE)
-        val large = LayoutPlan.planFor(small, Layout.LARGE)
-        assertTrue(xl.resultLine, xl.list)
-        assertTrue(large.resultLine, large.dial <= xl.dial + 0.5f)
-    }
-
-    /** C3.2 #2: Large is its own layout: 2 × 2 with no Map tile and the map in the header, its dial 16 or more over Medium's. */
-    @Test fun largeIsNotMedium() {
-        for (name in listOf("iPhone 17 Pro Max", "Pixel 7", "Android 412x914")) {
-            val d = LayoutPlan.devices.first { it.name == name }
-            for (st in LayoutPlan.State.entries) {
-                val m = LayoutPlan.planFor(d, Layout.MEDIUM, 1f, st)
-                val l = LayoutPlan.planFor(d, Layout.LARGE, 1f, st)
-                assertEquals("$name ${st.id}", GridMode.FULL, m.grid)
-                assertEquals("$name ${st.id}", GridMode.QUAD, l.grid)
-                assertEquals("$name ${st.id}", MapMode.BUTTON, l.map)
-                assertTrue("$name ${st.id}: Large draws a Map tile", l.rows.none { TileKind.MAP in it.tiles })
-                assertEquals("$name ${st.id}: Large's rows", listOf(2, 2), l.rows.map { it.tiles.size })
-                assertTrue("$name ${st.id}: dial ${l.dial} vs ${m.dial}", l.dial >= m.dial + LayoutPlan.LARGE_STEP - 0.5f)
-            }
+            assertTrue(name, s.dial <= m.dial + 0.5f && m.dial <= l.dial + 0.5f && l.dial <= xl.dial + 0.5f)
         }
     }
 
-    /** C3.2 #3: the no-heading dash is a bar 0.5 em × 0.08 em centred on the cap-height midline, well off the baseline. */
-    @Test fun dashOnTheCapHeightMidline() {
-        for (size in listOf(56f, 70f, 64f, 80f)) {
-            val (centre, wide, high) = LayoutPlan.dash(size)
-            assertEquals(LayoutPlan.CAP_HEIGHT * size / 2f, centre, 0.01f)
-            assertEquals(0.5f * size, wide, 0.01f)
-            assertEquals(0.08f * size, high, 0.01f)
-            // The bar's bottom edge is far above the baseline (the "_ °" sat on it).
-            assertTrue("size $size", centre - high / 2f > 0.25f * size)
+    /** A.4: on the golden devices the sample state gives band / quad / six / strip with card / tile / button / button. */
+    @Test fun layoutsAreDistinct() {
+        for (name in LayoutPlan.goldenDevices) {
+            val plans = Layout.entries.map { LayoutPlan.planFor(device(name), it) }
+            assertEquals(name, listOf(GridMode.BAND, GridMode.QUAD, GridMode.SIX, GridMode.STRIP), plans.map { it.grid })
+            assertEquals(name, listOf(MapMode.CARD, MapMode.TILE, MapMode.BUTTON, MapMode.BUTTON), plans.map { it.map })
+            for (p in plans) assertTrue("$name ${p.layout.id}", p.dial + 0.5f >= LayoutPlan.ownerFloor(device(name).w, device(name).h))
+            // Large is its own layout: no Map tile, the map in the location card.
+            assertTrue(plans[2].rows.none { TileKind.MAP in it.tiles })
         }
     }
 
-    /** C2.3 #14: the header's time is never cut and nothing ends in "…", however narrow the bar. */
+    /** The worked numbers on the Pixel 7 (A.9), sample: the golden cells. */
+    @Test fun workedNumbersPixel7() {
+        val d = device("Pixel 7")
+        val (s, m, l, xl) = Layout.entries.map { LayoutPlan.planFor(d, it) }
+        assertEquals(368f, s.dial, 0.5f); assertTrue(s.resultLine, s.map == MapMode.CARD && s.mapHeight >= 140f)
+        assertEquals(368f, m.dial, 0.5f); assertEquals(88f, m.tile, 0.5f); assertEquals(88f, m.tile2, 0.5f)
+        assertEquals(392f, l.dial, 0.5f); assertEquals(GridMode.SIX, l.grid)
+        assertEquals(396f, xl.dial, 0.5f); assertEquals(120f, xl.tile, 0.5f)
+        // Dial top = status inset + 18; the card 12 under the status line; the stack ends 8 over the navigation bar.
+        assertEquals(18f, m.dialTop, 0f)
+        assertEquals(m.statusTop + m.status + 12f, m.locationTop, 0.01f)
+        assertEquals(56f, m.location, 0.01f)
+        assertEquals(d.s - 8f - m.bottomSpare, m.gridTop + m.gridHeight, 0.5f)
+    }
+
+    /** A.8: two panes have no full-width header: the location card is top-aligned with the dial, a map card ≥ 240 on a tablet. */
+    @Test fun twoPanes() {
+        for (name in listOf("iPad 11 landscape", "iPad 13 landscape", "Android tablet landscape", "Mac 1200x800")) for (l in Layout.entries) {
+            val p = LayoutPlan.planFor(device(name), l)
+            assertTrue("$name ${l.id}", p.twoPane)
+            assertEquals("$name ${l.id}", p.dialTop, p.locationTop, 0.01f)
+            assertTrue("$name ${l.id}: ${p.resultLine}", p.map == MapMode.CARD && p.mapHeight >= 240f && p.bottomSpare <= 24.5f)
+            assertTrue("$name ${l.id}: trailing ${p.trailingWidth}", p.trailingWidth in 360f..560f)
+        }
+    }
+
+    /** A.8: a tablet column is at most 720 wide, tiles 96. */
+    @Test fun tablet() {
+        val p = LayoutPlan.planFor(device("iPad 11 portrait"), Layout.MEDIUM)
+        assertTrue(p.tablet)
+        assertTrue(p.column <= 720f)
+        assertEquals(96f, p.tile, 0.01f)
+        assertEquals(MapMode.CARD, p.map)
+        assertEquals(listOf(TileKind.SUN, TileKind.MOON), p.rows[1].tiles)
+    }
+
+    /** A.7: accessibility text is one scrolling list, the location card after the status line, the dial still 0.40 H. */
+    @Test fun accessibilityTextScrollsAsOneList() {
+        val d = device("Pixel 7")
+        val p = LayoutPlan.planFor(d, Layout.MEDIUM, 2f)
+        assertTrue(p.list)
+        assertTrue(p.locationTop > p.statusTop)
+        assertTrue(p.dial >= 0.40f * d.h)
+        assertEquals(listOf(TileKind.POSITION, TileKind.ELEVATION, TileKind.SUN, TileKind.MOON), p.rows.map { it.tiles.single() })
+    }
+
+    /** "No heading" replaces the readout; its slot keeps the readout's height or its own 40 × k line. */
+    @Test fun noHeadingSlot() {
+        assertEquals("No heading", LayoutPlan.NO_HEADING_TEXT)
+        assertEquals(0.55f, com.bradcowdrey.bearings.ui.Op.NO_HEADING, 0f)
+        for (size in listOf(56f, 64f, 70f, 80f)) for (k in listOf(1f, 1.3f)) {
+            assertEquals(maxOf(LayoutPlan.readoutHeight(size, k), 40f * k), LayoutPlan.readoutBlock(size, k, true), 0.01f)
+            assertEquals(LayoutPlan.readoutHeight(size, k), LayoutPlan.readoutBlock(size, k, false), 0.01f)
+        }
+    }
+
+    /** A.2: nothing ends in "…": the location card's time is never cut; the lock row's label and cue never split. */
     @Test fun noEllipsis() {
         val dates = listOf(Triple("Sun, Nov 1", "Nov 1", "9:41 AM"), Triple("Wed, Sep 30", "Sep 30", "12:59 PM"))
         for ((long, short, time) in dates) for (room in 4..40) {
@@ -160,16 +265,21 @@ class LayoutPlanTest {
             assertTrue("$room: $lines", lines.any { time in it })
         }
         val (lead, cue) = TextFit.lockParts("Locked 240° · turn 12° right")
-        assertEquals("Locked 240°", lead)
-        assertEquals("turn 12° right", cue)
+        assertEquals("Locked\u00A0240°", lead)
+        assertEquals("turn\u00A012°\u00A0right", cue)
+        assertEquals("240°", TextFit.shortLock(lead))
         assertEquals("6:36" to "AM", TextFit.splitClock("6:36 AM"))
         assertEquals("06:36" to null, TextFit.splitClock("06:36"))
+        assertTrue(LayoutPlan.shortLock(300f))
+        assertTrue(!LayoutPlan.shortLock(370f))
     }
 
-    /** C3.4 #12: both Position lines at one size, the longer line's. */
+    /** Both Position lines at one size, the longer line's. */
     @Test fun positionLinesShareOneSize() {
         val scale = mapOf("39.09898° N" to 0.95f, "106.94117° W" to 0.9f)
         assertEquals(0.9f, TextFit.sharedScale(scale.keys.toList()) { scale.getValue(it) }, 0f)
+        assertEquals("39.09898°" to "North", TextFit.hemisphere("39.09898° N"))
+        assertEquals("106.94117°" to "West", TextFit.hemisphere("106.94117° W"))
     }
 
     @Test fun layoutIds() {

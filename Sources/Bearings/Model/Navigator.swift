@@ -567,7 +567,8 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
             lock = sampleLock
         }
         spot = Spot(latitude: 39.1911, longitude: -106.8175)
-        speed = 1.43
+        // The sample is still (Concept A): Large shows Pressure and the speed chip is hidden.
+        speed = nil
         pressure = 712.4
         locating = false
         access = .allowed

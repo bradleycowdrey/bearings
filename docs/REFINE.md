@@ -815,3 +815,345 @@ Cycle 5 applies, in this priority:
    the safe bottom.
 4. Spare height to content (map card, tile growth; iPad landscape right pane top-aligned with a map
    card), then the iPad regular-width type ramp, then the rest of the C4 list.
+
+---
+
+## Concept A (chosen, Option 1: location card below the compass)
+
+The owner approved **Concept A, Instrument Panel (Targets + Grid)** with one change, **Option 1**: the
+location card moves **below the compass**. This section is the build spec. Where it differs from C3–C4 or
+from an earlier LAYOUTS.md, this section wins. Mockups (the sources of truth): `A5-location-below` (Option 1,
+the middle phone), `A1-layouts` (the four sizes), `A2-scenarios`, `A3-ipad-mac` and `A4-android`. The
+generators are `genA1.js` to `genA5.js`.
+
+**Unchanged by owner's order:** the dial drawing (`DialView.swift`, `Dial.kt`, including its no-compass
+drawing), the readout "228° SW" (font, size, weight, the "SW" colour; `LayoutPlan.heading` 56,
+`headingTablet` 96 on Apple, `HEADING_TABLET` 64 on Android, × the readout scale) and the status line
+(13, white 60%, centred). The mockups draw the readout at 64 px. That is only an approximation of the current
+glyphs, so the build keeps the current readout block, `readoutHeight(headingSize:)` = size × 0.72 + 4.
+Because of that, the y-positions below differ from the PNG by up to 14 pt. The order and the tokens are
+what must match.
+
+### A.1 Order and anchors (portrait, one column)
+
+**dial → readout → status line → location card → Targets card (only if a lock or spot exists) → the
+layout's tiles / map.**
+
+- Nothing is pinned to the status bar. **The dial's top = safe top + 18** (iPhone 16 Pro: 62 + 18 = 80;
+  Android: status-bar inset + 18 dp; a Mac window: title-bar band 28 + 18 = 46). The ⋯ menu lives in the
+  location card.
+- The stack **ends at the safe bottom**: at the home-indicator inset where there is one (16 Pro: 840 = 874 − 34),
+  otherwise 16 above the screen edge (iPhone SE, a Mac window: 24). Android: navigation-bar inset + 8 dp.
+- Reference (approved PNG, Medium, 402 × 874): dial 80–432, readout 440, status 508, card 536–584,
+  Targets 592–680, grid 688–840.
+
+**Frozen gap tokens** (× k where noted; never grown, only given up in the order of A.6):
+
+| From → to | pt / dp |
+|---|---|
+| safe top → dial top | 18 (may fall to 12 under pressure) |
+| dial → readout (dial edge to the digits' cap top) | 12 |
+| readout → status | 6 × k |
+| status → location card | 12 (may fall to 8 under pressure) |
+| location card → Targets card | 8 |
+| Targets card (or location card) → tiles / map | 8 |
+| between tile rows and columns | 8 |
+| side margins | 16 phone; iPad column min(W − 48, 720), centred; Mac 24 |
+
+### A.2 Elements (Apple pt; Android dp/sp in brackets)
+
+**Location card** (the sky card, formerly the header): the full column width C, **48 high** [56 dp] × k, radius
+**14** [16], the sky gradient from LOOK.md "The sky" (day: `#3D74B0` → `#1C3A5E`, twilight and night rows as
+listed, `Palette.skyUnknown` before a fix). Padding: 14 leading [16], 4 trailing.
+- Line 1: the place, "Maroon Bells, Colorado", 17 semibold [18 sp], line 20 [22], white, never truncated
+  (at k ≥ 1.3 it may wrap. The full name stays in the accessibility label).
+- Line 2: "Sun, Nov 1 · 9:41 AM", 13 [13 sp], line 18 [20], white 75%, tabular. The **Sample** pill trails
+  it: 12 semibold [12 sp] black on `Palette.notice` `#F2A65A`, a 17 [20] capsule, padding 7 [8]. Night: the pill
+  is an outline (black fill, 1.5 white inset, white text).
+- Trailing, in fixed order: the sky glyph (22, white 85%, decorative, in a 32 wide slot), the **map
+  button** (Large and Extra Large only. 24 glyph, 44 × 44 target [48 dp]), then **⋯** (Apple
+  `ellipsis.circle` 28 in 44 × 44. Android `more_vert` 24 dp in a 36 dp `Palette.chipOff` circle, 48 dp
+  target). The card has no shadow.
+- Accessibility: one header element, "Maroon Bells, Colorado, Sunday November 1, 9:41 AM, sample data".
+  The buttons are separate elements after it.
+
+**Dial**: centred, drawn exactly as now. Its diameter comes from the plan (A.5).
+
+**Readout**: exactly as now. **No compass: the words "No heading"** replace the readout (and the drawn
+dash, which is removed). The words are 34 semibold [34 sp], line 40, tracking −0.2, centred, white **55%**
+(new opacity token `Palette.Op.noHeading = 0.55` / `Op.NO_HEADING = 0.55f`). The readout slot keeps its
+height, max(readoutHeight, 40 × k), so nothing below moves. The text sits 12 under the dial, and the status
+line sits 6 below it and reads "Position, sun and map still work". It is spoken as "Heading unavailable"
+(`NO_HEADING_SPOKEN`), announced once, politely. The dial's no-compass drawing is unchanged. Locking is
+unavailable, and the spot row stays.
+
+**Targets card**: one card, present only when a lock or a spot exists. It shows only the rows that exist.
+- Container: radius 16, `Palette.tileFill` (white 8%) with a 1 pt `Palette.tileStroke` (white 12%) edge,
+  `overflow: clip`.
+- **Row height 44** [48 dp]. Extra Large **52** [64 dp]. iPad **52**. Under pressure 36 [40 dp] (A.6). The ✕
+  target stays 44 [48] and may overlap the hairline.
+- **Lock row** (first): fill `Palette.lockFill` `#3D2128` with a 1 pt inset `Palette.lockBorder` `#5A2C38`
+  [`lockStroke`], top corners 16 (all four if it is the only row). Content: lock glyph (14 × 16, white 85%,
+  in a 16 [18] wide column), "Locked 240°" 17 regular [17 sp], flexible space, "turn 12° right" 17
+  semibold, ✕ (14 glyph, white 60%, in a 40 frame / 44 hit [48 dp]). Gap 8, padding 14 leading [16], 4
+  trailing.
+- **Hairline** between rows: 1 pt white 8% (`Op.tile`).
+- **Spot row**: the neutral card fill, pin glyph (14 × 16, white 85%), "Marked spot" 17 regular, "9.2 mi ·
+  46° NE" 17 semibold tabular, ✕.
+- Type: Small 15 [16 sp], Medium and Large 17 [17 sp], Extra Large 17 [19 sp], iPad 19. Values use
+  non-breaking spaces ("turn 12° right", "9.2 mi", "46° NE") and never split or ellipsize. The leading
+  text yields first: it scales to 0.85 and then drops "Locked" → "240°" only below a 320 column.
+- Interactions are kept: tap a row for its menu (Lock to Spot, Clear…), ✕ clears. Each row is one
+  accessibility element with the ✕ as a named action ("Clear lock", "Clear marked spot").
+- Night: the lock fill goes red at about 15% luminance through the multiply. The ✕ and secondary text go
+  to white 90%.
+
+**Tile** (one component on both ports): radius 16, `tileFill`, 1 pt `tileStroke`, padding 10 vertical × 12
+horizontal (Large 10 × 10. iPad 12 × 16). The caption is 11 semibold [11 sp] caps, tracking 0.6, white 60%
+(`Op.caption`; night 90%), line 13 [14], text only. Values are medium weight and tabular. Secondary is 13
+[13 sp], white 60% (night 90%), line 17 [18]. Caption at the top. The value block's last baseline sits at the
+bottom inset (space-between). Nothing ellipsizes: text scales to 0.85, then the layout gives way (A.6).
+Times use the shared formatter (a narrow no-break space before AM/PM; a no-break space after ↑/↓).
+
+**Map tile**: the snapshot (Apple `MKMapSnapshotter` image with the user dot; Android the dark style with
+labels at 70%), full bleed in the tile. A 24 scrim along the bottom (a gradient to black 65% [solid black
+60%]) carries the expand glyph (11), "MAP" (caption style, white), and "© OpenStreetMap" trailing at 9
+[9 sp], white 60%. It is one element: "Map, opens full map".
+
+**Map card** (Small; iPad and two-pane): radius 16, 1 pt `tileStroke`. Speed chip top-leading at 12: 13
+semibold [13 sp] tabular, padding 5 × 10, radius 14, fill black 72% (`Palette.mapControl` on Android,
+`#2A2D30`). Controls top-trailing at 12: 36 circles [36 dp in 48 dp targets], 8 apart, locate and
+north/compass (Apple `.ultraThinMaterial` dark, Android `mapControl`). Cards under 200 high show only the
+chip and one expand button. Zoom, follow and ⋯ live in the sheet. Attribution: Apple "© OpenStreetMap" 9–10
+bottom-leading at 8. Android an "© OpenStreetMap ⓘ" pill, 24 dp, 10 sp, radius 12, bottom-leading at 8 dp,
+above the band when there is one. Tap anywhere opens the map sheet.
+
+**Map sheet**: unchanged (A2 sheet 5: "Map" / Done bar, speed chip, + − north-up follow, dotted line to the
+spot with a "Marked spot · 9.2 mi" pill, OSM pill).
+
+### A.3 The four layouts (iPhone 16 Pro, sample: lock + spot, k = 1.0)
+
+The sample state is **still** (no speed), so Large shows Pressure and the speed chip is hidden. The
+mockups' "3.2 mph" chip illustrates the moving state. Tile column widths: 2-up (C − 8)/2 = 181, 3-up
+(C − 16)/3 = 118 (C = 370).
+
+| | Small | Medium (default) | Large | Extra Large |
+|---|---|---|---|---|
+| Menu subtitle | "Compass + big map" | "Balanced · map tile" | "Bigger compass · map in header" | "Biggest compass · one row" |
+| Grid (`Grid`) | `band` (over the map card) | `quad` 2 × 2 with the Map tile | `six` 3 × 2 | `strip` |
+| Map surface | card, takes all the spare | tile (bottom-right cell) | header button | header button |
+| Dial cap (portrait phone) | round8(0.40 H) = 352 | round8(0.40 H) = 352 | round8(0.42 H) = 368 | width cap W − 16 = 386 |
+| Readout scale | 1.0 | 1.0 | 1.0 | 1.25 |
+| Targets rows | 44, 15 pt text | 44, 17 | 44, 17 | 52, 17 |
+| Tiles | — (band 68) | 72, grow to 88 | 72, grow to 104 | strip 88, grows to 120 |
+| Planned (16 Pro) | dial 352, map card ≈ 166 | dial 352, tiles ≈ 79 | dial ≈ 365, tiles 72 | dial 386, strip ≈ 104 |
+
+The dial floor is **ceil(0.40 H)** in every layout (349.6 → 350 on the 16 Pro). The width cap is W − 32 for
+Small and Medium and W − 16 for Large and Extra Large (`Layout.e`).
+
+**Small**: dial → readout → status → card → Targets → **one map card** to the safe bottom (≥ 140; 16 Pro
+≈ 166). The speed chip and the two controls sit on the map. A **band** along its bottom: 68 high
+[72 dp], Apple fill `rgba(12,14,14,0.78)` + 12 blur, Android a solid `#16191A`, 1 pt `tileStroke` top
+edge, padding 10 × 12, three columns 1.15fr | 1fr | 1fr [1.2 | 1 | 1], gap 8:
+- `POSITION · DD`: "39.09898° N" / "106.94117° W";
+- `ELEVATION`: "9,587 ft" / "2,922 m" (secondary);
+- `SUN · ◐ 53%` (moon glyph 11): "↑ 6:36 AM" / "↓ 5:08 PM".
+Values are 13 semibold, line 17, 3 below the caption. There are no separate tiles.
+
+**Medium (default)**: a 2 × 2 grid of 181-wide tiles:
+- `POSITION · DD`: two lines at 15 medium, line 19;
+- `ELEVATION`: "9,587 ft" 17 medium + "2,922 m · 21.04 inHg" secondary;
+- `SUN · ◐ 53%`: "↑ 6:36 AM" / "↓ 5:08 PM" at 15 medium;
+- **MAP** tile.
+Rows are 72 and grow to 88 from spare.
+
+**Large**: a 3 × 2 grid of 118-wide compact tiles, values 16 medium, line 20, tracking −0.2, then a secondary
+line:
+
+| `LATITUDE` | `LONGITUDE` | `ELEVATION` |
+|---|---|---|
+| "39.09898°" / "North" | "106.94117°" / "West" | "9,587 ft" / "2,922 m" |
+| **`SUNRISE`** "↑ 6:36 AM" (AM at 12, white 70%) / "Sets 5:08 PM" | **`MOON`** "◐ 53%" (glyph 15) / "Last quarter" | **`PRESSURE`** "21.04 inHg" (unit 12, 70%) / "712.5 hPa", or **`SPEED`** "3.2 mph" / "5.1 km/h" |
+
+- The sixth tile is **SPEED when moving** (`nav.speed` ≥ 0.5 m/s), otherwise **PRESSURE**. On both
+  ports it never borrows unrelated data. With no barometer and no motion, it shows `PRESSURE` "—".
+- Map: the header button in the location card.
+- With DMS/DDM/UTM/MGRS/Plus Code, Latitude | Longitude become one `POSITION · <FMT>` tile spanning two
+  columns (2u + 8).
+
+**Extra Large**: the biggest dial (to the width cap), readout × 1.25, Targets rows 52, and **one summary
+strip**:
+- one tile, 88 high [104 dp], growing to 120 from spare;
+- three columns 1.2fr | 1fr | 1fr [1.25 | 1 | 1], each with 12 horizontal padding, 14 vertical, and 1 pt
+  `tileStroke` dividers;
+- `POSITION`: two lines at 15 medium; `ELEVATION`: "9,587 ft" / "2,922 m"; `SUN`: "↑ 6:36 AM" / "↓ 5:08 PM";
+- map: the header button.
+
+**Live (no lock, no spot)**: the Targets card is absent (A2 sheet 1). Its height plus the 8 gap goes to the
+layout's growth:
+- Small: the map card.
+- Medium: row 1 to 88, then row 2 up to 176. At ≥ 150, the Sun tile becomes `SUN` + "10 h 32 m of
+  daylight" over a hairline and a `MOON` section ("◐ 53%" / "Last quarter"), and the Map tile shows the
+  speed chip.
+- Large: rows to 104, then the dial to its width cap.
+- Extra Large: the strip to 120.
+No band wider than 24 may be left empty (above the dial beyond the 18 token, or at the bottom).
+
+### A.4 Distinctness (golden test)
+
+In the sample state (lock + spot) on iPhone 16, iPhone 16 Pro and Pixel 7, the four layouts differ in
+**grid** (`band`, `quad`, `six`, `strip`) and in **map surface** (card, tile, button, button, and Large and
+Extra Large differ by grid). The test also requires dial(Small) ≤ dial(Medium) ≤ dial(Large) ≤ dial(Extra
+Large), and every dial ≥ 0.40 H. The old rule dial(L) ≥ dial(M) + 16 is dropped. On smaller devices, under
+pressure, neighbours must still differ in at least one of grid, map surface or dial.
+
+### A.5 Planner (`LayoutPlan.swift` / `LayoutPlan.kt`, the same steps in the same order)
+
+1. `dialTop = safeTop + 18`. `end = safeBottom > 0 ? H − safeBottom : H − 16` (Mac H − 24; Android
+   H − navInset − 8).
+2. Fixed blocks: the readout group (12 + readoutHeight + 6k + 16k × statusLines), 12 + location card,
+   8 + Targets (rows × row height) if any, 8 + the layout's grid at its minimum (band: none; quad 2 × 72 +
+   8; six 2 × 72 + 8; strip 88), Small's map card at 140.
+3. `dial = min(cap, end − dialTop − fixed)`. If that is under the floor ceil(0.40 H), give way in the
+   order of A.6, one step at a time, re-planning after each.
+4. Spend spare **in this order**: (a) the layout's growth (Small map card, unbounded; Medium rows 88 (live:
+   88 / 176); Large rows 104; XL strip 120); (b) the dial, up to its width cap; (c) the bottom, at most
+   24. If more remains, restore given-up steps in reverse order.
+5. The screen reads every frame (dial, card top, Targets rows, grid, tile height, map height, sixth tile)
+   from the plan. New plan fields: `locationTop`, `targetsTop`, `targetsRows` (0–2), `targetsRowHeight`,
+   `sixth` (`.pressure` / `.speed`), `grid` ∈ {`band`, `quad`, `six`, `strip`, `quadCompact`, `twoRow`, `list`},
+   `map` ∈ {`card`, `tile`, `button`}. Android: `GridMode` {BAND, QUAD, SIX, STRIP, QUAD_COMPACT, TWO_ROW,
+   ROWS}, `MapMode` unchanged, `TileKind` + LATITUDE, LONGITUDE, PRESSURE, SPEED.
+
+### A.6 When height runs short (give-way order, before the dial goes under 0.40 H)
+
+1. **Tile growth** back to minimum (88 → 72, strip 120 → 88, map card growth → 140).
+2. **Spare gaps**: safe top → dial 18 → 12, status → card 12 → 8.
+3. **Targets rows to compact height**: 44 → 36 [48 → 40 dp]. Extra Large 52 → 44.
+4. **Grid density**: Large `six` → `quadCompact`, a 2 × 2 of 64-high tiles: `POSITION · DD` | `ELEVATION`,
+   `SUN · ◐ 53%` | Pressure/Speed.
+5. **Map card**: Small's card (at 140) gives way to a Map tile in a `quad` (Small then reads like Medium,
+   which is allowed only off the golden devices).
+6. **Header button**: a Map tile gives way to the header map button, and the remaining three tiles become one
+   72 compact row (Position = C − 16 − 2w, w = max(104, round(0.27 C))).
+7. **Scrolling list** (A.7). The dial stays ≥ 0.40 H inside the list.
+
+iPhone SE (375 × 667) in Medium takes steps 2, 3 and 6 to keep a 272 dial. The spare that step 6 frees then
+restores the rows and the gaps (A.5 step 4) and grows the row to 88. Its self-test line reads "dial 272 · compact · map button".
+
+### A.7 Text size
+
+- **k ≥ 1.3** (Dynamic Type xLarge+ / fontScale ≥ 1.3): every three-column compact arrangement (Small's
+  band, Extra Large's strip, the step-6 row) becomes **two rows**: Position full width (64 × k), then
+  Elevation | Sun at (C − 8)/2 each. There are **no half-width chips**, the rows have equal height, and
+  values are top-aligned 6 below the caption. Large's `six` becomes `quadCompact` (its 118 columns cannot
+  hold "106.94117°"). Times are non-breaking ("6:36 AM" never splits) with a 0.85 minimum scale. The Sun
+  caption is `SUN` only (the moon glyph moves to the dial and the Moon tile). The last row ends at or above
+  the safe bottom (≥ 16 above it with no home indicator; Android nav inset + 16).
+- **Accessibility sizes** (AX1+ / fontScale ≥ 1.5): **one scrolling list** (A2 sheet 3, with Option 1
+  applied):
+  - dial (≥ 0.40 H, e.g. 352 on the 16 Pro), readout and status (status 17, wraps at "·");
+  - the location card, wrapping to 96 (place 24 / line 29, the pill 17 in a 26 capsule on line 1, date 17);
+  - Targets rows 84 with the cue on line 2 (24 / 20, ✕ 18 in 44);
+  - then one tile per row, 96 high, caption 15 leading, value 22 medium trailing (secondary 17): Position,
+    Elevation, Sun, Moon;
+  - a 176 full-width Map tile with a 32 scrim.
+  The list has a 24 fade at the bottom and flashes its scroll indicator once. VoiceOver / TalkBack reads the
+  heading as one element: "Heading 228 degrees southwest, locked 240, turn 12 right".
+
+### A.8 iPad, Mac and landscape
+
+- **Regular-width ramp** (iPad, Mac): location card 56, radius 16, place 20 semibold, date 15 at 85%, pill 13
+  in a 19 capsule, buttons 48. Status 15 (line 18). Targets rows 52 at 19, ✕ 44, leading 16, gap 10.
+  Tiles **96**, padding 12 × 16, caption **13** (line 16), value **22** medium (line 26), secondary 15
+  at 70%. Map card chip 15 (6 × 12, radius 16), controls 40, attribution 11. The readout is unchanged
+  (Apple 96, Android 64). Column **≤ 720**, centred, `min(W − 48, 720)`. The dial may be wider than the
+  column only up to its width cap.
+- **iPad portrait** (834 × 1194): one column, dial top 24 + 18 = 42, dial round8(0.40 H) = 480, readout,
+  status, location card, Targets, then the layout's grid at the tablet ramp:
+  - Medium: `POSITION · DD` | `ELEVATION`, `SUN` | `MOON` at 96, then a **map card** to the bottom
+    (≥ 140; ≈ 147 at 834 × 1194);
+  - Small: the map card with the band (tablet type);
+  - Large: `six` at 96 + header button;
+  - Extra Large: the strip at 104 + header button.
+- **Two panes** (W > H and W ≥ 700, a Mac window wider than tall, or a phone on its side): **no
+  full-width header**.
+  - **Left pane** (24 outer margin, 32 between the panes): dial, readout and status, **top-aligned** with the
+    dial top at safe top + 18 (Mac 46). Dial = min(pane width − 48, height to the bottom − readout group,
+    share × H), with shares Small 0.56, Medium 0.62, Large 0.66, Extra Large 0.72. Extra Large's left pane
+    takes 60% of the width. iPad 11" landscape Medium: ≈ 520. Mac 1200 × 800: ≈ 496.
+  - **Right pane** (width 360–560, the current `paneMin`/`paneMax`; 520 at 1194 and 1200): **top-aligned
+    with the dial top**:
+    1. the **location card** (with ⋯);
+    2. 8, then the Targets card;
+    3. 8, then the grid (Medium `POSITION · DD` | `ELEVATION`, `SUN` | `MOON` at 96; Large `six` at 96;
+       Extra Large the strip; Small none);
+    4. 8, then a **map card** to the pane's bottom (≥ 240; Small ≥ 60% of the pane, with its band).
+  - In two panes the header map button is hidden (opacity 0, its slot kept), because a map card is on
+    screen.
+  - Right-pane bottom spare ≤ 24. The four landscape plans stay distinct by grid.
+- **Mac**: hidden title bar, traffic lights over the left pane's top band, 24 on the sides and bottom. It has no
+  live compass, so it shows the no-compass state with "No heading". The update banner (44, tile style) goes
+  between the location card and the Targets card.
+
+### A.9 Android
+
+The same plan, numbers and order in dp/sp (Pixel 7, 412 × 915):
+- dial top = status inset + 18;
+- location card 56 dp, radius 16, place 18 sp;
+- Targets rows 48 dp (XL 64), 17 sp (Small 16, XL 19), ✕ 48 dp;
+- tiles 72 dp growing to 88 (Medium) / 104 (Large), captions 11 sp line 14, values 17 sp line 22, secondary
+  13 sp line 18;
+- Small band 72 dp, solid `#16191A`; XL strip 104 dp;
+- Inter at Normal weight for the readout (unchanged), flat tiles with no ripple or shadow.
+Expected plan on the Pixel 7 sample: Small dial 368 + card ≈ 207, Medium 368 + tiles 88, Large 384 + tiles
+≈ 91, XL 396 + strip 120. The golden table prints the exact values. Night, map labels (glyph PBFs bundled),
+`MapSnippet.kt` and the extras (`sample`, `layout`, `format`, `mapSheet`, `noCompass`, `lock`, `spot`,
+`night`, `selftest`) are unchanged.
+
+### A.10 Kept behaviour
+
+All of the following stay as they are now:
+- accessibility labels and actions (dial: Lock/Unlock, Larger/Smaller Compass);
+- gestures: tap the dial to lock; tap Position for the next format; long-press (Mac right-click) to copy;
+  Elevation, Sun and Moon open Details; map tile, card or button opens the sheet;
+- night mode (`Palette.nightTint` multiply, secondary 0.9), sample mode, the stored `"layout"` key (default
+  `medium`), the Layout menu and its subtitles;
+- launch arguments `--sample`, `--layout`, `--format`, `--map-sheet`, `--no-compass`, `--show-terms`,
+  `--selftest`, and the Android extras;
+- self-tests and the screenshot names.
+
+### A.11 Tests to update or add (both ports)
+
+Swift `Tests/BearingsTests/LayoutPlanTests.swift`, Kotlin `android/app/src/test/.../LayoutPlanTest.kt`, and
+`LayoutPlan.tableFailures()`:
+
+- **Keep:** `testOwnersRuleDialAtLeast40PercentOfH` / `dialIsAtLeastFortyPercentOfTheScreen` (portrait,
+  single column, every layout, state and k, including the list); `testNoEllipsisAnywhere` / `noEllipsis`;
+  `testRowWidthsAddUpToC` / `rowsAddUpToTheColumn`, extended to `band` (three columns + 24 padding + 2 × 8
+  gaps = C), `six` (3u + 16 = C), `strip`, `twoRow`; `testLayoutsAreDistinct` / `largeIsNotMedium` (A.4
+  rules).
+- **Update:**
+  - `testFrozenRhythm` / `frozenGaps`: the dial top is safe top + 18 (or 12 after give-way), and the A.1 tokens.
+  - `testWorkedNumbersIPhone16Pro`: the A.3 table (Medium: dial 352, card top ≈ 522, Targets 2 × 44,
+    tiles ≈ 79, end 840).
+  - `testGivingWayOrder` / `givesThingsUpBeforeTheDial`: the A.6 order (and SE Medium → steps 2, 3, 6).
+  - `dialsStepUp`: ≤ instead of +16.
+  - `testIPad`: column ≤ 720, tiles 96, caption 13, value 22.
+  - `testTwoPanes`: no full-width header; location card top = dial top; right-pane spare ≤ 24; a map card
+    ≥ 240.
+  - `testAccessibilityTextScrollsAsOneList`: the location card after the status line.
+- **Replace** the dash test (`testDrawnReadoutAndPosition` dash part, the `MainView` self-test glyph check
+  at `glyphCanvas(heading: nil…)`, Kotlin `dashOnTheCapHeightMidline`) with a **rendered "No heading"**
+  check. The ink box is centred on the column ±2, its top 12 ± 2 under the dial, its cap height
+  24 ± 3 (34 pt semibold), its width 150–200, and its colour white at 0.55 ± 0.03 (and no single
+  horizontal bar).
+- **Add:**
+  - `testLocationCardBelowStatus` (card top = status bottom + 12, or 8 after give-way, in every portrait plan;
+    nothing above the dial);
+  - `testTargetsCardRows` (0/1/2 rows by state, 44/36/52 heights, the lock row first);
+  - `testLargeSixthTile` (speed nil or < 0.5 m/s → `.pressure`, ≥ 0.5 → `.speed`, on both ports);
+  - `testLargeTextTwoRows` (at k 1.3 and 2.0: no compact three-column row, rows of equal height,
+    "6:36 AM" never split, last row above the safe bottom);
+  - no empty band > 24 in any portrait golden.
+- The **golden table** devices and states are unchanged. Its checks are updated to the above.

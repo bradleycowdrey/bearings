@@ -1,23 +1,24 @@
 import CoreGraphics
+import Foundation
 
-/// The four layouts (docs/REFINE.md §3.4, revised by Cycle 3 §C3.3, the owner's decision): one rule per
-/// layout, the same on every port and device. The map surface shrinks as the compass grows, one step per
-/// layout, and every step changes the grid, so the four always look different.
+/// The four layouts of Concept A, "Instrument Panel (Targets + Grid)", Option 1 (docs/REFINE.md "Concept A
+/// (chosen)", docs/LAYOUTS.md): the same dial, readout and status line on every size, then the location card
+/// (the sky card with ⋯), then one Targets card (lock and marked spot, only when set), then what the layout
+/// packs underneath. One rule set on every port and device.
 ///
-/// | Layout | Grid | Tiles | Map | Dial cap | Readout |
-/// |---|---|---|---|---|---|
-/// | Small "Compass + big map" | compact row | 72 | card ≥ 140, takes all spare (else a map tile, a strip a tile high or more, else the header button) | 0.40 H (its floor) | 1.0 |
-/// | Medium "Balanced · map tile" (default) | 3 columns, 2 rows, with the Map tile | 72, grows to 88 from spare | tile; a card (≥ 200) when ≥ 160 is spare | W − 32 (tablet: and 0.48 H); 16 under Large | 1.0 |
-/// | Large "Bigger compass · map in header" | 2 × 2 at (C − 8) / 2 | fixed 72 | header button | W − 16 (tablet: and 0.54 H) | 1.0 |
-/// | Extra Large "Biggest compass · one row" | compact row | 72 | header button | W − 16 (tablet: and 0.64 H, the column widens to the dial) | 1.25 |
+/// | Layout | Grid | Map | Dial cap (one column) | Readout |
+/// |---|---|---|---|---|
+/// | Small "Compass + big map" | `band` (over the map card) | card, all spare height | ceil8(0.40 H) | 1.0 |
+/// | Medium "Balanced · map tile" (default) | `quad` 2 × 2 with the Map tile | tile | ceil8(0.40 H) | 1.0 |
+/// | Large "Bigger compass · map in header" | `six` 3 × 2 | header button | ceil8(0.42 H), grows to W − 16 | 1.0 |
+/// | Extra Large "Biggest compass · one row" | `strip` | header button | W − 16 | 1.25 |
 ///
-/// The owner's rule: in one column (phones, iPad portrait, Mac windows taller than wide), at every text size
-/// short of the accessibility sizes, every layout's dial is at least min(0.40 H, its width cap). Small sits
-/// at that floor, Medium at or over it, Large over Medium, Extra Large the largest. Short of height, a
-/// layout gives up its other parts first (`LayoutPlan.plan`), never the dial.
+/// The owner's rule: in one column (phones, iPad portrait, Mac windows taller than wide), at every text size,
+/// every layout's dial is at least min(0.40 H, its width cap), in the scrolling list too. Short of height,
+/// a layout gives things up first (`LayoutPlan.Step`), never the dial.
 ///
-/// (On iPad the tiles are 96 and do not grow.) Saved under "layout" as the raw value; anything else reads
-/// as Medium. (This shadows SwiftUI's `Layout` protocol inside the app, which Bearings doesn't use.)
+/// Saved under "layout" as the raw value; anything else reads as Medium. (This shadows SwiftUI's `Layout`
+/// protocol inside the app, which Bearings doesn't use.)
 enum Layout: String, CaseIterable, Identifiable {
     case small, medium, large, extraLarge
 
@@ -36,8 +37,7 @@ enum Layout: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The one-line subtitle in both menus (the ⋯ menu and the Mac's View › Layout): what the layout
-    /// changes (C3.2 #2).
+    /// The one-line subtitle in both menus (the ⋯ menu and the Mac's View › Layout).
     var subtitle: String {
         switch self {
         case .small: "Compass + big map"
@@ -51,8 +51,8 @@ enum Layout: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .small: "map"
-        case .medium: "square.grid.3x2"
-        case .large: "square.grid.2x2"
+        case .medium: "square.grid.2x2"
+        case .large: "square.grid.3x2"
         case .extraLarge: "location.north.circle"
         }
     }
@@ -66,36 +66,33 @@ enum Layout: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The dial's floor, as a share of the full height H: the owner's rule, 0.40 H for every layout (capped
-    /// by the layout's width cap). The planner gives up everything else before the dial goes under it.
-    var floorShare: CGFloat { LayoutPlan.ownerShare }
-
-    /// On a tablet (and in two panes) the dial is also capped at this share of H. In one column Small
-    /// uses 0.40 H (`LayoutPlan.smallShare`) instead; two panes keep 0.36.
-    var tabletShare: CGFloat {
+    /// One column: the dial's cap as a share of H (rounded up to 8), or nil for the width cap alone.
+    var capShare: CGFloat? {
         switch self {
-        case .small: 0.36
-        case .medium: 0.48
-        case .large: 0.54
-        case .extraLarge: 0.64
+        case .small, .medium: 0.40
+        case .large: 0.42
+        case .extraLarge: nil
         }
     }
+
+    /// Two panes: the dial's share of H (Small 0.56, Medium 0.62, Large 0.66, Extra Large 0.72).
+    var paneShare: CGFloat {
+        switch self {
+        case .small: 0.56
+        case .medium: 0.62
+        case .large: 0.66
+        case .extraLarge: 0.72
+        }
+    }
+
+    /// Two panes: the right pane's share of the width (Extra Large's left pane takes 60%).
+    var rightShare: CGFloat { self == .extraLarge ? 0.40 : 0.4333 }
 
     /// Multiplies the heading number and its point letters: 1.25 at Extra Large (56 → 70; 96 → 120 on iPad).
     var readoutScale: CGFloat { self == .extraLarge ? 1.25 : 1 }
 
-    /// Small and Extra Large use the compact row (Position, Elevation, Sun with the moon in its caption).
-    var compactRow: Bool { self == .small || self == .extraLarge }
-
-    /// Two panes: the trailing pane's share of the width (C3.4 #5: Extra Large's leading pane is 60%).
-    var paneShare: CGFloat {
-        switch self {
-        case .small: 0.50
-        case .medium: 0.42
-        case .large: 0.36
-        case .extraLarge: 0.40
-        }
-    }
+    /// The Targets card's text: 15 at Small, 17 otherwise (19 on iPad).
+    var targetsText: CGFloat { self == .small ? 15 : 17 }
 
     private var index: Int { Self.allCases.firstIndex(of: self) ?? 1 }
 
@@ -108,41 +105,53 @@ enum Layout: String, CaseIterable, Identifiable {
     static func of(_ id: String?) -> Layout { id.flatMap(Layout.init(rawValue:)) ?? .default }
 }
 
-/// The "Instrument panel" planner (docs/REFINE.md §3.3, replaced by Cycle 3 §C3.3: one rule set for Apple
-/// and Android): one pure function with no UI code. MainView reads the dial, the grid (`cells`), the map,
-/// the tiles and every gap from the plan and nowhere else.
+/// The Concept A planner (docs/REFINE.md A.5, the same steps as Android's LayoutPlan.kt): one pure function
+/// with no UI code. MainView reads every frame from the plan and nowhere else.
 ///
-/// Shared steps:
-/// 1. The header is pinned at the safe top + 8 (a Mac window: 24 in from every edge).
-/// 2. The fixed blocks are placed with frozen gap tokens × k that never grow: header → dial 12, dial →
-///    readout 12, readout → status 6, status → lock 8, lock → spot 8, (spot →) grid 8, rows 8, grid → map
-///    card 12, bottom 16 (24 on iPad and Mac).
-/// 3. Dial = min(cap, S − fixed).
-/// 4. The dial never goes under its floor, min(0.40 H, the width cap) (the owner's rule). When the height
-///    runs short, the plan gives things up in this order instead: tile growth, then the spare gaps, then
-///    Small's map card (it shrinks to a map tile, a strip a tile high or more, then the map moves to the
-///    header button), then Medium's and Large's grids (the compact row, the map in the header; Large gives
-///    up its 2 × 2 rather than sit within 16 of the floor, and Extra Large merges its rows rather than fall
-///    under Large), then the lock and spot rows (one 44 row, `merged`), and only then the
-///    whole screen becomes the scrolling list, whose dial also keeps 0.40 H where the width allows.
-/// 5. Spare height goes, in order: to the dial (up to its cap), to the map card (Small and Medium only), to
-///    taller tiles (Medium only, 72 → 88 on phones), then split between header → dial and the bottom, each
-///    at most 24. Anything still left (a tall window where the dial is already as wide as it may be and
-///    nothing else may grow): Medium's map becomes a card where one of 140 fits; otherwise the dial grows
-///    to its width cap (staying 16 under the next layout's), and the rest is split evenly above and below,
-///    so the panel is centred under the header rather than ending on a dead band (`centred`).
+/// 1. Anchors: the dial's top is the safe top + 18 (a Mac window: its 28 title band + 18); the stack ends
+///    at the safe bottom where there is a home indicator, else 16 above the edge (a Mac window: 24).
+/// 2. Fixed blocks: dial → readout 12, readout → status 6 × k, status → location card 12, location card →
+///    Targets card 8 (only when a lock or spot exists), → grid 8, → Small's map card 8 (at 140).
+/// 3. Dial = min(cap, what is left). Under ceil(0.40 H) the plan gives way one step at a time (`Step`):
+///    the spare gaps, the Targets rows to compact height, Large's grid density, Small's map card, the map
+///    tile to the header button, and only then the scrolling list.
+/// 4. Spare height: first the given-up steps come back (in reverse order, where they fit), then the
+///    layout's growth (Small's map card; Medium's rows to 88, live row 2 to 176; Large's rows to 104; Extra
+///    Large's strip to 120), then the dial up to its width cap (Large, Extra Large), then at most 24 at the
+///    bottom; anything still left centres the stack (`centred`).
 ///
-/// From top to bottom: header bar → dial → readout → status line → lock row → spot row → tile grid → map
-/// card (only where it fits whole).
+/// Top to bottom: dial → readout → status line → location card → Targets card → grid → map card.
 struct LayoutPlan: Equatable {
-    /// The tile grid: 3 columns in two rows (Position 2u | Elevation, then Sun | Moon | Map), 2 × 2
-    /// (Position | Elevation, Sun | Moon), the compact row (Position | Elevation | Sun, widths from C), or
-    /// full-width rows in the scrolling list.
-    enum Grid: Equatable { case full, twoByTwo, compact, list }
-    /// Where the map is: a tile in the grid, a full-width card, or a button in the header (map sheet).
-    enum Map: Equatable { case tile, card, button }
+    /// What sits under the Targets card.
+    /// - `band`: Small's three columns along the map card's bottom (no separate tiles).
+    /// - `quad`: 2 × 2 (Medium: Position | Elevation, Sun | Map; with a map card: Sun | Moon).
+    /// - `six`: Large's 3 × 2 (Latitude | Longitude | Elevation, Sunrise | Moon | Pressure or Speed).
+    /// - `strip`: Extra Large's one summary tile, Position | Elevation | Sun.
+    /// - `quadCompact`: 2 × 2 of 64 tiles (Position | Elevation, Sun | Pressure or Speed).
+    /// - `twoRow`: large text: Position full width, then Elevation | Sun (Small: Elevation | Map).
+    /// - `row`: one 72 compact row, Position | Elevation | Sun (Small: Elevation | Map), the map in the header.
+    /// - `mapRows`: Small giving up its card: the compact row, then a full-width Map tile.
+    /// - `list`: the scrolling list's rows.
+    enum Grid: String, Equatable { case band, quad, six, strip, quadCompact, twoRow, row, mapRows, list }
+    /// Where the map is: a tile in the grid, a card, or the location card's map button (the map sheet).
+    enum Map: String, Equatable { case tile, card, button }
     /// The tiles of the grid.
-    enum Tile: Equatable { case position, elevation, sun, moon, map }
+    enum Tile: Equatable { case position, elevation, sun, moon, map, latitude, longitude, sunrise, sixth, strip }
+    /// Large's sixth tile: Speed while moving, otherwise Pressure.
+    enum Sixth: Equatable { case pressure, speed }
+    /// What a layout gives up when height runs short, in the owner's order (A.6).
+    enum Step: Int, CaseIterable, Hashable {
+        /// The spare gaps: safe top → dial 18 → 12, status → location card 12 → 8.
+        case tight
+        /// The Targets rows to compact height: 44 → 36 (Extra Large and iPad 52 → 44).
+        case compactRows
+        /// Large's `six` becomes `quadCompact`.
+        case dense
+        /// Small's map card becomes a Map tile (`mapRows`); iPad Medium's map card a Map tile in the quad.
+        case mapTile
+        /// The Map tile gives way to the header map button; the rest is one compact `row`.
+        case button
+    }
     /// One tile and its width.
     struct Cell: Equatable {
         var tile: Tile
@@ -153,101 +162,126 @@ struct LayoutPlan: Equatable {
     var twoPane = false
     /// The whole screen scrolls as one list (accessibility text sizes, or nothing fits even at the floor).
     var list = false
-    /// An iPad (or a Mac window as large): the regular-width type ramp, header 56, heading 96, tiles 96.
+    /// An iPad (or a window as large): the regular-width type ramp.
     var tablet = false
-    /// A Mac window: 24 in from every edge.
     var mac = false
     var locked = false
     var hasSpot = false
-    /// The lock row and the spot row share one 44 × k row (the owner's rule: before the screen scrolls).
-    var merged = false
-    /// An accessibility Text Size (the scrolling list; exempt from the owner's 0.40 H floor).
+    var noCompass = false
+    var hasBanner = false
     var accessibilityText = false
     /// The text multiplier (Text Size, 1…1.3).
     var k: CGFloat = 1
     var margin: CGFloat = 16
-    /// The header's top under the safe area: 8 (24 from a Mac window's edge). Pinned in every layout and state.
-    var topInset: CGFloat = 8
-    /// Under the last block: 16 × k (24 × k on iPad and Mac).
-    var bottomInset: CGFloat = 16
-    /// The grid's width: the column C (single column) or the trailing pane's content (two panes).
+    /// The column C (one column), or the right pane's width (two panes).
     var columnWidth: CGFloat = 0
-    /// Two panes: the trailing pane's width (its content plus the right margin). 0 in a single column.
+    /// Two panes: the left pane's width (dial, readout, status).
+    var leftWidth: CGFloat = 0
+    /// Two panes: the right pane's width (the same as `columnWidth`). 0 in one column.
     var trailingWidth: CGFloat = 0
-    /// The grid's columns: 3, or 2 in a trailing pane narrower than 340.
-    var columns = 3
     var dial: CGFloat = 0
+    /// The owner's floor: min(ceil(0.40 H), the width cap).
     var floor: CGFloat = 0
-    /// The dial's cap for this layout (width, and the share of H where one applies).
+    /// The dial's starting cap for this layout.
     var dialCap: CGFloat = 0
+    /// The column plus its margins, less 2e.
+    var widthCap: CGFloat = 0
     /// The dial as a share of the full height H.
     var share: CGFloat = 0
     var readoutScale: CGFloat = 1
     /// The heading number's size: 56 (96 on a tablet) × the readout scale.
     var headingSize: CGFloat = 56
-    var headerHeight: CGFloat = 48
+    /// The readout's slot: the trimmed readout, or with no compass max(that, 40 × k) for "No heading".
+    var readoutSlot: CGFloat = 0
     var statusLines: CGFloat = 1
-    /// No compass: the dash readout, and the status line's two-line note.
-    var noCompass = false
-    var grid: Grid = .full
+    var statusHeight: CGFloat = 16
+    /// The location card: 48 × k (56 × k on a tablet).
+    var cardHeight: CGFloat = 48
+    var grid: Grid = .quad
     var map: Map = .tile
-    /// The map card's height (0 unless `map == .card`; under 140 only for Small's `mapStrip`).
+    var sixth: Sixth = .pressure
+    /// Large's Latitude and Longitude tiles (decimal degrees); other formats share one Position tile.
+    var splitPosition = true
+    /// The map card's height (0 without one).
     var mapHeight: CGFloat = 0
-    /// 72 × k (96 × k on a tablet); Medium grows it up to 88 × k on a phone; two panes use 80 × k.
-    var tileHeight: CGFloat = 72
-    // The frozen gaps (token × k).
-    var gapHeaderDial: CGFloat = 12
+    /// The grid's rows, top to bottom.
+    var rowHeights: [CGFloat] = []
+    /// The Targets card's rows: 0, 1 or 2 (the lock row first).
+    var targetsRows = 0
+    var targetsRowHeight: CGFloat = 44
+    /// The steps given up to keep the dial at its floor.
+    var steps: Set<Step> = []
+    /// A Mac window's title band (28) above the dial's gap; 0 elsewhere.
+    var topBand: CGFloat = 0
+    // The frozen gaps.
+    var gapTopDial: CGFloat = 18
     var gapDialReadout: CGFloat = 12
     var gapReadoutStatus: CGFloat = 6
-    var gapStatusRows: CGFloat = 8
-    var gapRows: CGFloat = 8
-    var gapGridMap: CGFloat = 12
-    /// Spare added under the header, above the dial (at most 24, unless `centred`).
+    var gapStatusCard: CGFloat = 12
+    var gap: CGFloat = 8
+    /// Under the stack: 0 over a home indicator, 16 without one, 24 in a Mac window.
+    var bottomInset: CGFloat = 0
+    /// Spare added above the dial (only when the stack is centred).
     var topExtra: CGFloat = 0
-    /// Spare left under the grid or map (with the bottom inset). At most 24, unless `centred`.
+    /// Spare left under the stack: 24 or less unless `centred`.
     var bottomSpare: CGFloat = 0
-    /// The panel is centred under the header: more was spare than 24 + 24 with nothing left to grow.
     var centred = false
-    /// Two panes: the trailing stack's top inset (Large and Extra Large centre it).
-    var trailingInset: CGFloat = 0
-    /// Two panes: the trailing pane holds more than fits and scrolls (a phone on its side).
+    /// Two panes: the right pane holds more than fits and scrolls (a phone on its side).
     var trailingScrolls = false
-    /// Everything the plan places, top to bottom (single column; the trailing pane in two panes).
+    /// Where the stack ends, from the top of the safe area.
+    var end: CGFloat = 0
+    /// Everything placed, from the top of the safe area (one column: it equals `end`).
     var used: CGFloat = 0
-    /// The grid's top, from the top of the safe area (single column and the list).
-    var gridTop: CGFloat = 0
-    /// The list: the bottom of the Position row and of the Elevation row, from the top of the safe area.
-    var listFold: CGFloat = 0
-    var listFold2: CGFloat = 0
 
-    /// The map button sits in the header only when the map is neither a tile nor a card.
-    var mapInHeader: Bool { map == .button }
+    // MARK: Positions (from the top of the safe area; two panes: the dial and the right pane share a top)
 
-    /// Small under pressure (the owner's rule): its card shrank to a map tile, a strip as wide as the column
-    /// and a tile high or more but under 140, under the compact row. Drawn as the card is, `mapHeight` high.
-    var mapStrip: Bool { layout == .small && !list && !twoPane && map == .card && mapHeight < Self.mapMin - 0.5 }
-
-    /// The layout gave up part of itself to keep its dial at the owner's 0.40 H floor: Small's map card,
-    /// Medium's 3 columns or Large's 2 × 2 (to the compact row), or the separate lock and spot rows.
-    var yielded: Bool {
-        if list || twoPane { return false }
-        switch layout {
-        case .small: return map != .card || mapStrip || merged
-        case .medium: return grid != .full || merged
-        case .large: return grid != .twoByTwo || merged
-        case .extraLarge: return merged
-        }
+    var dialTop: CGFloat { topBand + gapTopDial + topExtra }
+    var readoutTop: CGFloat { dialTop + dial + gapDialReadout }
+    var statusTop: CGFloat { readoutTop + readoutSlot + gapReadoutStatus }
+    var statusBottom: CGFloat { statusTop + statusHeight }
+    /// The location card's top: under the status line, or (two panes) level with the dial.
+    var locationTop: CGFloat { twoPane ? dialTop : statusBottom + gapStatusCard }
+    var bannerTop: CGFloat { locationTop + cardHeight + gap }
+    var hasTargets: Bool { targetsRows > 0 }
+    var targetsHeight: CGFloat { CGFloat(targetsRows) * targetsRowHeight }
+    /// The Targets card's top (where it would be when there is none).
+    var targetsTop: CGFloat {
+        let bannerPart: CGFloat = hasBanner ? Self.banner + gap : 0
+        return locationTop + cardHeight + bannerPart + gap
     }
+    var gridTop: CGFloat { hasTargets ? targetsTop + targetsHeight + gap : targetsTop }
+    var gridHeight: CGFloat {
+        guard !rowHeights.isEmpty else { return 0 }
+        return rowHeights.reduce(0, +) + CGFloat(rowHeights.count - 1) * gap
+    }
+    var mapTop: CGFloat { gridHeight > 0 ? gridTop + gridHeight + gap : gridTop }
+    /// The bottom of the last block.
+    var contentBottom: CGFloat {
+        if map == .card { return mapTop + mapHeight }
+        if gridHeight > 0 { return gridTop + gridHeight }
+        if hasTargets { return targetsTop + targetsHeight }
+        return locationTop + cardHeight
+    }
+    /// The first row's height (for the self-tests' reports).
+    var tileHeight: CGFloat { rowHeights.first ?? 0 }
+    /// The list: the bottom of the Position row.
+    var listFold: CGFloat { gridTop + (rowHeights.first ?? 0) }
+
+    /// The location card carries the map button (Large and Extra Large, and wherever the map gave way).
+    var mapInHeader: Bool { map == .button }
+    /// Two panes in Large and Extra Large: a map card is on screen, so the header button is hidden (its slot kept).
+    var mapButtonSlot: Bool { mapInHeader || (twoPane && (layout == .large || layout == .extraLarge)) }
 
     /// The owner's floor for this plan's layout: min(0.40 H, the column plus its margins less 2e).
     func ownerFloor(h: CGFloat) -> CGFloat {
         min(Self.ownerShare * h, columnWidth + 2 * margin - 2 * layout.e)
     }
-    /// The grid's unit width u = (C − 2 × 8) / 3.
-    var unit: CGFloat { (columnWidth - 2 * Self.rowGap) / 3 }
 
-    /// The compact row's widths, from C rather than from grid units (C2.2 #1): Elevation = Sun =
-    /// w = max(104, round(0.27 C)) and Position = C − 2 × 8 − 2w, so the row is exactly C wide.
+    /// Large text (k ≥ 1.3): no three-column compact arrangement.
+    var largeText: Bool { k >= Self.largeTextK - 0.001 }
+
+    /// The compact row's widths, from C: Elevation = Sun = w = max(104, round(0.27 C)) and Position =
+    /// C − 2 × 8 − 2w, so the row is exactly C wide.
     var compactWidths: (position: CGFloat, other: CGFloat) { Self.compactWidths(columnWidth) }
 
     static func compactWidths(_ c: CGFloat) -> (position: CGFloat, other: CGFloat) {
@@ -255,510 +289,482 @@ struct LayoutPlan: Equatable {
         return (c - 2 * rowGap - 2 * w, w)
     }
 
+    /// Small's band: three columns 1.15 | 1 | 1 inside 12 padding each side and two 8 gaps.
+    var bandWidths: [CGFloat] { Self.bandWidths(columnWidth) }
+    static func bandWidths(_ c: CGFloat) -> [CGFloat] {
+        let inner = c - 2 * bandPadding - 2 * rowGap
+        let unit = inner / 3.15
+        return [inner - 2 * unit, unit, unit]
+    }
+
+    /// Extra Large's strip: three columns 1.2 | 1 | 1 split by two 1 pt dividers.
+    var stripWidths: [CGFloat] { Self.stripWidths(columnWidth) }
+    static func stripWidths(_ c: CGFloat) -> [CGFloat] {
+        let inner = c - 2 * divider
+        let unit = inner / 3.2
+        return [inner - 2 * unit, unit, unit]
+    }
+
     /// The grid, row by row, exactly as MainView draws it: each row's widths plus its 8 gutters add up to C.
     var cells: [[Cell]] {
-        let c = columnWidth, g = Self.rowGap, half = (c - g) / 2
+        let c = columnWidth, g = Self.rowGap, half = (c - g) / 2, third = (c - 2 * g) / 3
         func cell(_ tile: Tile, _ width: CGFloat) -> Cell { Cell(tile: tile, width: width) }
+        // Small keeps a Map tile where the others keep Sun.
+        let last: Tile = layout == .small && map == .tile ? .map : .sun
+        let w = compactWidths
         switch grid {
+        case .band:
+            return []
         case .list:
             return [[cell(.position, c)], [cell(.elevation, c)], [cell(.sun, c)], [cell(.moon, c)]]
-        case .compact:
-            let w = compactWidths
-            return [[cell(.position, w.position), cell(.elevation, w.other), cell(.sun, w.other)]]
-        case .twoByTwo:
-            return [[cell(.position, half), cell(.elevation, half)], [cell(.sun, half), cell(.moon, half)]]
-        case .full:
-            if columns == 3 {
-                let u = unit
-                let second = map == .tile ? [cell(.sun, u), cell(.moon, u), cell(.map, u)] : [cell(.sun, half), cell(.moon, half)]
-                return [[cell(.position, 2 * u + g), cell(.elevation, u)], second]
+        case .quad:
+            return [[cell(.position, half), cell(.elevation, half)],
+                    [cell(.sun, half), cell(map == .tile ? .map : .moon, half)]]
+        case .six:
+            let first = splitPosition
+                ? [cell(.latitude, third), cell(.longitude, third), cell(.elevation, third)]
+                : [cell(.position, 2 * third + g), cell(.elevation, third)]
+            return [first, [cell(.sunrise, third), cell(.moon, third), cell(.sixth, third)]]
+        case .quadCompact:
+            return [[cell(.position, half), cell(.elevation, half)], [cell(.sun, half), cell(.sixth, half)]]
+        case .strip:
+            return [[cell(.strip, c)]]
+        case .twoRow:
+            return [[cell(.position, c)], [cell(.elevation, half), cell(last, half)]]
+        case .row:
+            return [[cell(.position, w.position), cell(.elevation, w.other), cell(last, w.other)]]
+        case .mapRows:
+            if largeText {
+                return [[cell(.position, c)], [cell(.elevation, half), cell(.sun, half)], [cell(.map, c)]]
             }
-            var rows = [[cell(.position, half), cell(.elevation, half)], [cell(.sun, half), cell(.moon, half)]]
-            if map == .tile { rows.append([cell(.map, c)]) }
-            return rows
+            return [[cell(.position, w.position), cell(.elevation, w.other), cell(.sun, w.other)], [cell(.map, c)]]
         }
     }
 
     /// Each row's tile widths, top to bottom.
     var rowWidths: [[CGFloat]] { cells.map { $0.map(\.width) } }
 
-    /// The grid's height as drawn (the list's rows may grow).
-    var gridHeight: CGFloat {
-        let rows = CGFloat(cells.count)
-        return rows * tileHeight + max(0, rows - 1) * gapRows
-    }
-
     // MARK: Constants (points; dp on Android). Spacing tokens are 4 / 8 / 12 / 16 / 24 only.
 
-    /// The header's top under the safe area (C3.2 #1).
-    static let top: CGFloat = 8
-    static let headerToDial: CGFloat = 12
+    /// Safe top → dial top, and under pressure.
+    static let topGap: CGFloat = 18
+    static let topGapTight: CGFloat = 12
+    /// A Mac window's title band above that.
+    static let macTitleBand: CGFloat = 28
     static let dialToReadout: CGFloat = 12
+    /// × k.
     static let readoutToStatus: CGFloat = 6
-    /// Status line → the first row (lock, spot or grid).
-    static let statusToRows: CGFloat = 8
-    /// Lock row → spot row → grid, between grid rows, and the gutters between tiles.
+    static let statusToCard: CGFloat = 12
+    static let statusToCardTight: CGFloat = 8
+    /// Location card → Targets card → grid → map card, between grid rows, and the gutters between tiles.
     static let rowGap: CGFloat = 8
-    static let gridToMap: CGFloat = 12
     static let bottomPhone: CGFloat = 16
-    static let bottomLarge: CGFloat = 24
     static let marginPhone: CGFloat = 16
-    /// iPad: C = min(W − 48, 720), so the margin is the same in every layout.
-    static let marginTablet: CGFloat = 24
-    /// A Mac window: 24 in from all four edges (C3.4 #17).
+    /// iPad and Mac: 24 at the sides; the iPad column is min(W − 48, 720).
+    static let marginLarge: CGFloat = 24
     static let macInset: CGFloat = 24
     static let maxColumn: CGFloat = 640
     static let maxColumnTablet: CGFloat = 720
-    static let header: CGFloat = 48
-    static let headerTablet: CGFloat = 56
+    /// The location card: 48 (56 on a tablet) × k.
+    static let card: CGFloat = 48
+    static let cardTablet: CGFloat = 56
     static let heading: CGFloat = 56
     static let headingTablet: CGFloat = 96
-    /// The readout's block, its line box trimmed: from the digits' cap height (0.72 of the size, with the
-    /// light weight's rounding) to 4 under the baseline.
+    /// The readout's block, its line box trimmed: from the digits' cap height (0.72 of the size) to 4 under
+    /// the baseline.
     static let readoutCap: CGFloat = 0.72
     static let readoutBelow: CGFloat = 4
-    /// The status line's 13 pt line.
+    /// "No heading": 34 semibold on a 40 line.
+    static let noHeadingSize: CGFloat = 34
+    static let noHeadingLine: CGFloat = 40
+    /// The status line's 13 pt line, unchanged by Concept A (the same 16 line on a tablet).
     static let statusLine: CGFloat = 16
-    /// The lock row and the spot row (C3.4 #7): one component on both ports, 52 high, two columns.
-    static let lockRow: CGFloat = 52
-    static let spotRow: CGFloat = 52
-    /// The lock and spot rows merged into one (the owner's rule, before the list): 44, side by side.
-    static let mergedRow: CGFloat = 44
+    static let statusLineTablet: CGFloat = 16
+    /// The Targets card's rows: 44 (Extra Large and iPad 52); 8 less under pressure.
+    static let targetsRow: CGFloat = 44
+    static let targetsRowLarge: CGFloat = 52
+    static let targetsRowStep: CGFloat = 8
+    /// The scrolling list's Targets rows (the cue on line 2).
+    static let listTargetsRow: CGFloat = 84
     static let tile: CGFloat = 72
-    static let tileGrown: CGFloat = 88
-    /// iPad's regular-width tiles: 96, which never grow (C3.4 #10).
     static let tileTablet: CGFloat = 96
-    /// Two panes on a phone or a small Mac window: fixed 80 rows (C3.4 #5).
-    static let tilePane: CGFloat = 80
+    /// `quadCompact`, `twoRow` and `mapRows`.
+    static let tileCompact: CGFloat = 64
+    /// Medium's rows grow to 88 (live, row 2 to 176); Large's to 104.
+    static let tileGrown: CGFloat = 88
+    static let tileTall: CGFloat = 176
+    static let tileLarge: CGFloat = 104
+    /// Medium's Sun tile adds the daylight and the moon once its row is this tall.
+    static let tallSun: CGFloat = 150
+    static let strip: CGFloat = 88
+    static let stripTablet: CGFloat = 104
+    static let stripGrown: CGFloat = 120
+    /// Small's band along the map card's bottom: 68 × k, 12 padding, three columns 8 apart.
+    static let band: CGFloat = 68
+    static let bandPadding: CGFloat = 12
+    /// The strip's dividers.
+    static let divider: CGFloat = 1
     /// The compact row: Elevation and Sun are max(104, 0.27 C) wide.
     static let compactMin: CGFloat = 104
     static let compactShare: CGFloat = 0.27
-    /// The longest Position line, a decimal-degrees longitude ("106.94117° W"), at the compact row's smallest
-    /// size (0.85 of 15 pt; of 20 semibold on a tablet) at Text Size 1.0, with a little in hand (the self-test
-    /// measures 120 on a tablet). Scaled by k.
-    static let positionLine: CGFloat = 96
-    static let positionLineTablet: CGFloat = 128
-    /// A tile's horizontal inset each side (Ramp.insetH: 12; 14 on a tablet).
-    static let tileInset: CGFloat = 12
-    static let tileInsetTablet: CGFloat = 14
-
-    /// The narrowest Position tile that holds the longest coordinate line on one line at text size `k`.
-    /// In two panes a compact row whose Position is narrower than this gives way to the 2 × 2.
-    static func positionNeed(k: CGFloat, tablet: Bool) -> CGFloat {
-        let line: CGFloat = tablet ? positionLineTablet : positionLine
-        let inset: CGFloat = tablet ? tileInsetTablet : tileInset
-        return line * k + 2 * inset
-    }
-    /// The narrowest Sun tile that holds a sunrise or sunset time ("12:08" with its period below) at text
-    /// size `k`: about 74 pt of digits at 1.0, plus the insets. In two panes a row whose Sun is narrower
-    /// gives way to the 2 × 2, as for Position.
-    static let sunLine: CGFloat = 74
-    static func sunNeed(k: CGFloat, tablet: Bool) -> CGFloat {
-        let inset: CGFloat = tablet ? tileInsetTablet : tileInset
-        return sunLine * k + 2 * inset
-    }
-    /// Medium: spare at or above this (dial at its cap) turns the Map tile into a full-width card…
-    static let mapPromote: CGFloat = 160
-    /// …of at least this height, taken from the dial.
-    static let mapPromoted: CGFloat = 200
     static let mapMin: CGFloat = 140
-    /// Two panes on a tablet: the map card is at least this tall, or the map stays a tile.
-    static let mapPaneTablet: CGFloat = 240
-    /// Medium's dial stays this far under Large's (C3.2 #2), unless Medium is at its floor.
-    static let layoutStep: CGFloat = 16
-    /// The most ever left empty at the bottom (and added above the dial), unless the panel is centred.
+    /// Two panes: the map card is at least this tall (Small: also 60% of the pane).
+    static let mapPane: CGFloat = 240
+    static let mapPaneSmall: CGFloat = 0.60
+    /// The scrolling list: tiles 96, the Map tile 176.
+    static let listRow: CGFloat = 96
+    static let listMap: CGFloat = 176
+    /// The most ever left empty at the bottom (unless the stack is centred).
     static let maxSpare: CGFloat = 24
-    /// The owner's hard rule: the compass takes up at least 40% of the screen. In one column, at every text
-    /// size short of the accessibility sizes, every dial is at least min(0.40 H, its width cap).
+    /// The owner's hard rule: the compass takes up at least 40% of the screen.
     static let ownerShare: CGFloat = 0.40
-    /// Small's dial: 0.40 H, the owner's floor.
-    static let smallShare: CGFloat = ownerShare
-    /// Two panes at Text Size 1.3, and the accessibility list: dial = min(W − 48, 0.36 H) (C3.4 #6). (In one
-    /// column, Text Size 1.3 keeps the owner's 0.40 H.)
+    /// Large text: the three-column arrangements become two rows.
     static let largeTextK: CGFloat = 1.3
-    static let largeTextInset: CGFloat = 48
-    static let largeTextShare: CGFloat = 0.36
-    /// The scrolling list: its map card is 200, its tiles 64 rows (caption leading, value trailing), and
-    /// the Targets card (lock and spot together) has a 44 line for each.
-    static let listMap: CGFloat = 200
-    static let listRow: CGFloat = 64
-    static let targetsLine: CGFloat = 44
-    static let targetsPadding: CGFloat = 4
     static let dialMin: CGFloat = 120
+    /// Moving: Large's sixth tile shows Speed from this many metres a second.
+    static let movingSpeed: Double = 0.5
     /// A window whose shorter side is at least this is a tablet (iPad, or a large Mac window).
     static let tabletSide: CGFloat = 700
     static let twoPaneWidth: CGFloat = 700
     static let landscapePhone: CGFloat = 480
-    /// The narrowest trailing pane (a phone on its side): C = 344, as an iPhone SE's column, so the compact
-    /// row's Position (120) holds a longitude on one line.
+    /// Two panes: the right pane is 360 to 560 wide, 32 from the left pane.
     static let paneMin: CGFloat = 360
     static let paneMax: CGFloat = 560
-    static let paneColumns3: CGFloat = 340
-    /// The Mac's update banner (44) and the 8 under it.
+    static let paneGap: CGFloat = 32
+    /// The Mac's update banner (44), between the location card and the Targets card.
     static let banner: CGFloat = 44
     static let bannerGap: CGFloat = 8
     /// The text multiplier's cap on Apple devices.
     static let maxK: CGFloat = 1.3
-    /// The Mac window's smallest size: every layout with the sample (locked and marked) fits without
-    /// scrolling, with 24 at every edge (header + dial + grid + insets).
+    /// The Mac window's smallest size: every layout with the sample fits without scrolling.
     static let macMinWidth: CGFloat = 420
     static let macMinHeight: CGFloat = 780
 
     // MARK: Heights, shared with MainView so what it draws is what was planned
 
-    static func headerHeight(k: CGFloat, tablet: Bool) -> CGFloat { (tablet ? headerTablet : header) * k }
+    static func cardHeight(k: CGFloat, tablet: Bool) -> CGFloat { (tablet ? cardTablet : card) * k }
     /// The readout's trimmed block: cap height to 4 under the baseline.
     static func readoutHeight(headingSize: CGFloat) -> CGFloat { headingSize * readoutCap + readoutBelow }
-    static func statusHeight(k: CGFloat, lines: CGFloat) -> CGFloat { statusLine * k * lines }
-    static func lockHeight(k: CGFloat) -> CGFloat { lockRow * k }
-    static func mergedHeight(k: CGFloat) -> CGFloat { mergedRow * k }
-    static func spotHeight(k: CGFloat) -> CGFloat { spotRow * k }
-    /// The list's Targets card: a 44 line per target and 4 above and below.
-    static func targetsHeight(k: CGFloat, lines: CGFloat) -> CGFloat { (targetsLine * lines + 2 * targetsPadding) * k }
-    /// The readout group: the readout, 6, the status line.
-    static func groupHeight(headingSize: CGFloat, k: CGFloat, statusLines: CGFloat) -> CGFloat {
-        readoutHeight(headingSize: headingSize) + readoutToStatus * k + statusHeight(k: k, lines: statusLines)
+    /// The readout's slot: with no compass it also holds "No heading" on its 40 × k line.
+    static func readoutSlot(headingSize: CGFloat, k: CGFloat, noCompass: Bool) -> CGFloat {
+        let readout = readoutHeight(headingSize: headingSize)
+        return noCompass ? max(readout, noHeadingLine * k) : readout
     }
+    static func statusHeight(k: CGFloat, lines: CGFloat, tablet: Bool = false) -> CGFloat {
+        (tablet ? statusLineTablet : statusLine) * k * lines
+    }
+    static func targetsRowHeight(layout: Layout, k: CGFloat, tablet: Bool, compact: Bool) -> CGFloat {
+        let base: CGFloat = layout == .extraLarge || tablet ? targetsRowLarge : targetsRow
+        return (compact ? base - targetsRowStep : base) * k
+    }
+    /// The sixth tile for a speed in metres a second.
+    static func sixth(speed: Double?) -> Sixth { (speed ?? 0) >= movingSpeed ? .speed : .pressure }
+    /// Rounded up to a multiple of 8.
+    static func ceil8(_ v: CGFloat) -> CGFloat { (v / 8 - 0.0001).rounded(.up) * 8 }
 
     // MARK: The planner
 
+    /// Everything the planner is given.
+    private struct Input {
+        var w: CGFloat
+        var h: CGFloat
+        var s: CGFloat
+        var layout: Layout
+        var k: CGFloat
+        var accessibilityText: Bool
+        var hasSpot: Bool
+        var locked: Bool
+        var noCompass: Bool
+        var banner: Bool
+        var mac: Bool
+        var landscapePhone: Bool
+        var home: Bool
+        var topBand: CGFloat
+        var speed: Double?
+        var split: Bool
+    }
+
     /// `w` the window's (safe) width, `h` its full height including the safe-area insets, `s` the safe
     /// height, `k` the Text Size multiplier (capped at 1.3), `accessibilityText` an accessibility Text Size.
-    /// `locked` the lock row shows; `hasSpot` the spot row; `noCompass` the dash and the two-line note;
-    /// `mac` a Mac window. `onlyMerged` (the planner's own probe of Extra Large for Large's limit) tries only
-    /// the stages with the rows merged (true) or separate (false), and wants no more than the floor.
+    /// `locked` and `hasSpot` the Targets card's rows; `noCompass` "No heading"; `mac` a Mac window.
+    /// `homeIndicator`: the stack ends at the safe bottom (nil: guessed from H − S). `topBand`: a Mac
+    /// window's title band still inside the safe area (nil: 28 on a Mac). `speed` picks Large's sixth tile;
+    /// `splitPosition` (decimal degrees) gives Large its Latitude and Longitude tiles. `neighbours` keeps the
+    /// dials in order (each at most the next layout's; Extra Large at least Large's).
     static func plan(w: CGFloat, h: CGFloat, s: CGFloat, layout: Layout = .default, k: CGFloat = 1,
                      accessibilityText: Bool = false, hasSpot: Bool = false, locked: Bool = false,
                      noCompass: Bool = false, hasUpdateBanner: Bool = false, mac: Bool = false,
-                     isLandscapePhone: Bool = false, onlyMerged: Bool? = nil) -> LayoutPlan {
+                     isLandscapePhone: Bool = false, homeIndicator: Bool? = nil, topBand: CGFloat? = nil,
+                     speed: Double? = nil, splitPosition: Bool = true, neighbours: Bool = true) -> LayoutPlan {
+        let input = Input(w: w, h: h, s: s, layout: layout, k: min(max(k, 1), maxK),
+                          accessibilityText: accessibilityText, hasSpot: hasSpot, locked: locked,
+                          noCompass: noCompass, banner: hasUpdateBanner, mac: mac, landscapePhone: isLandscapePhone,
+                          home: homeIndicator ?? (!mac && h - s > 30), topBand: topBand ?? (mac ? macTitleBand : 0),
+                          speed: speed, split: splitPosition)
+        return plan(input, neighbours: neighbours)
+    }
+
+    private static func plan(_ i: Input, neighbours: Bool) -> LayoutPlan {
+        if i.accessibilityText { return listPlan(i) }
+        if i.landscapePhone || (i.w > i.h && (i.w >= twoPaneWidth || i.s < landscapePhone)) { return twoPanePlan(i) }
+        var limit = CGFloat.infinity
+        var want: CGFloat?
+        if neighbours {
+            if i.layout == .extraLarge {
+                // Extra Large keeps at least Large's dial where it can (it gives way further for it).
+                var large = i
+                large.layout = .large
+                if let l = core(large, limit: .infinity, want: nil) { want = l.dial }
+            } else if let next = i.layout.larger {
+                // Every other layout stays at or under the next one's dial.
+                var n = i
+                n.layout = next
+                let p = plan(n, neighbours: true)
+                if !p.list && !p.twoPane { limit = p.dial }
+            }
+        }
+        return core(i, limit: limit, want: want) ?? listPlan(i)
+    }
+
+    /// What every arrangement shares.
+    private static func base(_ i: Input) -> LayoutPlan {
         var p = LayoutPlan()
-        p.layout = layout
-        p.k = min(max(k, 1), maxK)
-        let k = p.k
-        p.mac = mac
-        p.noCompass = noCompass
-        p.locked = locked
-        p.hasSpot = hasSpot
-        p.accessibilityText = accessibilityText
-        p.tablet = min(w, h) >= tabletSide
-        let roomy = mac || p.tablet
-        p.margin = roomy ? marginTablet : marginPhone
-        p.topInset = mac ? macInset : top
-        p.bottomInset = (roomy ? bottomLarge : bottomPhone) * k
-        p.headerHeight = headerHeight(k: k, tablet: p.tablet)
-        p.readoutScale = layout.readoutScale
-        p.headingSize = (p.tablet ? headingTablet : heading) * layout.readoutScale
-        // The status line may wrap only at k > 1.1, or for the no-compass note.
-        p.statusLines = noCompass || k > 1.1 ? 2 : 1
-        p.gapHeaderDial = headerToDial * k
-        p.gapDialReadout = dialToReadout * k
-        p.gapReadoutStatus = readoutToStatus * k
-        p.gapStatusRows = statusToRows * k
-        p.gapRows = rowGap * k
-        p.gapGridMap = gridToMap * k
-        p.tileHeight = (p.tablet ? tileTablet : tile) * k
-
-        let banner: CGFloat = hasUpdateBanner ? Self.banner + bannerGap : 0
-        let group = groupHeight(headingSize: p.headingSize, k: k, statusLines: p.statusLines)
-        // The rows above the grid: the lock row and the spot row, each with the 8 under it; merged, one 44 row.
-        func above(merged: Bool) -> CGFloat {
-            if merged { return locked || hasSpot ? mergedHeight(k: k) + p.gapRows : 0 }
-            return (locked ? lockHeight(k: k) + p.gapRows : 0) + (hasSpot ? spotHeight(k: k) + p.gapRows : 0)
-        }
-        // The same arguments for a neighbouring layout.
-        func neighbour(_ l: Layout) -> LayoutPlan {
-            plan(w: w, h: h, s: s, layout: l, k: k, accessibilityText: accessibilityText, hasSpot: hasSpot, locked: locked,
-                 noCompass: noCompass, hasUpdateBanner: hasUpdateBanner, mac: mac, isLandscapePhone: isLandscapePhone)
-        }
-
-        func listPlan() -> LayoutPlan {
-            var l = p
-            l.list = true
-            l.twoPane = false
-            l.trailingWidth = 0
-            l.merged = false
-            l.columns = 3
-            l.columnWidth = min(w - 2 * l.margin, l.tablet ? maxColumnTablet : maxColumn)
-            let full = l.columnWidth + 2 * l.margin
-            l.grid = .list
-            l.map = .card
-            l.mapHeight = listMap
-            l.tileHeight = listRow * k
-            l.topExtra = 0
-            l.bottomSpare = 0
-            l.centred = false
-            l.used = 0
-            // The dial: min(W − 48, 0.36 H), smaller still where that brings the Position and Elevation rows
-            // above the fold with 24 to spare (C3.4 #6), but never under 120. Short of the accessibility
-            // sizes (the list as the last resort), never under the owner's min(0.40 H, the width cap) either.
-            let targetLines: CGFloat = (locked ? 1 : 0) + (hasSpot ? 1 : 0)
-            let targets = targetLines > 0 ? targetsHeight(k: k, lines: targetLines) + l.gapRows : 0
-            let rest = l.topInset + l.headerHeight + banner + l.gapHeaderDial + l.gapDialReadout + group + l.gapStatusRows
-                + targets + 2 * l.tileHeight + l.gapRows
-            l.floor = accessibilityText ? dialMin : max(dialMin, min(ownerShare * h, full - 2 * layout.e))
-            l.dial = max(l.floor, min(full - largeTextInset, largeTextShare * h, s - maxSpare - rest))
-            l.dialCap = max(l.floor, min(full - largeTextInset, largeTextShare * h))
-            l.share = l.dial / h
-            l.gridTop = rest - 2 * l.tileHeight - l.gapRows + l.dial
-            l.listFold = l.gridTop + l.tileHeight
-            l.listFold2 = l.listFold + l.gapRows + l.tileHeight
-            return l
-        }
-
-        // Accessibility sizes: the whole screen is one scrolling list (§3.6).
-        if accessibilityText { return listPlan() }
-
-        // Two panes (§3.5, C3.4 #5): wide windows, and phones on their side. One header across the top;
-        // the dial and readout centred in the leading pane; the rows, the grid and the map card in the
-        // trailing pane.
-        if isLandscapePhone || (w > h && (w >= twoPaneWidth || s < landscapePhone)) {
-            p.twoPane = true
-            let trailing = min(max(layout.paneShare * w, paneMin), paneMax)
-            p.trailingWidth = trailing
-            p.columnWidth = trailing - p.margin
-            p.columns = trailing >= paneColumns3 ? 3 : 2
-            let below = s - p.topInset - p.headerHeight - banner - p.gapHeaderDial - p.bottomInset
-            let rest = p.gapDialReadout + group
-            var dial = min(w - trailing - 2 * p.margin, below - rest)
-            // Each layout's share of H, so the four dials differ (Small 0.36, Medium 0.48, Large 0.54,
-            // Extra Large 0.64).
-            if p.tablet || mac || layout == .small { dial = min(dial, layout.tabletShare * h) }
-            if k >= largeTextK { dial = min(dial, largeTextShare * h) }
-            if dial < dialMin { return listPlan() }
-            p.dial = dial
-            p.floor = dial
-            p.dialCap = dial
-            p.share = dial / h
-            // Fixed rows: 80 (96 on a tablet), never stretched.
-            let row = (p.tablet ? tileTablet : tilePane) * k
-            p.tileHeight = row
-            p.grid = layout.compactRow ? .compact : (layout == .large ? .twoByTwo : .full)
-            // A narrow trailing pane (Extra Large's 40% of a 900 window): the compact row's Position would be
-            // too narrow for a longitude at this text size, so the pane takes the 2 × 2 instead, where it fits.
-            let positionWidth: CGFloat = compactWidths(p.columnWidth).position
-            let quadHeight: CGFloat = above(merged: false) + 2 * row + p.gapRows
-            if p.grid == .compact && positionWidth < positionNeed(k: k, tablet: p.tablet) - 0.5 && quadHeight <= below + 0.5 {
-                p.grid = .twoByTwo
-            }
-            // The same for the Sun tile: in a narrow pane at a larger text size the three-column row (Medium)
-            // or the compact row leaves Sun too narrow for a time like "12:08", so the pane takes the 2 × 2.
-            let threeColumn: CGFloat = (p.columnWidth - 2 * rowGap) / 3
-            let sunWidth: CGFloat = p.grid == .full ? (p.columns == 3 ? threeColumn : (p.columnWidth - rowGap) / 2) : (p.grid == .compact ? compactWidths(p.columnWidth).other : .infinity)
-            if sunWidth < sunNeed(k: k, tablet: p.tablet) - 0.5 && quadHeight <= below + 0.5 {
-                p.grid = .twoByTwo
-            }
-            let gridRows: CGFloat = p.grid == .compact ? 1 : 2
-            var used = above(merged: false) + gridRows * row + (gridRows - 1) * p.gapRows
-            let forMap = below - used - p.gapGridMap
-            switch layout {
-            case .large, .extraLarge:
-                p.map = .button
-            case .small, .medium:
-                let minCard = p.tablet ? mapPaneTablet : (layout == .small ? mapMin : mapPromote)
-                if forMap >= minCard {
-                    // The rest of the pane is the map card.
-                    p.map = .card
-                    p.mapHeight = forMap
-                    used = below
-                } else if layout == .medium && p.grid == .full {
-                    // 3 columns: the Map tile sits in row 2; 2 columns: its own row, spanning both.
-                    p.map = .tile
-                    if p.columns == 2 { used += p.gapRows + row }
-                } else {
-                    p.map = .button
-                }
-            }
-            p.used = used
-            if used > below + 0.5 { p.trailingScrolls = true }
-            // Large and Extra Large centre their short stack; Small and Medium start at the top and fill.
-            if layout == .large || layout == .extraLarge || p.map != .card {
-                p.trailingInset = max(0, (below - used) / 2)
-            }
-            p.bottomSpare = max(0, below - used - p.trailingInset)
-            return p
-        }
-
-        // One column, C = min(W − 2 × margin, 640; 720 on iPad), centred. Extra Large on a tablet widens it
-        // to its dial.
-        var c = min(w - 2 * p.margin, p.tablet ? maxColumnTablet : maxColumn)
-        if p.tablet && layout == .extraLarge { c = min(w - 2 * p.margin, max(c, layout.tabletShare * h)) }
-        p.columnWidth = c
-        let full = c + 2 * p.margin
-        // One column keeps the owner's 0.40 H at Text Size 1.3 too, so the caps don't narrow there.
-        func widthCap(_ l: Layout) -> CGFloat { full - 2 * l.e }
-        func cap(_ l: Layout) -> CGFloat {
-            var limit = widthCap(l)
-            if l == .small { limit = min(limit, smallShare * h) } else if p.tablet { limit = min(limit, l.tabletShare * h) }
-            return limit
-        }
-        func gridHeight(_ g: Grid) -> CGFloat { g == .compact ? p.tileHeight : 2 * p.tileHeight + p.gapRows }
-        func fixed(_ g: Grid, card: Bool, merged: Bool) -> CGFloat {
-            p.topInset + p.headerHeight + banner + p.gapHeaderDial + p.gapDialReadout + group + p.gapStatusRows
-                + above(merged: merged) + gridHeight(g) + (card ? p.gapGridMap : 0) + p.bottomInset
-        }
-        func gridTop(_ dial: CGFloat, merged: Bool) -> CGFloat {
-            p.topInset + p.headerHeight + banner + p.gapHeaderDial + p.topExtra + dial + p.gapDialReadout + group
-                + p.gapStatusRows + above(merged: merged)
-        }
-        p.dialCap = cap(layout)
-        // The owner's rule: the dial is never under min(0.40 H, its cap).
-        p.floor = min(layout.floorShare * h, p.dialCap)
-        // The last thing given up before the list: the lock and spot rows become one 44 row.
-        let merges: [Bool] = locked || hasSpot ? [false, true] : [false]
-
-        if layout == .small {
-            // Small: the compact row, the dial at 0.40 H (its floor), and a map card taking all the spare (140
-            // or more). Short of that the card shrinks to a map tile (a strip as wide as the column, a tile
-            // high or more: `mapStrip`), then the map moves to the header button, then the rows merge, then
-            // the list. (As on Android.)
-            p.grid = .compact
-            p.dial = p.dialCap
-            p.share = p.dial / h
-            for merged in merges {
-                p.merged = merged
-                let avail = s - fixed(.compact, card: true, merged: merged)
-                if avail - p.dial >= p.tileHeight - 0.5 {
-                    p.map = .card
-                    p.mapHeight = avail - p.dial
-                    p.used = s
-                    p.gridTop = gridTop(p.dial, merged: merged)
-                    return p
-                }
-                let spare = s - fixed(.compact, card: false, merged: merged) - p.dial
-                if spare >= -0.5 {
-                    p.map = .button
-                    p.mapHeight = 0
-                    p.topExtra = min(maxSpare, max(0, spare) / 2)
-                    p.bottomSpare = min(maxSpare, max(0, spare) - p.topExtra)
-                    let over = max(0, spare - p.topExtra - p.bottomSpare)
-                    if over > 0.5 { p.centred = true }
-                    p.topExtra += over / 2
-                    p.bottomSpare += over / 2
-                    p.used = s
-                    p.gridTop = gridTop(p.dial, merged: merged)
-                    return p
-                }
-            }
-            return listPlan()
-        }
-
-        // The stages each layout may take, in the owner's order: its own grid and map, then (Medium and
-        // Large) the compact row with the map in the header, then each again with the rows merged.
-        let grids: [(Grid, Map)]
-        switch layout {
-        case .medium: grids = [(.full, .tile), (.compact, .button)]
-        case .large: grids = [(.twoByTwo, .button), (.compact, .button)]
-        default: grids = [(.compact, .button)]
-        }
-        // Medium stays 16 under Large (unless at its floor); Large is never over Extra Large's best dial on
-        // this screen (Extra Large probed with the rows separate and merged), so Extra Large stays the largest.
-        let large = layout == .medium ? neighbour(.large) : nil
-        var extraLargeBest: CGFloat?
-        if layout == .large {
-            var best = p.floor
-            for merged in merges {
-                let x = plan(w: w, h: h, s: s, layout: .extraLarge, k: k, accessibilityText: accessibilityText, hasSpot: hasSpot,
-                             locked: locked, noCompass: noCompass, hasUpdateBanner: hasUpdateBanner, mac: mac,
-                             isLandscapePhone: isLandscapePhone, onlyMerged: merged)
-                if !x.list && !x.twoPane { best = max(best, x.dial) }
-            }
-            extraLargeBest = best
-        }
-        // What each layout wants before it stops giving things up (as on Android): Small and Medium the floor;
-        // Large 16 over it (a step over Medium); Extra Large at least Large's dial (it merges the rows for that
-        // where it must). Never more than Large's limit.
-        var want = p.floor
-        if onlyMerged == nil {
-            switch layout {
-            case .large: want = min(p.floor + layoutStep, widthCap(.large))
-            case .extraLarge:
-                let l = neighbour(.large)
-                if !l.list && !l.twoPane { want = max(p.floor, l.dial) }
-            default: break
-            }
-        }
-        if let extraLargeBest { want = min(want, extraLargeBest) }
-        // The first stage that gives the layout what it wants; failing that, the stage with the biggest dial
-        // still at the floor; failing that, the list.
-        var chosen: (grid: Grid, map: Map, merged: Bool, dial: CGFloat)?
-        var fallback: (grid: Grid, map: Map, merged: Bool, dial: CGFloat)?
-        stages: for merged in merges where onlyMerged == nil || onlyMerged == merged {
-            for (grid, surface) in grids {
-                var d = min(p.dialCap, s - fixed(grid, card: false, merged: merged))
-                if let large, !large.list && !large.twoPane { d = min(d, max(p.floor, large.dial - layoutStep)) }
-                if let extraLargeBest { d = min(d, extraLargeBest) }
-                if d < p.floor - 0.5 { continue }
-                if d >= want - 0.5 {
-                    chosen = (grid, surface, merged, d)
-                    break stages
-                }
-                if d > (fallback?.dial ?? -.infinity) + 0.5 { fallback = (grid, surface, merged, d) }
-            }
-        }
-        if chosen == nil { chosen = fallback }
-        guard let chosen else { return listPlan() }
-        let g = chosen.grid
-        var map = chosen.map
-        var dial = chosen.dial
-        p.merged = chosen.merged
-        var spare = max(0, s - fixed(g, card: false, merged: p.merged) - dial)
-        var grow: CGFloat = 0
-        if layout == .medium && map == .tile {
-            if spare >= mapPromote * k {
-                // A map card (200 or more, taken from the dial down to its floor).
-                map = .card
-                p.mapHeight = spare - p.gapGridMap
-                if p.mapHeight < mapPromoted * k {
-                    let take = min(mapPromoted * k - p.mapHeight, max(0, dial - p.floor))
-                    dial -= take
-                    p.mapHeight += take
-                }
-                spare = 0
-            } else if !p.tablet {
-                // Taller tiles: 72 → 88 (iPad's 96 tiles don't grow).
-                grow = max(0, min((tileGrown - tile) * k, spare / 2))
-                spare -= 2 * grow
-            }
-        }
-        // More than the tiles and the two 24s can take, and a card of 140 fits: Medium's map becomes a card
-        // after all (its tiles back to 72), as on Android.
-        if layout == .medium && map == .tile && spare > 2 * maxSpare + 0.5 && spare + 2 * grow - p.gapGridMap >= mapMin {
-            map = .card
-            p.mapHeight = spare + 2 * grow - p.gapGridMap
-            grow = 0
-            spare = 0
-        }
-        // Up to 24 under the header and up to 24 at the bottom.
-        p.topExtra = min(maxSpare, spare / 2)
-        p.bottomSpare = min(maxSpare, spare - p.topExtra)
-        var over = max(0, spare - p.topExtra - p.bottomSpare)
-        if over > 0.5 {
-            // Still spare: the dial grows to its width cap (past a tablet's share of H), staying 16 under
-            // the next layout's; the rest centres the panel.
-            // (Medium stays 16 under Large; Large never passes Extra Large's best dial.)
-            var limit = widthCap(layout)
-            if let large, !large.list && !large.twoPane { limit = min(limit, large.dial - layoutStep) }
-            if let extraLargeBest { limit = min(limit, extraLargeBest) }
-            let add = max(0, min(over, limit - dial))
-            dial += add
-            over -= add
-            if over > 0.5 { p.centred = true }
-            p.topExtra += over / 2
-            p.bottomSpare += over / 2
-        }
-        p.grid = g
-        p.map = map
-        p.dial = dial
-        p.share = dial / h
-        let gridRows: CGFloat = g == .compact ? 1 : 2
-        // (fixed() counts the tiles at their base height; the growth is added here.)
-        p.used = fixed(g, card: map == .card, merged: p.merged) + dial + p.mapHeight + grow * gridRows + p.topExtra + p.bottomSpare
-        p.gridTop = gridTop(dial, merged: p.merged)
-        p.tileHeight += grow
+        p.layout = i.layout
+        p.k = i.k
+        p.mac = i.mac
+        p.locked = i.locked
+        p.hasSpot = i.hasSpot
+        p.noCompass = i.noCompass
+        p.hasBanner = i.banner
+        p.accessibilityText = i.accessibilityText
+        p.tablet = min(i.w, i.h) >= tabletSide
+        p.margin = i.mac || p.tablet ? marginLarge : marginPhone
+        p.columnWidth = min(i.w - 2 * p.margin, p.tablet ? maxColumnTablet : maxColumn)
+        p.widthCap = p.columnWidth + 2 * p.margin - 2 * i.layout.e
+        p.readoutScale = i.layout.readoutScale
+        p.headingSize = (p.tablet ? headingTablet : heading) * i.layout.readoutScale
+        p.readoutSlot = readoutSlot(headingSize: p.headingSize, k: i.k, noCompass: i.noCompass)
+        p.statusLines = i.k > 1.1 ? 2 : 1
+        p.statusHeight = statusHeight(k: i.k, lines: p.statusLines, tablet: p.tablet)
+        p.cardHeight = cardHeight(k: i.k, tablet: p.tablet)
+        p.gapReadoutStatus = readoutToStatus * i.k
+        p.sixth = sixth(speed: i.speed)
+        p.splitPosition = i.split
+        p.targetsRows = (i.locked ? 1 : 0) + (i.hasSpot ? 1 : 0)
+        p.topBand = i.topBand
+        p.bottomInset = i.home ? 0 : (i.mac ? macInset : bottomPhone)
+        p.end = i.s - p.bottomInset
+        p.floor = min((ownerShare * i.h - 0.001).rounded(.up), p.widthCap)
         return p
     }
 
-    // MARK: The golden table (Cycle 3 §C3.3 and §C3.4's tests)
+    /// The grid and map surface for a layout with the steps it has given up.
+    private static func gridAndMap(_ layout: Layout, largeText: Bool, tablet: Bool, steps: Set<Step>) -> (Grid, Map) {
+        switch layout {
+        case .small:
+            if steps.contains(.button) { return (largeText ? .twoRow : .row, .tile) }
+            if steps.contains(.mapTile) { return (.mapRows, .tile) }
+            return (largeText ? .twoRow : .band, .card)
+        case .medium:
+            if steps.contains(.button) { return (largeText ? .twoRow : .row, .button) }
+            return (.quad, tablet && !steps.contains(.mapTile) ? .card : .tile)
+        case .large:
+            if steps.contains(.button) { return (largeText ? .twoRow : .row, .button) }
+            if steps.contains(.dense) || largeText { return (.quadCompact, .button) }
+            return (.six, .button)
+        case .extraLarge:
+            return (largeText ? .twoRow : .strip, .button)
+        }
+    }
+
+    /// Whether a step means anything for this plan.
+    private static func applies(_ step: Step, to p: LayoutPlan) -> Bool {
+        switch step {
+        case .tight: return true
+        case .compactRows: return p.hasTargets
+        case .dense: return p.layout == .large && !p.largeText
+        case .mapTile: return p.layout == .small || (p.layout == .medium && p.tablet)
+        case .button: return p.layout != .extraLarge
+        }
+    }
+
+    /// The grid's rows at their smallest.
+    private static func minRows(_ grid: Grid, k: CGFloat, tablet: Bool, largeText: Bool) -> [CGFloat] {
+        let t = (tablet ? tileTablet : tile) * k, compact = tileCompact * k
+        switch grid {
+        case .band, .list: return []
+        case .quad, .six: return [t, t]
+        case .quadCompact, .twoRow: return [compact, compact]
+        case .row: return [tile * k]
+        case .mapRows: return largeText ? [compact, compact, compact] : [compact, compact]
+        case .strip: return [(tablet ? stripTablet : strip) * k]
+        }
+    }
+
+    /// Applies a set of given-up steps: the gaps, the Targets rows, the grid and the map at their smallest.
+    private static func apply(_ steps: Set<Step>, to p: inout LayoutPlan) {
+        let tight = steps.contains(.tight)
+        p.gapTopDial = tight ? topGapTight : topGap
+        p.gapStatusCard = tight ? statusToCardTight : statusToCard
+        p.targetsRowHeight = targetsRowHeight(layout: p.layout, k: p.k, tablet: p.tablet, compact: steps.contains(.compactRows))
+        let surface = gridAndMap(p.layout, largeText: p.largeText, tablet: p.tablet, steps: steps)
+        p.grid = surface.0
+        p.map = surface.1
+        p.rowHeights = minRows(p.grid, k: p.k, tablet: p.tablet, largeText: p.largeText)
+        p.mapHeight = p.map == .card ? mapMin : 0
+        p.steps = steps
+    }
+
+    /// Everything but the dial, with these steps given up, from the top of the safe area.
+    private static func fixedHeight(_ p: LayoutPlan, steps: Set<Step>) -> CGFloat {
+        var q = p
+        apply(steps, to: &q)
+        q.topExtra = 0
+        q.dial = 0
+        return q.contentBottom
+    }
+
+    /// One column. Nil when even every step leaves the dial under its floor (the list then).
+    private static func core(_ i: Input, limit: CGFloat, want: CGFloat?) -> LayoutPlan? {
+        var p = base(i)
+        let k = i.k
+        var cap = p.widthCap, grow = p.widthCap
+        if let share = i.layout.capShare {
+            cap = min(ceil8(share * i.h), p.widthCap)
+            // Small and Medium stay at their cap; Large may grow to its width cap from spare.
+            if i.layout != .large { grow = cap }
+        }
+        cap = min(cap, limit)
+        grow = min(grow, limit)
+        p.dialCap = cap
+        let target: CGFloat = want.map { max(p.floor, min($0, cap)) } ?? p.floor
+        apply([], to: &p)
+        var steps: Set<Step> = []
+        var taken: [Step] = []
+        if p.end - fixedHeight(p, steps: steps) < target - 0.5 {
+            for step in Step.allCases where applies(step, to: p) {
+                steps.insert(step)
+                taken.append(step)
+                if p.end - fixedHeight(p, steps: steps) >= target - 0.5 { break }
+            }
+        }
+        let room = p.end - fixedHeight(p, steps: steps)
+        if room < p.floor - 0.5 { return nil }
+        var dial = min(cap, room)
+        if dial < p.floor - 0.5 { return nil }
+        var spare = room - dial
+        // What fits comes back, last given up first.
+        for step in taken.reversed() {
+            var without = steps
+            without.remove(step)
+            let cost = fixedHeight(p, steps: without) - fixedHeight(p, steps: steps)
+            if cost <= spare + 0.001 {
+                steps = without
+                spare -= cost
+            }
+        }
+        apply(steps, to: &p)
+        // The layout's growth.
+        if p.map == .card {
+            p.mapHeight += spare
+            spare = 0
+        } else if !p.tablet && !p.rowHeights.isEmpty {
+            let rowCap: CGFloat
+            if p.grid == .strip {
+                rowCap = stripGrown * k
+            } else if i.layout == .large {
+                rowCap = tileLarge * k
+            } else {
+                rowCap = tileGrown * k
+            }
+            let n = CGFloat(p.rowHeights.count)
+            let add = max(0, min(rowCap - p.rowHeights[0], spare / n))
+            p.rowHeights = p.rowHeights.map { $0 + add }
+            spare -= add * n
+            // Live Medium: row 2 grows on to 176 (the Sun tile adds the daylight and the moon).
+            if i.layout == .medium && p.grid == .quad && !p.hasTargets && p.rowHeights.count == 2 {
+                let more = max(0, min(tileTall * k - p.rowHeights[1], spare))
+                p.rowHeights[1] += more
+                spare -= more
+            }
+        }
+        // Then the dial, up to its width cap (Large, Extra Large).
+        let add = max(0, min(grow - dial, spare))
+        dial += add
+        spare -= add
+        // Then at most 24 at the bottom; anything more centres the stack.
+        p.bottomSpare = min(maxSpare, spare)
+        spare -= p.bottomSpare
+        if spare > 0.5 {
+            p.centred = true
+            p.topExtra = spare / 2
+            p.bottomSpare += spare / 2
+        }
+        p.dial = dial
+        p.share = dial / i.h
+        p.used = p.contentBottom + p.bottomSpare
+        return p
+    }
+
+    /// Accessibility sizes, or nothing fits: one scrolling list. The dial keeps the owner's 0.40 H.
+    private static func listPlan(_ i: Input) -> LayoutPlan {
+        var p = base(i)
+        p.list = true
+        p.twoPane = false
+        p.grid = .list
+        p.map = .tile
+        p.dial = max(min(ceil8(ownerShare * i.h), p.widthCap), p.floor)
+        p.dialCap = p.dial
+        p.share = p.dial / i.h
+        p.statusLines = 2
+        p.statusHeight = statusHeight(k: i.k, lines: 2, tablet: p.tablet)
+        p.rowHeights = Array(repeating: listRow, count: 4)
+        p.mapHeight = listMap
+        p.targetsRowHeight = listTargetsRow
+        p.used = p.contentBottom + gapAboveListMap + listMap
+        return p
+    }
+
+    /// The list's Map tile sits 8 under the last row.
+    static let gapAboveListMap: CGFloat = 8
+
+    /// Two panes (iPad landscape, wide Mac windows, a phone on its side): no full-width header. The dial,
+    /// readout and status line top-aligned in the left pane; the location card, the Targets card, the grid
+    /// and a map card (240 or more) in the right pane, level with the dial.
+    private static func twoPanePlan(_ i: Input) -> LayoutPlan {
+        var p = base(i)
+        p.twoPane = true
+        p.margin = marginLarge
+        let right = min(max(i.layout.rightShare * i.w, paneMin), paneMax)
+        p.trailingWidth = right
+        p.columnWidth = right
+        p.leftWidth = i.w - 2 * marginLarge - paneGap - right
+        p.widthCap = p.leftWidth
+        apply([], to: &p)
+        let group = p.gapDialReadout + p.readoutSlot + p.gapReadoutStatus + p.statusHeight
+        let dial = min(p.leftWidth, p.end - p.topBand - p.gapTopDial - group, i.layout.paneShare * i.h)
+        if dial < dialMin { return listPlan(i) }
+        p.dial = dial
+        p.floor = dial
+        p.dialCap = dial
+        p.share = dial / i.h
+        // The right pane always ends with a map card (so Medium's quad is Sun | Moon).
+        p.map = .card
+        let pane = p.end - p.topBand - p.gapTopDial
+        // Split up so the type checker never has to solve one long mixed expression.
+        let bannerPart: CGFloat = p.hasBanner ? banner + bannerGap : 0
+        let targetsPart: CGFloat = p.hasTargets ? p.gap + p.targetsHeight : 0
+        let gridPart: CGFloat = p.gridHeight > 0 ? p.gap + p.gridHeight : 0
+        let above: CGFloat = p.cardHeight + bannerPart + targetsPart + gridPart + p.gap
+        let least: CGFloat = i.layout == .small ? max(mapPane, mapPaneSmall * pane) : mapPane
+        p.mapHeight = max(least, pane - above)
+        p.trailingScrolls = above + p.mapHeight > pane + 0.5
+        p.bottomSpare = max(0, pane - above - p.mapHeight)
+        p.used = p.contentBottom + p.bottomSpare
+        return p
+    }
+
+    // MARK: The golden table (docs/REFINE.md A.4 and A.11)
 
     /// A device in the planner's table: width, full height, safe height, and whether it is a Mac window.
     struct Device { let name: String; let w: CGFloat; let h: CGFloat; let s: CGFloat; var mac = false }
@@ -783,29 +789,28 @@ struct LayoutPlan: Equatable {
         Device(name: "Phone landscape", w: 852, h: 393, s: 372),
     ]
 
-    /// The states of §4.7 and C3.3: nothing (live), locked, marked, both (the sample).
+    /// The golden devices: the four layouts must look different in the sample state on these.
+    static let goldenDevices: Set<String> = ["iPhone 16", "iPhone 16 Pro"]
+
+    /// Nothing (live), locked, marked, both (the sample).
     static let states: [(name: String, locked: Bool, spot: Bool)] = [
         ("none", false, false), ("locked", true, false), ("marked", false, true), ("both", true, true),
     ]
 
     /// Runs the whole table (devices × layouts × states × compass or not × text sizes × banner) and returns
-    /// the cases that break a rule (C3.3's shared tests, and the owner's rule: in one column, portrait, short
-    /// of the accessibility sizes, a dial under min(0.40 H, its width cap) fails, as does Large not over
-    /// Medium or Extra Large under Large): a gap that isn't its token × k, a header not at the
-    /// safe top + 8, more than 24 left empty at the bottom (unless the panel is centred), a block partly
-    /// visible, the dial under its floor or over its cap, a tile taller than its cap, a map card under 140,
-    /// a row whose widths and gutters don't add up to C, neighbouring layouts with the same grid (or, Medium
-    /// and Large, the same map surface, or Large's dial not 16 over Medium's), four landscape plans that
-    /// aren't four, and at Text Size 1.3 in the list the Position row under the fold. Then the worked
-    /// numbers. Empty when all is well.
+    /// the cases that break a rule: the owner's 0.40 H in portrait (the list too), a gap that isn't its token,
+    /// anything above the dial, the location card not under the status line, the Targets card's rows, more
+    /// than 24 empty at the bottom (unless centred), anything cut, a row whose widths don't add up to C, the
+    /// dials out of order, neighbouring layouts that are the same plan, four landscape plans that aren't four,
+    /// and the worked numbers. Empty when all is well.
     static func tableFailures() -> [String] {
         var failures: [String] = []
+        let textSizes: [(CGFloat, Bool)] = [(1, false), (1.15, false), (1.3, false), (1.3, true)]
         for d in devices {
             for state in states {
-                for (k, acc) in [(CGFloat(1), false), (1.3, false), (1.3, true)] {
+                for (k, acc) in textSizes {
                     for banner in [false, true] where !banner || d.mac {
                         for noCompass in [false, true] {
-                            // No compass: no heading, so nothing can be locked.
                             if noCompass && state.locked { continue }
                             var plans: [LayoutPlan] = []
                             for layout in Layout.allCases {
@@ -816,43 +821,66 @@ struct LayoutPlan: Equatable {
                                 let name = "\(d.name) \(layout.rawValue) \(state.name) k\(k)\(acc ? " acc" : "")\(banner ? " banner" : "")\(noCompass ? " no compass" : "")"
                                 failures += check(p, device: d, name: name)
                             }
-                            // Neighbours at Text Size 1.0, and in one column at 1.3 too (the owner's rule holds
-                            // there); two panes at 1.3 share the large-text dial and are left out.
-                            guard !acc, !banner, k == 1 || !plans.contains(where: \.twoPane) else { continue }
-                            failures += distinct(plans, name: "\(d.name) \(state.name) k\(k)\(noCompass ? " no compass" : "")")
+                            guard !acc else { continue }
+                            let golden = goldenDevices.contains(d.name) && state.locked && state.spot && !banner && !noCompass
+                            failures += distinct(plans, k: k, golden: golden,
+                                                 name: "\(d.name) \(state.name) k\(k)\(banner ? " banner" : "")\(noCompass ? " no compass" : "")")
                         }
                     }
                 }
             }
         }
-        // The worked numbers: iPhone 16 Pro, 402 × 874, S = 778, C = 370, floor 0.40 H = 350. With the sample
-        // (locked + marked) every layout gives up its grid or map card to keep the owner's 0.40 H: Small 350,
-        // Medium 370, Large 386, Extra Large 386, all on the compact row with the map in the header.
-        let medium = plan(w: 402, h: 874, s: 778, hasSpot: true, locked: true)
-        let large = plan(w: 402, h: 874, s: 778, layout: .large, hasSpot: true, locked: true)
-        let xl = plan(w: 402, h: 874, s: 778, layout: .extraLarge, hasSpot: true, locked: true)
-        let small = plan(w: 402, h: 874, s: 778, layout: .small, hasSpot: true, locked: true)
-        if abs(small.dial - 350) > 1 || abs(medium.dial - 370) > 1 || abs(large.dial - 386) > 1 || abs(xl.dial - 386) > 1 {
-            failures.append("16 Pro sample dials: \(Int(small.dial)) / \(Int(medium.dial)) / \(Int(large.dial)) / \(Int(xl.dial)), expected 350 / 370 / 386 / 386")
+        failures += workedNumbers()
+        return failures
+    }
+
+    /// The worked numbers (docs/REFINE.md A.3, A.4, A.6).
+    static func workedNumbers() -> [String] {
+        var failures: [String] = []
+        // iPhone 16 Pro, 402 × 874, S = 778, the sample (locked and marked).
+        func pro(_ layout: Layout, sample: Bool = true) -> LayoutPlan {
+            plan(w: 402, h: 874, s: 778, layout: layout, hasSpot: sample, locked: sample)
         }
-        if medium.grid != .compact || medium.map != .button || large.grid != .compact || large.map != .button || medium.merged || large.merged {
-            failures.append("16 Pro sample: Medium and Large should give up their grids (the compact row), not merge the rows")
+        let small = pro(.small), medium = pro(.medium), large = pro(.large), xl = pro(.extraLarge)
+        let smallOK = small.grid == .band && small.map == .card && abs(small.dial - 352) <= 0.5
+            && abs(small.mapHeight - 166) <= 2
+        if !smallOK {
+            failures.append("16 Pro Small sample: \(small.description), expected dial 352, band, map card ≈ 166")
         }
-        if xl.grid != .compact || xl.map != .button || abs(xl.readoutScale - 1.25) > 0.001 {
-            failures.append("16 Pro Extra Large sample: expected the compact row, the header map button and a 1.25 readout")
+        let mediumSurface: Bool = medium.grid == .quad && medium.map == .tile && medium.targetsRows == 2
+        let mediumDial: Bool = abs(medium.dial - 352) <= 0.5 && abs(medium.tileHeight - 79) <= 1.5
+        let mediumCard: CGFloat = medium.locationTop + 62
+        let mediumEnd: CGFloat = medium.used + 62
+        let mediumStack: Bool = abs(mediumCard - 522.3) <= 2 && abs(medium.targetsRowHeight - 44) <= 0.5
+            && abs(mediumEnd - 840) <= 0.5
+        if !(mediumSurface && mediumDial && mediumStack) {
+            failures.append("16 Pro Medium sample: \(medium.description), location card at \(Int(medium.locationTop + 62)), expected dial 352, the location card at ≈ 522 on screen, tiles ≈ 79, end 840")
         }
-        if small.map != .button || small.list {
-            failures.append("16 Pro Small sample: expected the map in the header (no 140 card fits at 0.40 H)")
+        let largeOK = large.grid == .six && large.map == .button && abs(large.dial - 365.7) <= 1
+            && abs(large.tileHeight - 72) <= 0.5
+        if !largeOK {
+            failures.append("16 Pro Large sample: \(large.description), expected dial ≈ 365, six, tiles 72")
         }
-        // Live (nothing locked or marked) the four keep their own grids: Small 350 with a 174 card, Medium
-        // 370 with the 3 columns and Map tile, Large 386 on 2 × 2, Extra Large 386 on the compact row.
-        let liveSmall = plan(w: 402, h: 874, s: 778, layout: .small)
-        let liveMedium = plan(w: 402, h: 874, s: 778)
-        let liveLarge = plan(w: 402, h: 874, s: 778, layout: .large)
-        if liveSmall.map != .card || liveSmall.mapHeight < mapMin - 0.5 || abs(liveSmall.dial - 0.40 * 874) > 1
-            || liveMedium.grid != .full || liveMedium.map != .tile || liveLarge.grid != .twoByTwo
-            || liveLarge.dial < liveMedium.dial + layoutStep - 0.5 {
-            failures.append("16 Pro live: Small \(liveSmall.description); Medium \(liveMedium.description); Large \(liveLarge.description)")
+        let xlOK = xl.grid == .strip && xl.map == .button && abs(xl.dial - 386) <= 0.5
+            && abs(xl.readoutScale - 1.25) <= 0.001 && abs(xl.targetsRowHeight - 52) <= 0.5
+        if !xlOK {
+            failures.append("16 Pro Extra Large sample: \(xl.description), expected dial 386, strip, rows 52")
+        }
+        // Live: Medium's row 1 at 88 and row 2 grown; Large's rows at 104 and its dial at the width cap.
+        let liveMedium = pro(.medium, sample: false), liveLarge = pro(.large, sample: false)
+        let liveMediumOK = !liveMedium.hasTargets && liveMedium.rowHeights.count == 2
+            && abs(liveMedium.rowHeights[0] - tileGrown) <= 0.5 && liveMedium.rowHeights[1] >= tallSun
+        let liveLargeOK = abs(liveLarge.tileHeight - tileLarge) <= 0.5 && abs(liveLarge.dial - 386) <= 0.5
+        if !(liveMediumOK && liveLargeOK) {
+            failures.append("16 Pro live: Medium \(liveMedium.description); Large \(liveLarge.description)")
+        }
+        // iPhone SE, Medium, the sample: steps 2, 3 and 6 keep a 272 dial; the rows and gaps come back and the
+        // row grows to 88.
+        let se = plan(w: 375, h: 667, s: 647, hasSpot: true, locked: true)
+        let seOK = abs(se.dial - 272) <= 0.5 && se.grid == .row && se.map == .button
+            && abs(se.tileHeight - tileGrown) <= 0.5 && se.steps == [.button]
+        if !seOK {
+            failures.append("iPhone SE Medium sample: \(se.description), expected dial 272 · compact · map button")
         }
         // The compact row at C = 370, 380 and 700: 146 | 104 | 104, 156 | 104 | 104, 306 | 189 | 189.
         let w370 = compactWidths(370), w380 = compactWidths(380), w700 = compactWidths(700)
@@ -860,15 +888,13 @@ struct LayoutPlan: Equatable {
             || w700.position != 306 || w700.other != 189 {
             failures.append("Compact row widths: \(w370) at 370, \(w380) at 380, \(w700) at 700")
         }
-        // iPad portrait, Medium, nothing locked: the map is a card of 200 or more (C3.4 #10).
-        let ipad = plan(w: 834, h: 1210, s: 1166)
-        if ipad.map != .card || ipad.mapHeight < mapPromoted - 0.5 {
-            failures.append("iPad 11 portrait Medium: map \(ipad.map) \(Int(ipad.mapHeight)), expected a card of 200 or more")
-        }
-        // The smallest Mac window holds every layout with the sample without scrolling (at 0.40 H or more).
+        // The smallest Mac window holds every layout with the sample without scrolling.
         for layout in Layout.allCases where plan(w: macMinWidth, h: macMinHeight, s: macMinHeight, layout: layout,
                                                  hasSpot: true, locked: true, mac: true).list {
             failures.append("Mac \(Int(macMinWidth)) × \(Int(macMinHeight)): \(layout.rawValue) scrolls")
+        }
+        if sixth(speed: nil) != .pressure || sixth(speed: 0.4) != .pressure || sixth(speed: 0.5) != .speed {
+            failures.append("Large's sixth tile: Pressure when still, Speed from 0.5 m/s")
         }
         if plan(w: 393, h: 852, s: 759).layout != .medium || Layout.of(nil) != .medium || Layout.of("bogus") != .medium {
             failures.append("Medium is not the default")
@@ -880,146 +906,135 @@ struct LayoutPlan: Equatable {
     private static func check(_ p: LayoutPlan, device d: Device, name: String) -> [String] {
         var failures: [String] = []
         let k = p.k
-        // The header is pinned at the safe top + 8 (24 from a Mac window's edge), in every layout and state.
-        if abs(p.topInset - (d.mac ? macInset : top)) > 0.01 { failures.append("\(name): header at \(p.topInset)") }
-        if d.mac && (p.margin < macInset - 0.5 || p.bottomInset < macInset - 0.5) {
-            failures.append("\(name): Mac edges \(Int(p.margin)) / \(Int(p.topInset)) / \(Int(p.bottomInset)), expected 24")
-        }
-        // The owner's hard rule: in one column, portrait (phones, iPad portrait, Mac windows taller than wide),
-        // short of the accessibility sizes, the dial is at least min(0.40 H, its width cap), in the list too.
-        if !p.twoPane && !p.accessibilityText && d.h >= d.w && p.dial < p.ownerFloor(h: d.h) - 0.5 {
+        // The owner's hard rule: in one column, portrait, the dial is at least min(0.40 H, its width cap),
+        // in the list too.
+        if !p.twoPane && d.h >= d.w && p.dial < p.ownerFloor(h: d.h) - 0.5 {
             failures.append("\(name): dial \(Int(p.dial)) is \(Int((100 * p.dial / d.h).rounded()))% of H, under the owner's floor \(Int(p.ownerFloor(h: d.h)))")
         }
-        // Every gap is its token × k.
+        // The frozen gaps.
+        let tight = p.steps.contains(.tight)
         let gaps: [(CGFloat, CGFloat, String)] = [
-            (p.gapHeaderDial, headerToDial, "header → dial"), (p.gapDialReadout, dialToReadout, "dial → readout"),
-            (p.gapReadoutStatus, readoutToStatus, "readout → status"), (p.gapStatusRows, statusToRows, "status → rows"),
-            (p.gapRows, rowGap, "rows"), (p.gapGridMap, gridToMap, "grid → map"),
+            (p.gapTopDial, tight ? topGapTight : topGap, "safe top → dial"),
+            (p.gapDialReadout, dialToReadout, "dial → readout"),
+            (p.gapReadoutStatus, readoutToStatus * k, "readout → status"),
+            (p.gapStatusCard, tight ? statusToCardTight : statusToCard, "status → location card"),
+            (p.gap, rowGap, "between blocks"),
         ]
-        for (gap, token, what) in gaps where abs(gap - token * k) > 0.01 {
-            failures.append("\(name): \(what) is \(gap), not \(token) × \(k)")
+        for (gap, token, what) in gaps where abs(gap - token) > 0.01 {
+            failures.append("\(name): \(what) is \(gap), not \(token)")
         }
-        // Every row's widths and gutters add up to C (C2.2 #1).
+        if d.mac && (p.margin < macInset - 0.5 || (!p.list && abs(p.bottomInset - macInset) > 0.5)) {
+            failures.append("\(name): Mac edges \(Int(p.margin)) / \(Int(p.bottomInset)), expected 24")
+        }
+        // Every row's widths and gutters add up to C.
         for row in p.rowWidths {
             let sum = row.reduce(0, +) + CGFloat(row.count - 1) * rowGap
             if abs(sum - p.columnWidth) > 0.5 { failures.append("\(name): a row is \(Int(sum)) wide in a column of \(Int(p.columnWidth))") }
-            if p.grid == .compact && row.contains(where: { $0 < compactMin - 0.5 }) {
+            if (p.grid == .row || p.grid == .mapRows) && row.count == 3 && row.contains(where: { $0 < compactMin - 0.5 }) {
                 failures.append("\(name): a compact tile under \(Int(compactMin))")
             }
-        }
-        if p.list {
-            if p.dial < dialMin - 0.5 { failures.append("\(name): list dial \(Int(p.dial))") }
-            // At Text Size 1.3 the Position row is whole above the fold, and Elevation too wherever the dial
-            // could give way (C3.4 #6); not on a phone on its side, which is all fold, and not where the
-            // dial is held at the owner's 0.40 H (the owner's rule comes first).
-            let held = !p.accessibilityText && p.dial <= p.floor + 0.5
-            if d.s >= landscapePhone && !held && p.listFold > d.s + 0.5 { failures.append("\(name): the Position row ends \(Int(p.listFold - d.s)) under the fold") }
-            if d.s >= landscapePhone && !held && p.dial > dialMin + 0.5 && p.listFold2 > d.s + 0.5 {
-                failures.append("\(name): the Elevation row ends \(Int(p.listFold2 - d.s)) under the fold")
+            if p.largeText && row.count == 3 && p.grid != .six {
+                failures.append("\(name): a three-column compact row at large text")
             }
-            return failures
         }
-        if (p.layout == .large || p.layout == .extraLarge) && p.map != .button {
+        let bandSum: CGFloat = p.bandWidths.reduce(0, +) + 2 * bandPadding + 2 * rowGap
+        let stripSum: CGFloat = p.stripWidths.reduce(0, +) + 2 * divider
+        if abs(bandSum - p.columnWidth) > 0.5 || abs(stripSum - p.columnWidth) > 0.5 {
+            failures.append("\(name): the band or strip doesn't add up to C")
+        }
+        // The Targets card: a row for each target, at its height.
+        if p.targetsRows != (p.locked ? 1 : 0) + (p.hasSpot ? 1 : 0) { failures.append("\(name): \(p.targetsRows) Targets rows") }
+        if p.list { return failures }
+        let rowBase: CGFloat = p.layout == .extraLarge || p.tablet ? targetsRowLarge : targetsRow
+        if abs(p.targetsRowHeight - rowBase * k) > 0.5 && abs(p.targetsRowHeight - (rowBase - targetsRowStep) * k) > 0.5 {
+            failures.append("\(name): Targets rows \(Int(p.targetsRowHeight))")
+        }
+        if (p.layout == .large || p.layout == .extraLarge) && !p.twoPane && p.map != .button {
             failures.append("\(name): \(p.layout.rawValue) shows the map as \(p.map)")
         }
-        if p.map == .card && p.mapHeight < mapMin - 0.5 && !(p.mapStrip && p.mapHeight >= p.tileHeight - 0.5) {
-            failures.append("\(name): map card \(Int(p.mapHeight))")
-        }
-        if p.grid == .compact && p.map == .tile { failures.append("\(name): the compact row has no Map tile") }
         if p.twoPane {
             if p.dial < dialMin - 0.5 { failures.append("\(name): two panes, dial \(Int(p.dial))") }
-            let rowCap = (p.tablet ? tileTablet : tilePane) * k
-            if p.tileHeight > rowCap + 0.5 { failures.append("\(name): two panes, tiles \(Int(p.tileHeight)) over \(Int(rowCap))") }
-            if !p.trailingScrolls && p.map == .card && p.bottomSpare > maxSpare + 0.5 {
+            if p.map != .card || p.mapHeight < mapPane - 0.5 { failures.append("\(name): two panes, map card \(Int(p.mapHeight))") }
+            if p.locationTop != p.dialTop { failures.append("\(name): two panes, the location card isn't level with the dial") }
+            if !p.trailingScrolls && p.bottomSpare > maxSpare + 0.5 {
                 failures.append("\(name): two panes, \(Int(p.bottomSpare)) empty under the map card")
             }
             return failures
         }
+        // Nothing above the dial; the location card under the status line.
+        if p.locationTop < p.dialTop + p.dial { failures.append("\(name): the location card is above the dial") }
+        if abs(p.locationTop - (p.statusBottom + p.gapStatusCard)) > 0.5 { failures.append("\(name): the location card isn't under the status line") }
+        if p.map == .card && p.mapHeight < mapMin - 0.5 { failures.append("\(name): map card \(Int(p.mapHeight))") }
         if p.bottomSpare > maxSpare + 0.5 && !p.centred { failures.append("\(name): \(Int(p.bottomSpare)) empty at the bottom") }
-        if p.centred && abs(p.topExtra - p.bottomSpare) > 0.5 { failures.append("\(name): centred, but \(Int(p.topExtra)) over and \(Int(p.bottomSpare)) under") }
-        if p.used > d.s + 0.5 { failures.append("\(name): \(Int(p.used - d.s)) cut off") }
-        if p.used < d.s - 0.5 { failures.append("\(name): \(Int(d.s - p.used)) unaccounted for") }
-        if p.dial + 0.5 < p.floor { failures.append("\(name): dial \(Int(p.dial)) under its floor \(Int(p.floor))") }
-        let widthCap = p.columnWidth + 2 * p.margin - 2 * p.layout.e
-        if p.dial > widthCap + 0.5 { failures.append("\(name): dial \(Int(p.dial)) over its cap \(Int(widthCap))") }
-        let grownCap = (p.tablet ? tileTablet : tileGrown) * k
-        if p.tileHeight > grownCap + 0.5 { failures.append("\(name): tiles \(Int(p.tileHeight)) over \(Int(grownCap))") }
-        // Only Medium grows its tiles.
-        if p.layout != .medium && abs(p.tileHeight - (p.tablet ? tileTablet : tile) * k) > 0.5 {
-            failures.append("\(name): \(p.layout.rawValue) tiles \(Int(p.tileHeight))")
+        if p.used > p.end + 0.5 { failures.append("\(name): \(Int(p.used - p.end)) cut off") }
+        if p.used < p.end - 0.5 { failures.append("\(name): \(Int(p.end - p.used)) unaccounted for") }
+        if p.dial > p.widthCap + 0.5 { failures.append("\(name): dial \(Int(p.dial)) over its width cap \(Int(p.widthCap))") }
+        // The golden devices in the sample state: no empty band wider than 24.
+        if goldenDevices.contains(d.name) && p.locked && p.hasSpot && k == 1 && (p.centred || p.bottomSpare > maxSpare + 0.5) {
+            failures.append("\(name): an empty band of \(Int(max(p.topExtra, p.bottomSpare)))")
         }
         return failures
     }
 
-    /// Neighbouring layouts differ (C3.2 #2): in grid mode, unless one of them gave up its own grid or map
-    /// to keep the owner's 0.40 H (`yielded`); Medium and Large also in map surface (same exception), with
-    /// Large's dial 16 or more over Medium's unless Medium is at its floor, and over it in any case (unless
-    /// Extra Large itself is held at the floor, where the three share it). Extra Large's dial is the largest.
-    /// In two panes (landscape) the four plans are four different plans.
-    private static func distinct(_ plans: [LayoutPlan], name: String) -> [String] {
+    /// The layouts differ (A.4): the dials rise from Small to Extra Large; neighbours differ in at least one
+    /// of grid, map surface or dial; on the golden devices in the sample state each layout has its own grid
+    /// (band, quad, six, strip) and map surface (card, tile, button, button). In two panes (landscape, at
+    /// Text Size 1.0) the four grids are four.
+    private static func distinct(_ plans: [LayoutPlan], k: CGFloat, golden: Bool, name: String) -> [String] {
         var failures: [String] = []
-        let panel = plans.filter { !$0.list }
-        if panel.count == plans.count && plans.allSatisfy(\.twoPane) {
-            for (i, a) in plans.enumerated() {
-                for b in plans.dropFirst(i + 1) where a.grid == b.grid && a.map == b.map && abs(a.dial - b.dial) < layoutStep - 0.5 {
-                    failures.append("\(name) landscape: \(a.layout.rawValue) and \(b.layout.rawValue) are the same plan")
-                }
-            }
+        if plans.allSatisfy(\.twoPane) {
+            if k == 1 && Set(plans.map(\.grid)).count != plans.count { failures.append("\(name) landscape: two plans share a grid") }
             return failures
         }
-        // (Extra Large held at the floor: on its compact row, or as the list it fell back to.)
-        let xlHeld = plans.last.map { !$0.twoPane && $0.dial <= $0.floor + 0.5 } ?? false
         for (a, b) in zip(plans, plans.dropFirst()) where !a.list && !b.list && !a.twoPane && !b.twoPane {
-            // Under the owner's floor a layout gives up its grid or map (C3.3's pressure order, then the
-            // owner's rule), and neighbours may then match; that is the one allowed match.
-            let yielded = a.yielded || b.yielded
-            if a.grid == b.grid && !yielded {
-                failures.append("\(name): \(a.layout.rawValue) and \(b.layout.rawValue) have the same grid")
-            }
             if b.dial < a.dial - 0.5 {
                 failures.append("\(name): \(b.layout.rawValue)'s dial \(Int(b.dial)) is under \(a.layout.rawValue)'s \(Int(a.dial))")
             }
-            if a.layout == .medium {
-                if a.map == b.map && !yielded { failures.append("\(name): Medium and Large show the map the same way") }
-                if b.dial < a.dial + layoutStep - 0.5 && a.dial > a.floor + 0.5 {
-                    failures.append("\(name): Large's dial \(Int(b.dial)) is not 16 over Medium's \(Int(a.dial))")
-                }
-                if b.dial < a.dial + 0.5 && !xlHeld {
-                    failures.append("\(name): Large's dial \(Int(b.dial)) is not over Medium's \(Int(a.dial))")
-                }
+            if a.grid == b.grid && a.map == b.map && abs(a.dial - b.dial) < 0.5 {
+                failures.append("\(name): \(a.layout.rawValue) and \(b.layout.rawValue) are the same plan")
+            }
+        }
+        if golden && k == 1 {
+            let grids = plans.map(\.grid), maps = plans.map(\.map)
+            if grids != [.band, .quad, .six, .strip] || maps != [.card, .tile, .button, .button] {
+                failures.append("\(name): grids \(grids.map(\.rawValue)), maps \(maps.map(\.rawValue))")
             }
         }
         return failures
     }
 
-    /// One line per layout for a device and state: "medium: dial 358 (43% of H), 3-column grid, map tile,
-    /// tiles 80, bottom 0". For the self-tests' reports.
+    /// One line per layout for a device and state: "medium: dial 352 (40% of H), quad, map tile, tiles 79,
+    /// bottom 0". For the self-tests' reports.
     static func summary(w: CGFloat, h: CGFloat, s: CGFloat, hasSpot: Bool, locked: Bool, noCompass: Bool = false,
                         mac: Bool = false) -> [String] {
-        Layout.allCases.map { layout in
+        Layout.allCases.map { (layout: Layout) -> String in
             let p = plan(w: w, h: h, s: s, layout: layout, hasSpot: hasSpot, locked: locked, noCompass: noCompass, mac: mac)
             return "\(layout.rawValue): \(p.description)"
         }
     }
 
-    /// "dial 358 (43% of H), 3-column grid, map tile, tiles 80, bottom 0".
+    /// "dial 352 (40% of H), quad, map tile, tiles 79, bottom 0".
     var description: String {
-        let gridText: String
-        switch grid {
-        case .full: gridText = "3-column grid"
-        case .twoByTwo: gridText = "2 × 2 grid"
-        case .compact: gridText = "compact row"
-        case .list: gridText = "list"
-        }
+        let dialText = "dial \(Int(dial.rounded())) (\(Int((100 * share).rounded()))% of H)"
+        if list { return "\(dialText), scrolling list" }
         let mapText: String
         switch map {
         case .tile: mapText = "map tile"
-        case .card: mapText = mapStrip ? "map tile \(Int(mapHeight.rounded()))" : "map card \(Int(mapHeight.rounded()))"
-        case .button: mapText = "map in header"
+        case .card: mapText = "map card \(Int(mapHeight.rounded()))"
+        case .button: mapText = "map button"
         }
-        let dialText = "dial \(Int(dial.rounded())) (\(Int((100 * share).rounded()))% of H)"
-        if list { return "\(dialText), scrolling list" }
-        let foot = twoPane ? "pane spare \(Int(bottomSpare.rounded()))" : "bottom \(Int(bottomSpare.rounded()))\(centred ? " (centred)" : "")"
-        return "\(dialText), \(gridText), \(mapText)\(merged ? ", rows merged" : ""), tiles \(Int(tileHeight.rounded())), \(foot)"
+        let rows = rowHeights.map { "\(Int($0.rounded()))" }.joined(separator: "/")
+        let stepNames: [String] = steps.sorted { $0.rawValue < $1.rawValue }.map { String(describing: $0) }
+        let gaveUp: String = stepNames.isEmpty ? "" : ", gave up " + stepNames.joined(separator: " ")
+        let spare = Int(bottomSpare.rounded())
+        let foot: String
+        if twoPane {
+            foot = "pane spare \(spare)" + (trailingScrolls ? ", scrolls" : "")
+        } else {
+            foot = "bottom \(spare)" + (centred ? " (centred)" : "")
+        }
+        let tiles: String = rows.isEmpty ? "none" : rows
+        let targets = "Targets \(targetsRows) × \(Int(targetsRowHeight.rounded()))"
+        return "\(dialText), \(grid.rawValue), \(mapText), \(targets), tiles \(tiles)\(gaveUp), \(foot)"
     }
 }

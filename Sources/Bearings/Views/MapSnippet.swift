@@ -9,7 +9,7 @@ import SwiftUI
 /// Apple Maps' logo and Legal link. In the map sheet (`bleed`) it runs edge to edge under the sheet's
 /// translucent bar (`topInset`). As a **thumbnail** (the Map tile, C3.4 #9) it is a still picture
 /// (MKMapSnapshotter) north up with your dot and heading cone, no controls and no gestures, on a 24 pt
-/// bottom band (40% scrim) with "MAP" and an expand glyph leading and the Maps attribution trailing; the
+/// bottom scrim (clear to black at 65%) with "MAP" and an expand glyph leading and the Maps attribution trailing; the
 /// live map's Legal link no longer lands in the middle of a 130 pt tile (the map sheet carries it). There
 /// is no fade over it. At night it is grey and at 15% brightness or less, so it is never the brightest
 /// thing on screen.
@@ -201,7 +201,7 @@ private struct MapThumbnail: View {
                 .colorMultiply(dimmed ? Color(white: MapSnippet.nightBrightness) : Color.white)
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                     Text("MAP")
                         .font(.system(size: Look.tileCaptionSize * k, weight: .semibold))
                         .tracking(Look.tileCaptionTracking)
@@ -215,7 +215,9 @@ private struct MapThumbnail: View {
                 .lineLimit(1)
                 .padding(.horizontal, 8)
                 .frame(width: geo.size.width, height: MapSnippet.captionBand)
-                .background(Color.black.opacity(0.4))
+                // A 24 pt scrim: clear to black at 65%.
+                .background(LinearGradient(colors: [Color.black.opacity(0), Color.black.opacity(0.65)],
+                                           startPoint: .top, endPoint: .bottom))
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .task(id: Self.key(fix, geo.size)) {

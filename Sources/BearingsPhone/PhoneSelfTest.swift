@@ -17,14 +17,14 @@ enum PhoneSelfTest {
 
         for (name, ok) in CoreChecks.run() { check(ok, name) }
 
-        // The layout planner (docs/REFINE.md Cycle 3 §C3.3, one rule set with Android): every device × layout ×
-        // state × compass × text size keeps every gap at its token × k, the header at the safe top + 8, no
-        // more than 24 empty at the bottom (unless the panel is centred), nothing cut, every dial at its floor
-        // (the owner's 0.40 H in portrait) or more, tiles under their cap, rows whose widths and gutters add up
-        // to C, and neighbouring layouts with different grids (Medium and Large also a different map surface
-        // and 16 of dial) unless one gave its grid up to keep the dial at 0.40 H.
+        // The layout planner (docs/REFINE.md "Concept A (chosen)", the same steps as Android): every device ×
+        // layout × state × compass × text size keeps every gap at its token, the dial 18 under the safe top
+        // (12 after giving way) with nothing above it, the location card under the status line, the Targets
+        // card's rows, no more than 24 empty at the bottom (unless the stack is centred), nothing cut, every
+        // dial at the owner's 0.40 H or more, rows whose widths add up to C, the dials in order and
+        // neighbouring layouts never the same plan; the golden phones keep band / quad / six / strip.
         let planFailures = LayoutPlan.tableFailures()
-        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, header pinned, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, nothing above the dial, location card under the status line, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
         let summaryDevices: [(String, CGFloat, CGFloat, CGFloat)] = [
             ("iPhone SE", 375, 667, 647), ("iPhone 16", 393, 852, 759), ("iPhone 16 Pro", 402, 874, 778),
             ("iPad 11 portrait", 834, 1210, 1166),
@@ -52,27 +52,27 @@ enum PhoneSelfTest {
             }
         }
         check(ownerFailures.isEmpty, "Owner's rule: dial ≥ 40% of H in portrait (\(ownerFailures.isEmpty ? "every layout, sample and live, Text Size 1.0 and 1.3" : ownerFailures.prefix(3).joined(separator: "; ")))")
-        // No "…" anywhere (C2): the tiles' and the header's strings, and what the tiles and the header must
+        // No "…" anywhere: the tiles' and the location card's strings, and what the tiles and the card must
         // hold measured in the system font on every device, at Text Size 1.0 and 1.3.
         let sampleTimes = Sky.sunTimes(at: Navigator.sampleTime, lat: 39.09898, lon: -106.94117)
         if let rise = sampleTimes.sunriseDate, let set = sampleTimes.sunsetDate {
             let fit = MainView.fitFailures(sunrise: rise, sunset: set, now: Navigator.sampleTime, lat: 39.09898, lon: -106.94117)
-            check(fit.isEmpty, "No ellipsis in the tiles, the lock row or the header (\(fit.isEmpty ? "every value fits or wraps" : fit.prefix(3).joined(separator: "; ")))")
+            check(fit.isEmpty, "No ellipsis in the tiles, the Targets card or the location card (\(fit.isEmpty ? "every value fits or wraps" : fit.prefix(3).joined(separator: "; ")))")
         } else {
-            check(false, "No ellipsis in the tiles or the header time (no sunrise for the sample)")
+            check(false, "No ellipsis in the tiles or the location card's time (no sunrise for the sample)")
         }
-        // What is drawn (C3): the no-heading dash on the digits' midline (it drew as "_ °"), both Position
-        // lines at one size, and the whole screen against its plan in every layout and state: the header
-        // pinned, the grid each layout plans (Large is not Medium), and no more empty at the bottom than planned.
-        let dash = MainView.dashFailures()
-        check(dash.isEmpty, "No-heading readout drawn as a centred dash (\(dash.isEmpty ? "within 4 pt of the digits' midline" : dash.prefix(2).joined(separator: "; ")))")
+        // What is drawn: "No heading" in words where the readout goes (it replaces the drawn dash), both
+        // Position lines at one size, and the whole screen against its plan in every layout and state: the
+        // location card where planned, the grid each layout plans, and no more empty at the bottom than planned.
+        let noHeading = MainView.noHeadingFailures()
+        check(noHeading.isEmpty, "No heading in words (\(noHeading.isEmpty ? "centred, 12 under the dial, 34 semibold, white 55%" : noHeading.prefix(2).joined(separator: "; ")))")
         let position = MainView.positionSizeFailures()
         check(position.isEmpty, "Both Position lines drawn at one size\(position.isEmpty ? "" : " (\(position.joined(separator: "; ")))")")
         let drawNav = Navigator(defaults: UserDefaults(suiteName: "bearings.selftest.drawing") ?? .standard)
         let drawSizes: [(CGFloat, CGFloat)] = [(402, 874), (375, 667), (834, 1210)]
         for (w, h) in drawSizes {
             let drawn = MainView.drawingFailures(nav: drawNav, width: w, height: h)
-            check(drawn.failures.isEmpty, "Screen drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "header pinned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
+            check(drawn.failures.isEmpty, "Screen drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "location card where planned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
             lines += drawn.info.map { "INFO \($0)" }
         }
         // Night secondary text: at least 4.5:1 on black (§4.3).

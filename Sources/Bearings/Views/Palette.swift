@@ -71,6 +71,8 @@ enum Palette {
         static let fill = 0.12
         static let tile = 0.08
         static let rowFill = 0.07
+        /// "No heading" in place of the readout when there is no compass (Concept A).
+        static let noHeading = 0.55
     }
 
     // MARK: The lock row (docs/REFINE.md C3.4 #7, the same on both ports)
@@ -212,8 +214,12 @@ struct Ramp {
     static let phone = Ramp(title: 17, subtitle: 13, caption: Look.tileCaptionSize, value: Look.tileValueSize,
                             valueWeight: .medium, secondary: Look.tileSecondarySize, compactValue: Look.compactValueSize,
                             singleValue: 20, insetH: Look.tilePaddingH, insetV: Look.tilePaddingV)
-    static let tablet = Ramp(title: 22, subtitle: 15, caption: 13, value: 22, valueWeight: .semibold, secondary: 15,
-                             compactValue: 20, singleValue: 26, insetH: 14, insetV: 14)
+    /// iPad and large windows (Concept A's regular-width ramp): captions 13, values 22 medium, tiles 12 × 16.
+    static let tablet = Ramp(title: 20, subtitle: 15, caption: 13, value: 22, valueWeight: .medium, secondary: 15,
+                             compactValue: 20, singleValue: 26, insetH: 16, insetV: 12)
+    /// The scrolling list (accessibility sizes): caption 15 leading, value 22 medium trailing, secondary 17.
+    static let list = Ramp(title: 24, subtitle: 17, caption: 15, value: 22, valueWeight: .medium, secondary: 17,
+                           compactValue: 22, singleValue: 22, insetH: 16, insetV: 12)
 }
 
 /// The sky behind the place card, as in Two Degrees, following the sun's real altitude where you are: deep

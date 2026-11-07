@@ -45,22 +45,22 @@ enum SelfTest {
 
         check(Updater.isNewer("0.2.0", than: "0.1.9") && !Updater.isNewer("0.1.0", than: "0.1.0") && !Updater.isNewer("1.0", than: "dev"), "Update version comparison")
 
-        // The layout planner (docs/REFINE.md Cycle 3 §C3.3, one rule set with Android): every device × layout ×
-        // state × compass × text size keeps every gap at its token × k, the header at the safe top + 8 (24
-        // from a Mac window's edge), no more than 24 empty at the bottom (unless the panel is centred),
-        // nothing cut, every dial at its floor (the owner's 0.40 H) or more, tiles under their cap, rows whose
-        // widths and gutters add up to C, and neighbouring layouts with different grids (Medium and Large also
-        // a different map surface and 16 of dial) unless one gave its grid up to keep the dial at 0.40 H.
+        // The layout planner (docs/REFINE.md "Concept A (chosen)", the same steps as Android): every device ×
+        // layout × state × compass × text size keeps every gap at its token, the dial 18 under the safe top
+        // (12 after giving way) with nothing above it, the location card under the status line, the Targets
+        // card's rows, no more than 24 empty at the bottom (unless the stack is centred), nothing cut, every
+        // dial at the owner's 0.40 H or more, rows whose widths add up to C, the dials in order and
+        // neighbouring layouts never the same plan; the golden phones keep band / quad / six / strip.
         let planFailures = LayoutPlan.tableFailures()
-        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, header pinned, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, nothing above the dial, location card under the status line, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
         let mac = LayoutPlan.plan(w: 420, h: 840, s: 840, hasSpot: true, locked: true, mac: true)
         let macLarge = LayoutPlan.plan(w: 420, h: 840, s: 840, layout: .large, hasSpot: true, locked: true, mac: true)
-        check(abs(mac.dial - 358) < 1 && mac.layout == .medium && mac.grid == .full && mac.map == .tile && mac.bottomSpare <= LayoutPlan.maxSpare,
-              "Medium at 420 × 840 with the sample: dial \(Int(mac.dial.rounded())) pt, 3-column grid with the Map tile, \(Int(mac.bottomSpare.rounded())) pt spare")
-        check(macLarge.grid == .twoByTwo && macLarge.map == .button && macLarge.dial >= mac.dial + LayoutPlan.layoutStep - 0.5,
-              "Large at 420 × 840 with the sample: 2 × 2, the map in the header, dial \(Int(macLarge.dial.rounded())) pt (16 or more over Medium's)")
-        check(mac.margin == LayoutPlan.macInset && mac.topInset == LayoutPlan.macInset && mac.bottomInset == LayoutPlan.macInset,
-              "Mac window margins \(Int(mac.margin)) / \(Int(mac.topInset)) / \(Int(mac.bottomInset)) pt (24 on every edge)")
+        check(abs(mac.dial - 336) < 1 && mac.layout == .medium && mac.grid == .quad && mac.map == .tile && mac.bottomSpare <= LayoutPlan.maxSpare,
+              "Medium at 420 × 840 with the sample: dial \(Int(mac.dial.rounded())) pt, 2 × 2 with the Map tile, \(Int(mac.bottomSpare.rounded())) pt spare")
+        check(macLarge.grid == .six && macLarge.map == .button && macLarge.dial >= mac.dial - 0.5,
+              "Large at 420 × 840 with the sample: 3 × 2, the map in the location card, dial \(Int(macLarge.dial.rounded())) pt (at least Medium's)")
+        check(mac.margin == LayoutPlan.macInset && abs(mac.dialTop - LayoutPlan.macTitleBand - LayoutPlan.topGap) < 0.5 && mac.bottomInset == LayoutPlan.macInset,
+              "Mac window: sides \(Int(mac.margin)), dial top \(Int(mac.dialTop)) (28 + 18), bottom \(Int(mac.bottomInset)) pt")
         // The owner's hard rule: the compass takes up at least 40% of the window. At 420 × 840 and the smallest
         // window, at Text Size 1.0 and 1.3, every layout's dial is at least min(0.40 H, its width cap) with the
         // sample (locked and marked) and live; a dial under it fails.
@@ -86,26 +86,26 @@ enum SelfTest {
                 lines.append("INFO \(Int(w)) × \(Int(h)), live: \(line)")
             }
         }
-        // No "…" anywhere (C2): the tiles' and the header's strings, and what the tiles and the header must
+        // No "…" anywhere: the tiles' and the location card's strings, and what the tiles and the card must
         // hold measured in the system font on every device, at Text Size 1.0 and 1.3.
         if let rise = Sky.sunTimes(at: Navigator.sampleTime, lat: 39.09898, lon: -106.94117).sunriseDate,
            let set = Sky.sunTimes(at: Navigator.sampleTime, lat: 39.09898, lon: -106.94117).sunsetDate {
             let fit = MainView.fitFailures(sunrise: rise, sunset: set, now: Navigator.sampleTime, lat: 39.09898, lon: -106.94117)
-            check(fit.isEmpty, "No ellipsis in the tiles, the lock row or the header (\(fit.isEmpty ? "every value fits or wraps" : fit.prefix(3).joined(separator: "; ")))")
+            check(fit.isEmpty, "No ellipsis in the tiles, the Targets card or the location card (\(fit.isEmpty ? "every value fits or wraps" : fit.prefix(3).joined(separator: "; ")))")
         } else {
-            check(false, "No ellipsis in the tiles or the header time (no sunrise for the sample)")
+            check(false, "No ellipsis in the tiles or the location card's time (no sunrise for the sample)")
         }
-        // What is drawn (C3): the no-heading dash on the digits' midline (it drew as "_ °"), both Position
-        // lines at one size, and the whole window against its plan in every layout and state: the header
-        // pinned, the grid each layout plans (Large is not Medium), and no more empty at the bottom than planned.
-        let dash = MainView.dashFailures()
-        check(dash.isEmpty, "No-heading readout drawn as a centred dash (\(dash.isEmpty ? "within 4 pt of the digits' midline" : dash.prefix(2).joined(separator: "; ")))")
+        // What is drawn: "No heading" in words where the readout goes (it replaces the drawn dash), both
+        // Position lines at one size, and the whole screen against its plan in every layout and state: the
+        // location card where planned, the grid each layout plans, and no more empty at the bottom than planned.
+        let noHeading = MainView.noHeadingFailures()
+        check(noHeading.isEmpty, "No heading in words (\(noHeading.isEmpty ? "centred, 12 under the dial, 34 semibold, white 55%" : noHeading.prefix(2).joined(separator: "; ")))")
         let position = MainView.positionSizeFailures()
         check(position.isEmpty, "Both Position lines drawn at one size\(position.isEmpty ? "" : " (\(position.joined(separator: "; ")))")")
         let drawNav = Navigator(defaults: UserDefaults(suiteName: "bearings.selftest.drawing") ?? .standard)
         for (w, h) in [(CGFloat(420), CGFloat(840)), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
             let drawn = MainView.drawingFailures(nav: drawNav, width: w, height: h)
-            check(drawn.failures.isEmpty, "Window drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "header pinned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
+            check(drawn.failures.isEmpty, "Window drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "location card where planned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
             lines += drawn.info.map { "INFO \($0)" }
         }
         // Night secondary text: at least 4.5:1 on black (§4.3).
@@ -133,7 +133,7 @@ enum SelfTest {
         check(render(screen(nav, width: 420, height: 840), to: folder.appendingPathComponent("mac-night.png")),
               "Drew night mode (mac-night.png)")
         nav.nightMode = night
-        // No compass (as on every Mac): the drawn dash, the rose at 40% and the two-line note.
+        // No compass (as on every Mac): "No heading", the rose at 40% and the note.
         nav.showSample(noCompass: true)
         check(nav.noCompass && nav.heading == nil, "Sample without a compass has no heading")
         check(render(screen(nav, width: 420, height: 840), to: folder.appendingPathComponent("mac-nocompass.png")),

@@ -71,6 +71,10 @@ object Palette {
     /** The lock row (C3.4 #7): maroon, with a 1 dp edge; red through night mode's multiply. */
     val lockFill = Color(0xFF3D2128)
     val lockStroke = Color(0xFF5A2C38)
+    /** Small's band along the map card's bottom (Concept A, A.3): solid, as Android has no blur. */
+    val band = Color(0xFF16191A)
+    /** The speed chip on a map tile (Concept A, A.2). */
+    val speedChip = Color(0xFF2A2D30)
     /** The dividers inside a widget (the same as border). */
     val widgetRule = border
 }
@@ -92,8 +96,8 @@ object Op {
     const val ROW_FILL = 0.07f
     /** Secondary text in night mode: white at 90% through the red multiply is #E6291C, about 4.7:1 on black (§4.3). */
     const val NIGHT_SECONDARY = 0.9f
-    /** The readout's "—°" before there is a heading. */
-    const val NO_HEADING = 0.4f
+    /** "No heading", the words that take the readout's place with no compass (Concept A, A.2). */
+    const val NO_HEADING = 0.55f
 }
 
 /** True while night mode's red multiply is on, for colours that must stay legible through it. */

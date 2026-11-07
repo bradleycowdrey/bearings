@@ -1,9 +1,11 @@
 name: Tests
 
 # Every push and pull request: the Swift unit tests (coordinate formats against Tests/fixtures/geo.json,
-# units, terms schedule, and the layout planner's golden table with Cycle 3's checks (docs/REFINE.md C3.3):
-# the header at the safe top + 8, every gap a token × k, 24 or less spare, rows that add up to C, no "…" in a
-# tile or the header time, neighbouring layouts on a different grid and map surface, Mac edges;
+# units, terms schedule, and the layout planner's golden table with Concept A's checks (docs/REFINE.md A.11):
+# the dial at the safe top + 18 and at least 40% of H, the location card below the status line, the Targets
+# card's rows, every gap a token × k, 24 or less spare, rows that add up to C, no "…" in a tile or the
+# location card, Large's sixth tile (pressure or speed), two rows at large text, the four layouts distinct,
+# two panes, Mac edges;
 # Tests/BearingsTests/LayoutPlanTests.swift) on a Mac, and the web app's tests at phone, tablet and desktop sizes.
 on:
   push:

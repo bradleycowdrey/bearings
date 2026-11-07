@@ -20,18 +20,18 @@ import kotlin.math.abs
 /**
  * `--ez selftest true` in the emulator (CI): the core formats, sun, moon and distances, a real location
  * fix (CI places the emulator at Maroon Bells, Colorado), the live ground elevation and place name for it,
- * the compass state, the widget's saved data, and the bottom-up layout planner (docs/REFINE.md §3.3, §4.7):
- * the golden table (C3.3: devices × layouts × sample, live, no compass, locked, marked × text sizes, portrait and
- * landscape) must keep every gap at its token × k, leave at most 24 dp at the bottom, show no block partly, keep
- * tiles under their cap and every dial at or above its floor (the owner's rule: in one portrait column at text sizes
- * up to 1.3, no dial under min(0.40 H, C − 16)), and give four distinct layouts (each step changes the
- * grid, Medium → Large moves the map to the header, Large's dial is 16 or more over Medium's), as must the plan
- * for this screen; every tile row's widths and gaps add up to its column; the header time and the Sun times never
- * need "…" at text sizes 1.0, 1.3 and 2.0 (measured with the app's own font); the no-heading dash is rendered and
- * its ink found on the digits' centre-line (not the string compared); both Position lines share one size; the lock
- * row's label and cue never split; the map labels are one upright colour; coordinates never carry "…"; and night
- * mode's secondary text is 4.5:1 or better. Writes files/report.txt, first line "ALL PASSED" or "FAILED …"; CI
- * then photographs the screen.
+ * the compass state, the widget's saved data, and the layout planner of Concept A (docs/REFINE.md "Concept A
+ * (chosen)", A.11): the golden table (devices × layouts × sample, live, no compass, locked, marked × text sizes,
+ * portrait and landscape) must keep the dial's top at safe top + 18 (12 given way) with nothing above it, the location
+ * card under the status line, every gap at its token, at most 24 dp at the bottom, the Targets card's rows, every
+ * dial at 40% of H or more in one portrait column (the owner's rule, the list included), and four distinct layouts
+ * (band / quad / six / strip with card / tile / button / button on the golden phones), as must the plan for this
+ * screen; every tile row's widths, gaps and insets add up to its column; the location card's time and the Sun times
+ * never need "…" and never break at text sizes 1.0, 1.3 and 2.0 (measured with the app's own font); "No heading" is
+ * rendered and its ink measured (centred, 12 under the dial, cap height 24, 150–200 wide, white 55%, words not a
+ * bar); both Position lines share one size; the lock row's label and cue never split or cut; the map labels are one
+ * upright colour; coordinates never carry "…"; and night mode's secondary text is 4.5:1 or better. Writes
+ * files/report.txt, first line "ALL PASSED" or "FAILED …"; CI then photographs the screen.
  */
 object SelfTest {
     suspend fun run(context: Context, nav: Navigator) {
@@ -77,7 +77,7 @@ object SelfTest {
         check(nav.placeKnown && nav.title.isNotBlank(), "Header names the place (${nav.title})")
         check(nav.sunText != null, "Sunrise and sunset for the fix (${nav.sunText})")
 
-        // The layout planner's golden table (C3.3): devices × layouts × states (sample, live, no compass, locked,
+        // The layout planner's golden table (A.11): devices × layouts × states (sample, live, no compass, locked,
         // marked) × text sizes 1.0 to 2.0, portrait and landscape.
         val broken = LayoutPlan.tableFailures()
         check(broken.isEmpty(), "Layout planner golden table (${if (broken.isEmpty()) "all cases" else broken.take(3).joinToString("; ")})")
@@ -89,54 +89,50 @@ object SelfTest {
             check(false, "Layout plan for this screen (none drawn)")
         } else {
             val f = { v: Float -> "%.0f".format(java.util.Locale.US, v) }
-            val what = "layout ${plan.layout.id}: ${plan.resultLine} (floor ${f(plan.floor)}), tiles ${f(plan.tile)}, " +
-                "over the dial ${f(plan.topExtra)}, bottom ${f(plan.bottomSpare)} dp, H ${f(h)} dp" +
-                (if (plan.centred) ", centred" else "") + (if (plan.twoPane) ", two panes" else "") + (if (plan.list) ", one scrolling list" else "")
+            val what = "layout ${plan.layout.id}: ${plan.resultLine} (floor ${f(plan.floor)}), tiles ${f(plan.tile)} / ${f(plan.tile2)}, " +
+                "dial top ${f(plan.dialTop)}, location card at ${f(plan.locationTop)}, bottom ${f(plan.bottomSpare)} dp, H ${f(h)} dp" +
+                (if (plan.given.isEmpty()) "" else ", gave way: ${plan.given.joinToString { it.name.lowercase() }}") +
+                (if (plan.twoPane) ", two panes" else "") + (if (plan.list) ", one scrolling list" else "")
             val ok = plan.list || plan.twoPane ||
-                ((plan.bottomSpare <= LayoutPlan.BOTTOM_SPARE_MAX + 0.5f || plan.centred) && plan.used <= s + 0.5f && plan.dial + 0.5f >= plan.floor)
+                ((plan.bottomSpare <= LayoutPlan.BOTTOM_SPARE_MAX + 0.5f || plan.held) && plan.used <= s + 0.5f && plan.dial + 0.5f >= plan.floor)
             check(ok, "Layout plan for this screen ($what)")
-            // The owner's rule on this screen: in one portrait column below accessibility sizes, the dial is at least
-            // min(0.40 H, C − 16).
+            // The owner's rule on this screen: in one portrait column the dial is at least 40% of H.
             val w0 = LayoutPlan.lastWidth
-            val accessibility = context.resources.configuration.fontScale >= 1.5f
-            if (w0 < h && !plan.twoPane && !accessibility) {
-                val owner = LayoutPlan.ownerFloor(LayoutPlan.columnWidth(w0, h, false), h)
+            if (w0 < h && !plan.twoPane) {
+                val owner = LayoutPlan.ownerFloor(w0, h)
                 check(plan.dial + 0.5f >= owner,
                     "Owner's rule: dial ≥ 40% of H on this screen (dial ${f(plan.dial)} = ${"%.1f".format(java.util.Locale.US, 100 * plan.dial / h)}% of H ${f(h)}, floor ${f(owner)})")
             }
-            // The frozen gaps (C3.2 #1): every gap is its token × k, and the header sits 8 under the status bar.
+            // The frozen gaps (A.1): the dial 18 under the status bar (12 given way), nothing above it; then 12, 6 × k,
+            // 12 (8) to the location card under the status line, 8, 8, 8.
             val k = plan.k
-            val tokens = abs(plan.headerGap - plan.topExtra - 12f * k) < 0.01f && abs(plan.dialGap - 12f * k) < 0.01f &&
-                abs(plan.statusGap - 6f * k) < 0.01f && abs(plan.lockGap - 8f * k) < 0.01f && abs(plan.spotGap - 8f * k) < 0.01f &&
-                abs(plan.gridGap - 8f * k) < 0.01f && abs(plan.rowGap - 8f * k) < 0.01f && abs(plan.mapGap - 12f * k) < 0.01f
-            val gapsOk = tokens && LayoutPlan.TOP == 8f && (plan.topExtra <= LayoutPlan.SLACK_MAX + 0.5f || plan.centred)
-            check(gapsOk, "Gaps are tokens × k, header at safe top + 8 (12 / 12 / 6 / 8 / 8 / 8 / 8 / 12 × ${"%.2f".format(java.util.Locale.US, k)})")
-            // The four layouts on this screen (C3.2 #2): each step changes the grid, and the map moves card → tile → header.
+            val topOk = plan.dialTop == LayoutPlan.DIAL_TOP || (plan.dialTop == LayoutPlan.DIAL_TOP_TIGHT && LayoutPlan.Step.GAPS in plan.given)
+            val cardOk = plan.twoPane || abs(plan.locationTop - (plan.statusTop + plan.status + plan.cardGap)) < 0.01f
+            val tokens = plan.dialGap == 12f && abs(plan.statusGap - 6f * k) < 0.01f && plan.targetsGap == 8f && plan.gridGap == 8f && plan.rowGap == 8f
+            check(topOk && cardOk && tokens, "Dial at safe top + ${f(plan.dialTop)}, location card under the status line, gaps 12 / 6 × k / ${f(plan.cardGap)} / 8 / 8 / 8")
+            // The four layouts on this screen (A.4): neighbours differ in grid, map surface or dial.
             val w = LayoutPlan.lastWidth
             val here = Layout.entries.map {
                 LayoutPlan.plan(w, h, s, it, locked = plan.locked, hasSpot = plan.hasSpot, isLandscapePhone = w > h && s < LayoutPlan.LANDSCAPE_PHONE,
                     noHeading = plan.noHeading)
             }
-            // A layout that gave up its grid or card for the owner's floor may share its neighbour's grid.
-            val alike = here.zipWithNext().filter { (a, b) ->
-                !a.list && !b.list && a.grid == b.grid && a.rung == LayoutPlan.Rung.OWN && b.rung == LayoutPlan.Rung.OWN
-            }
+            val alike = here.zipWithNext().filter { (a, b) -> !a.list && !b.list && a.grid == b.grid && a.map == b.map && abs(a.dial - b.dial) < 8f }
             check(alike.isEmpty(), "Four distinct layouts on this screen (" + here.joinToString("; ") { "${it.layout.id}: ${it.resultLine}" } + ")")
         }
-        // The owner's rule across the table: every portrait single-column plan at text sizes 1.0 to 1.3, in every
-        // state, keeps the dial at min(0.40 H, C − 16) or more (the golden table fails on it too; this line reports
+        // The owner's rule across the table: every portrait single-column plan, every layout, state and text size
+        // (the list included), keeps the dial at 40% of H or more (the golden table fails on it too; this line reports
         // the smallest share).
         var leastShare = Float.MAX_VALUE; var leastName = ""
         val underOwner = mutableListOf<String>()
-        for (d in LayoutPlan.devices.filter { it.w < it.h }) for (l in Layout.entries) for (st in LayoutPlan.State.entries) for (k in listOf(1f, 1.15f, 1.3f)) {
+        for (d in LayoutPlan.devices.filter { it.w < it.h }) for (l in Layout.entries) for (st in LayoutPlan.State.entries) for (k in listOf(1f, 1.15f, 1.3f, 1.5f, 2f)) {
             val p = LayoutPlan.planFor(d, l, k, st)
-            val owner = LayoutPlan.ownerFloor(LayoutPlan.columnWidth(d.w, d.h, false), d.h)
+            val owner = LayoutPlan.ownerFloor(d.w, d.h)
             if (p.dial + 0.5f < owner) underOwner += "${d.name} ${l.id} ${st.id} k$k: ${p.dial} < $owner"
             if (p.dial / d.h < leastShare) { leastShare = p.dial / d.h; leastName = "${d.name} ${l.id} ${st.id} k$k" }
         }
-        check(underOwner.isEmpty(), "Owner's rule: dial ≥ min(0.40 H, C − 16) in every portrait plan (" +
+        check(underOwner.isEmpty(), "Owner's rule: dial ≥ 40% of H in every portrait plan (" +
             (underOwner.firstOrNull() ?: "least ${"%.1f".format(java.util.Locale.US, 100 * leastShare)}% of H, $leastName") + ")")
-        // Every tile row's widths and 8 dp gaps add up to its column (C2.2 #1), on every device, layout, state and text size.
+        // Every tile row's widths, gaps and insets add up to its column, on every device, layout, state and text size.
         val ks = listOf(1f, 1.3f, 2f)
         val offColumn = LayoutPlan.devices.flatMap { d ->
             Layout.entries.flatMap { l ->
@@ -144,16 +140,16 @@ object SelfTest {
                     ks.flatMap { k ->
                         val p = LayoutPlan.planFor(d, l, k, st)
                         p.rows.mapNotNull { r ->
-                            val sum = r.widths.sum() + LayoutPlan.ROW_GAP * (r.widths.size - 1)
-                            if (abs(sum - p.column) > 0.01f) "${d.name} ${l.id} k$k ${st.id} ${r.tiles}: $sum in ${p.column}" else null
+                            if (abs(r.total - p.column) > 0.01f) "${d.name} ${l.id} k$k ${st.id} ${r.tiles}: ${r.total} in ${p.column}" else null
                         }
                     }
                 }
             }
         }
-        val compact = LayoutPlan.compactWidths(370f).joinToString(" | ") { "%.0f".format(java.util.Locale.US, it) }
-        check(offColumn.isEmpty(), "Tile rows add up to the column (${offColumn.firstOrNull() ?: "all; compact row at C = 370: $compact"})")
-        // No "…" anywhere: the header time and the Sun tile, at 1.0, 1.3 and 2.0, measured with Inter as the screen draws it.
+        val six = LayoutPlan.rows(GridMode.SIX, com.bradcowdrey.bearings.ui.MapMode.BUTTON, 370f)[0].widths.joinToString(" | ") { "%.0f".format(java.util.Locale.US, it) }
+        check(offColumn.isEmpty(), "Tile rows add up to the column (${offColumn.firstOrNull() ?: "all; six at C = 370: $six"})")
+        // No "…" anywhere: the location card's time and every Sun time, at 1.0, 1.3 and 2.0, measured with Inter as the
+        // screen draws it. Times never break: "↑ 6:36 AM" fits at 0.85 or more, or with AM at 11 on the same line.
         val regular = ResourcesCompat.getFont(context, R.font.inter_regular)
         val medium = ResourcesCompat.getFont(context, R.font.inter_medium)
         val semibold = ResourcesCompat.getFont(context, R.font.inter_semibold)
@@ -166,61 +162,84 @@ object SelfTest {
         for (d in LayoutPlan.devices) for (l in Layout.entries) for (k in ks) {
             val p = LayoutPlan.planFor(d, l, k, LayoutPlan.State.SAMPLE)
             val name = "${d.name} ${l.id} k$k"
-            // Header line 2: the bar's width less its 14 inset, the sky symbol and gaps, ⋯, the map button and
-            // the Sample pill (13 semibold, 8 each side, 6 before it), which trails line 2 except in the list.
-            val bar = if (p.twoPane || p.list) d.w - 2 * p.margin else p.column
-            val pill = if (p.list) 0f else 6f + width("Sample", 13f * k, semibold) + 16f
-            val room = bar - 14f - 8f - 20f - 4f - 48f - (if (p.mapButton) 48f else 0f) - pill
+            // Location card line 2: the card less its 16 inset, the sky glyph's 32 slot, 8, ⋯'s 48, 4, the map
+            // button's slot and the Sample pill (12 semibold, 8 each side, 6 before it), which trails line 2 except in the list.
+            val pill = if (p.list) 0f else 6f + width("Sample", 12f * k, semibold) + 16f
+            val room = p.column - 16f - 8f - 32f - 48f - 4f - (if (p.mapButtonSlot) 48f else 0f) - pill
             for ((long, short, time) in dates) {
                 val lines = TextFit.headerLines(long, short, time) { width(it, 13f * k, regular) <= room }
                 if (lines.size > 1) wrapped++
-                if (lines.any { '…' in it || width(it, 13f * k, regular) > room }) cutText += "$name header $lines in ${room.toInt()}"
+                if (lines.any { '…' in it || width(it, 13f * k, regular) > room }) cutText += "$name location card $lines in ${room.toInt()}"
             }
-            // The Sun tile: "↑ 6:36 AM" at 0.85 or more, else "↑ 6:36" over "AM".
+            // Every Sun time as drawn: the band (13 semibold), the strip (15 medium), Large's Sunrise (16), the tablet
+            // and list ramps (22), otherwise 15 (semibold in the compact row).
             val row = p.rows.firstOrNull { TileKind.SUN in it.tiles } ?: continue
             val cell = row.widths[row.tiles.indexOf(TileKind.SUN)]
-            val inner = if (p.grid == GridMode.ROWS) (cell - 36f) * 0.6f else cell - 24f
-            val small = p.grid == GridMode.COMPACT
-            val size = (if (small) 15f else 17f) * k * 0.85f
-            val face = if (small) semibold else medium
+            val (inner, size) = when {
+                p.list -> (cell - 32f) * 0.6f to 22f
+                p.grid == GridMode.BAND -> cell to 13f
+                p.grid == GridMode.STRIP -> cell - 24f to 15f
+                p.tablet -> cell - 32f to 22f
+                p.grid == GridMode.SIX -> cell - 20f to 16f
+                else -> cell - 24f to 15f
+            }
+            val face = if (p.grid == GridMode.ROW || p.grid == GridMode.BAND) semibold else medium
             for (t in times) {
-                if (width("↑ $t", size, face) <= inner) continue
+                val line = TextFit.sunLine("↑", t)
+                if (width(line, size * k * 0.85f, face) <= inner) continue
                 val (main, suffix) = TextFit.splitClock(t)
                 if (suffix != null) wrapped++
-                if ('…' in t || suffix == null || width("↑ $main", size, face) > inner) cutText += "$name Sun \"↑ $t\" in ${inner.toInt()}"
-            }
-        }
-        check(cutText.isEmpty(), "No \u2026 in the header time or the Sun tile at 1.0, 1.3 and 2.0 (" +
-            (cutText.firstOrNull() ?: "all devices and layouts; $wrapped wrap at a space instead") + ")")
-        // The no-heading dash, rendered (C3.2 #3): "228" and the bar drawn as the screen draws them (Inter at the
-        // readout's size, the bar centred CAP_HEIGHT / 2 above the baseline), then the rows of ink found in the
-        // pixels. The bar's centre must be within 4 dp of the digits' centre-line, and it must not sit on the
-        // baseline (the "_ °" of cycles 1–3).
-        val dashCases = listOf(56f, 64f, 70f, 80f * 1.3f)
-        val dashOff = dashCases.mapNotNull { size ->
-            val (centre, wide, high) = LayoutPlan.dash(size)
-            val bmp = android.graphics.Bitmap.createBitmap(400, 200, android.graphics.Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(bmp)
-            val baseline = 150f
-            val paint = Paint().apply { typeface = regular; textSize = size; isAntiAlias = true; color = android.graphics.Color.WHITE }
-            canvas.drawText("228", 10f, baseline, paint)
-            canvas.drawRoundRect(250f, baseline - centre - high / 2, 250f + wide, baseline - centre + high / 2, high / 2, high / 2, paint)
-            fun inkRows(x0: Int, x1: Int): Pair<Int, Int>? {
-                var top = -1; var bottom = -1
-                for (y in 0 until bmp.height) for (x in x0 until x1) {
-                    if (android.graphics.Color.alpha(bmp.getPixel(x, y)) > 128) { if (top < 0) top = y; bottom = y; break }
+                if ('…' in t || suffix == null || width("↑\u00A0$main\u202F", size * k * 0.85f, face) + width(suffix, 11f * k, medium) > inner) {
+                    cutText += "$name Sun \"$line\" in ${inner.toInt()}"
                 }
-                return if (top < 0) null else top to bottom
-            }
-            val digits = inkRows(0, 240); val bar = inkRows(240, 400)
-            bmp.recycle()
-            if (digits == null || bar == null) "size $size: nothing drawn"
-            else {
-                val dc = (digits.first + digits.second) / 2f; val bc = (bar.first + bar.second) / 2f
-                if (abs(dc - bc) > 4f || bar.second >= baseline - 2f) "size $size: bar centre $bc vs digits $dc" else null
             }
         }
-        check(dashOff.isEmpty(), "No-heading dash on the digits' centre-line, rendered (${dashOff.firstOrNull() ?: "56, 64, 70, 104 sp, within 4"})")
+        check(cutText.isEmpty(), "No … in the location card's time or the Sun times at 1.0, 1.3 and 2.0, times whole (" +
+            (cutText.firstOrNull() ?: "all devices and layouts; $wrapped shorten or drop AM to 11 instead") + ")")
+        // "No heading" (A.2), rendered: the words drawn as the screen draws them (Inter semibold 34 at white 55%, centred
+        // in the column, the line box trimmed to the cap height so the ink starts at the readout slot's top, 12 under
+        // the dial), then the ink found in the pixels: centred on the column ± 2, its top 12 ± 2 under the dial, a cap
+        // height of 24 ± 3, 150 to 200 wide, white at 0.55 ± 0.03, and words, not one horizontal bar.
+        val words = run {
+            val column = 370; val dialBottom = 40; val size = LayoutPlan.NO_HEADING_SIZE
+            val bmp = android.graphics.Bitmap.createBitmap(column, 120, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bmp)
+            val paint = Paint().apply {
+                typeface = semibold; textSize = size; isAntiAlias = true; letterSpacing = -0.2f / size; textAlign = Paint.Align.CENTER
+                color = android.graphics.Color.argb(Math.round(com.bradcowdrey.bearings.ui.Op.NO_HEADING * 255), 255, 255, 255)
+            }
+            val slotTop = dialBottom + LayoutPlan.DIAL_GAP
+            canvas.drawText(LayoutPlan.NO_HEADING_TEXT, column / 2f, slotTop + LayoutPlan.CAP_HEIGHT * size, paint)
+            var top = -1; var bottom = -1; var left = column; var right = -1; var maxAlpha = 0; var rows = 0
+            // The cap height from the "N" alone (the first ink columns), the box from everything.
+            var nTop = -1; var nBottom = -1
+            for (y in 0 until bmp.height) {
+                var any = false
+                for (x in 0 until column) {
+                    val a = android.graphics.Color.alpha(bmp.getPixel(x, y))
+                    if (a > 0) maxAlpha = maxOf(maxAlpha, a)
+                    if (a > 100) { any = true; if (top < 0) top = y; bottom = y; left = minOf(left, x); right = maxOf(right, x) }
+                }
+                if (any) rows++
+            }
+            if (right >= 0) for (y in 0 until bmp.height) for (x in left until minOf(left + 6, column)) {
+                if (android.graphics.Color.alpha(bmp.getPixel(x, y)) > 100) { if (nTop < 0) nTop = y; nBottom = y }
+            }
+            bmp.recycle()
+            val centre = (left + right) / 2f; val wide = right - left + 1; val cap = nBottom - nTop + 1
+            val alpha = maxAlpha / 255f
+            val problems = listOfNotNull(
+                "centre ${"%.1f".format(java.util.Locale.US, centre)} of ${column / 2}".takeIf { abs(centre - column / 2f) > 2f },
+                "top ${top - dialBottom} under the dial".takeIf { abs(top - dialBottom - 12) > 2 },
+                "cap height $cap".takeIf { abs(cap - 24) > 3 },
+                "width $wide".takeIf { wide !in 150..200 },
+                "white ${"%.2f".format(java.util.Locale.US, alpha)}".takeIf { abs(alpha - 0.55f) > 0.03f },
+                "a single bar ($rows rows of ink)".takeIf { rows < 12 },
+            )
+            val summary = "ink $wide × $cap at ${top - dialBottom} under the dial, white ${"%.2f".format(java.util.Locale.US, alpha)}"
+            (if (right < 0) "nothing drawn" else problems.joinToString().ifEmpty { null }) to summary
+        }
+        check(words.first == null, "\"No heading\" in words, rendered (${words.first ?: words.second})")
         // Both Position lines at one size (C3.4 #12): the shared scale is the longer line's.
         val narrow = 120f
         val pScale = { line: String ->
@@ -230,9 +249,9 @@ object SelfTest {
         }
         val shared = TextFit.sharedScale(listOf("39.09898° N", "106.94117° W"), pScale)
         check(shared == minOf(pScale("39.09898° N"), pScale("106.94117° W")), "Both Position lines at one size (scale ${"%.2f".format(java.util.Locale.US, shared)})")
-        // The lock row (C3.4 #7): "Locked 240°" and "turn 12° right" never split inside a value, and where the two
-        // don't fit side by side (12 between, in the row less 14 + 48 + 4) the planner put the cue on a line of its
-        // own, where each part fits whole: measured with Inter for every single-column plan up to text size 1.3.
+        // The Targets card's lock row (A.2): "Locked 240°" and "turn 12° right" never split inside a value; side by
+        // side in the row less 16 + 18 + 8 and ✕'s 48 + 4, 12 between, at worst with the lead in its short form "240°"
+        // and both at 0.85: measured with Inter for every single-column plan up to text size 1.3.
         val lockCut = mutableListOf<String>()
         for (label in listOf("Locked 240° · turn 12° right", "Locked 360° · turn 180° right", "Locked 5° · on bearing")) {
             val (lead, cue) = TextFit.lockParts(label)
@@ -241,14 +260,13 @@ object SelfTest {
         val (lead, cue) = TextFit.lockParts("Locked 360° · turn 180° right")
         for (d in LayoutPlan.devices) for (l in Layout.entries) for (k in listOf(1f, 1.3f)) {
             val p = LayoutPlan.planFor(d, l, k, LayoutPlan.State.SAMPLE)
-            // The merged lock-and-spot row (the owner's floor's last give-up) has its own short form.
-            if (p.list || p.mergedRows || cue == null) continue
-            val room = (if (p.twoPane) p.trailingWidth else p.column) - 14f - 48f - 4f
-            val side = width(lead, 17f * k, regular) + 12f + width(cue, 17f * k, semibold) <= room
-            if (!side && !p.lockTwoLines) lockCut += "${d.name} ${l.id} k$k: no room side by side in ${room.toInt()}, and not on two lines"
-            if (p.lockTwoLines && (width(lead, 17f * k, regular) > room || width(cue, 15f * k, semibold) > room)) lockCut += "${d.name} ${l.id} k$k: a part is wider than ${room.toInt()}"
+            if (p.list || cue == null) continue
+            val size = (if (p.tablet || l == Layout.EXTRA_LARGE) 19f else if (l == Layout.SMALL) 16f else 17f) * k
+            val room = p.column - 16f - 18f - 8f - 48f - 4f
+            val worst = width(TextFit.shortLock(lead), size * 0.85f, regular) + 12f + width(cue, size * 0.85f, semibold)
+            if (worst > room) lockCut += "${d.name} ${l.id} k$k: ${worst.toInt()} in ${room.toInt()}"
         }
-        check(lockCut.isEmpty(), "Lock row: label and cue never split (${lockCut.firstOrNull() ?: "all plans"})")
+        check(lockCut.isEmpty(), "Lock row: label and cue never split or cut (${lockCut.firstOrNull() ?: "all plans"})")
         // The map's labels (C3.4 #8): one colour, upright regular, never italic or the style's cyan.
         val font = MapDark.labelFont
         check(MapDark.labelColor == "#C9D3D6" && font.isNotEmpty() && font.none { "Italic" in it || "Bold" in it },

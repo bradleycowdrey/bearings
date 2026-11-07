@@ -4,8 +4,10 @@ name: Mac
 # extension point), and runs `Bearings --selftest`: the core's known answers, a live ground elevation
 # from Open-Meteo, naming a place, the update check, the screen drawn with the sample place in every
 # layout, live and without a compass (docs/LAYOUTS.md §8), the layout planner's golden table from
-# docs/REFINE.md C3.3 (24 on every window edge, the header pinned, frozen gaps, rows that add up to C, the
-# four layouts distinct), the drawn no-heading dash on the digits' centre-line, and every widget size drawn. The
+# docs/REFINE.md "Concept A" A.11 (the dial at the title-bar band + 18 with nothing above it, the location
+# card below the status line, 24 on the other window edges, frozen gaps, rows that add up to C, the four
+# layouts distinct, two panes with the location card atop the right pane), "No heading" drawn in words
+# (measured on the rendered bitmap), and every widget size drawn. The
 # report and pictures go to the ci-shots branch; the job fails if any check fails or a layout isn't drawn.
 on:
   push:
@@ -71,7 +73,7 @@ jobs:
         run: |
           grep -E "^FAIL" "$RUNNER_TEMP/shots/report.txt" | sed 's/^/::error::/' || true
           # The screen in every layout (docs/LAYOUTS.md §8): Medium is mac-main.png; mac-nocompass.png is the
-          # no-compass state (the drawn dash, the note in the status line, Medium's grid); mac-live.png has
+          # no-compass state ("No heading" in words, the status line, Medium's grid); mac-live.png has
           # nothing locked or marked; mac-wide-*.png are two panes (a wide window, as iPad landscape).
           for F in mac-main mac-night mac-nocompass mac-live mac-layout-small mac-layout-large mac-layout-extraLarge mac-layout-extraLarge-min mac-wide-medium mac-wide-large; do
             [ -s "$RUNNER_TEMP/shots/$F.png" ] || { echo "::error::The self-test didn't draw $F.png"; exit 1; }
