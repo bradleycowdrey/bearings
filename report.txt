@@ -1,0 +1,42 @@
+ALL PASSED (41 checks)
+PASS Decimal degrees
+PASS Degrees, minutes, seconds
+PASS Degrees, decimal minutes
+PASS UTM
+PASS MGRS
+PASS Plus Code
+PASS Compass points
+PASS Short way round
+PASS Smoothing across north
+PASS Elevation in feet and metres
+PASS Sun's position
+PASS Sunrise and sunset
+PASS Midnight sun
+PASS Moon's position
+PASS Moon's phase
+PASS Distance and bearing
+PASS Distance in words
+PASS Speed and pressure
+PASS Nearest listed place (34191 places: 66 mi NE of Montrose, Colorado)
+PASS Place name at Maroon Bells (Aspen, Colorado)
+PASS Widget data saved and read back (Maroon Bells, Colorado, 9,587 ft, 53% · Last quarter)
+PASS Location fix (39.09898, -106.94117)
+PASS Elevation 2939 m (GPS ±2 ft)
+PASS Compass state (LIVE, heading 8)
+PASS Declination at Maroon Bells (8.3°)
+PASS Header names the place (Aspen, Colorado)
+PASS Sunrise and sunset for the fix (6:43 – 5:02)
+PASS Layout planner golden table (all cases)
+PASS Layout plan for this screen (layout medium: dial 379 · 3 columns · map tile (floor 363), tiles 88, over the dial 46, bottom 46 dp, H 914 dp, centred)
+PASS Owner's rule: dial ≥ 40% of H on this screen (dial 379 = 41.5% of H 914, floor 363)
+PASS Gaps are tokens × k, header at safe top + 8 (12 / 12 / 6 / 8 / 8 / 8 / 8 / 12 × 1.00)
+PASS Four distinct layouts on this screen (small: dial 363 · one row · map card 208; medium: dial 379 · 3 columns · map tile; large: dial 395 · 2 × 2 · map in header; extraLarge: dial 395 · one row · map in header)
+PASS Owner's rule: dial ≥ min(0.40 H, C − 16) in every portrait plan (least 39.8% of H, Pixel 7 small sample k1.0)
+PASS Tile rows add up to the column (all; compact row at C = 370: 146 | 104 | 104)
+PASS No … in the header time or the Sun tile at 1.0, 1.3 and 2.0 (all devices and layouts; 62 wrap at a space instead)
+PASS No-heading dash on the digits' centre-line, rendered (56, 64, 70, 104 sp, within 4)
+PASS Both Position lines at one size (scale 0.95)
+PASS Lock row: label and cue never split (all plans)
+PASS Map labels #C9D3D6 in [Noto Sans Regular]
+PASS Coordinates never contain … (all formats)
+PASS Night secondary text contrast 4.70:1 (4.5 or better)
