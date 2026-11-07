@@ -18,8 +18,8 @@ struct BearingsMacApp: App {
         WindowGroup(Brand.appName) {
             MainView(update: updater.available.map { (version: $0.version, url: $0.url) })
                 .environmentObject(nav)
-                // The smallest window holds every layout with the sample (locked and marked) and 16 at every
-                // edge (LayoutPlan.macMinHeight: header + dial + grid + insets).
+                // The smallest window holds every layout with the sample (locked and marked) and 24 at every
+                // edge (LayoutPlan.macMinWidth × macMinHeight: header + dial + grid + insets).
                 .frame(minWidth: LayoutPlan.macMinWidth, idealWidth: 420, minHeight: LayoutPlan.macMinHeight, idealHeight: 840)
                 .task { await launch() }
         }
@@ -52,7 +52,8 @@ struct BearingsMacApp: App {
                 .disabled(nav.fix == nil && nav.spot == nil)
             }
             CommandGroup(after: .toolbar) {
-                // View › Layout: how large the compass is (docs/LAYOUTS.md §6).
+                // View › Layout: how large the compass is, each with what it changes ("Bigger compass · map
+                // in header", docs/LAYOUTS.md §6).
                 Menu("Layout") {
                     Picker("Layout", selection: $nav.layout) {
                         ForEach(Layout.allCases) { layout in

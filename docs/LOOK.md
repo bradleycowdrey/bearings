@@ -6,7 +6,7 @@ covers what the app does. This page covers how it looks. Features, wording, acce
 Dynamic Type and font-scale behaviour, the 44-point targets, night mode, the self-tests and the CI
 launch arguments (`--sample`, `--format`, `--layout`, `--map-sheet`, `--no-compass`, `--show-terms`,
 `--selftest`) stay as they are. Layout (sizes, gaps, the planner and the four layouts) is in LAYOUTS.md,
-which follows REFINE.md Cycle 2.
+which follows REFINE.md Cycle 3.
 
 The tokens are in `Sources/Bearings/Views/Palette.swift` (Apple, shared with the widget extensions) and
 `android/app/src/main/java/com/bradcowdrey/bearings/ui/Theme.kt` (Android). Use the tokens and don't
@@ -47,8 +47,8 @@ the app they are replaced by the new tokens below, except where this page says t
 - **Type**: SF Pro on Apple devices, Inter on Android (as now; Inter has no Light, so where this page
   says light, Android uses Normal). Sizes below are at the default text size and scale with the
   column's `k` (DESIGN.md) as they do now.
-- **Captions**: 12 semibold, uppercase, tracking 0.3, white at 60%, with a symbol 11 semibold, 5 apart
-  (`CardCaption`). Captions are stored in normal case ("Latitude") and only shown in capitals, so
+- **Captions**: 11 semibold, uppercase, tracking 0.6, white at 60%, **text only** (no symbol), in tiles,
+  sheets and widgets alike (`CardCaption`). Captions are stored in normal case ("Latitude") and only shown in capitals, so
   VoiceOver and TalkBack still read the tile's own label.
 - **Buttons**: a white capsule with black text (`LookButtonStyle`). The full-width primary is 50 high,
   17 semibold. The compact one is 14 semibold with padding 14 × 8 (44 target kept by its row). Switches,
@@ -76,29 +76,31 @@ decorative and hidden from screen readers. It's 17 medium, white at 85%.
 
 ## Main screen, phone (top to bottom)
 
-Background `Palette.screen` (black) edge to edge. Column margins 16 (20 on iPad). The gaps between
-blocks are the planner's spacing tokens, 4 / 8 / 12 / 16 / 24 only (docs/LAYOUTS.md §3).
+Background `Palette.screen` (black) edge to edge. Column margins 16; on iPad the column is
+min(W − 48, 720), centred. The gaps between blocks are the planner's frozen tokens × k, never widened by
+spare height (docs/LAYOUTS.md §3).
 
 1. **Header bar** (replaces the title row, the sky card and the sky bar on every layout and platform;
-   docs/REFINE.md §3.2): 48 high (52 on iPad) × k, radius 14 (`Look.headerRadius`), full column width,
-   on the sky gradient (`skyCard(altitude:)`'s colours, unchanged). White type:
-   - Line 1: the place (`nav.placeTitle`), 17 semibold, one line. When too long the state is dropped
-     first ("Maroon Bells"), then it truncates.
-   - Line 2: "Sun, Nov 1 · 9:41 AM", 13 regular, white at 75%, tabular figures, then the **Sample** pill
-     (11 semibold, black on `Palette.notice`).
-   - The time never truncates: the date shortens to "Nov 1" first, then line 2 wraps at the "·"; at
-     k > 1.1, or with three trailing buttons, the Sample pill moves to line 1.
-   - Trailing, fixed on every layout: the sky symbol (20, decorative), then the **map button** (Extra
-     Large only; 44 × 44, 48 dp), then **⋯** (44 × 44, 48 dp; 8 apart). ⋯
+   docs/REFINE.md §3.2): 48 high (56 on iPad) × k, radius 14 (`Look.headerRadius`), full column width,
+   on the sky gradient (`skyCard(altitude:)`'s colours, unchanged), **pinned at the safe top + 8** (status
+   bar + 8 dp; 24 in a Mac window) in every layout and state. White type:
+   - Line 1: the full place (`nav.placeTitle`), 17 semibold (22 on iPad). The state is never dropped:
+     the date shortens first, then the title wraps.
+   - Line 2: "Sun, Nov 1 · 9:41 AM", 13 regular (15 on iPad), white at 75%, tabular figures, then the
+     **Sample** pill, always trailing line 2 (13 semibold in a 20 capsule, black on `Palette.notice`; at
+     night a red outline and red text on black). Only at accessibility sizes does it move to line 1.
+   - The time never truncates: the date shortens to "Nov 1" first.
+   - Trailing, fixed on every layout: the sky symbol (20, decorative), then the **map button** (Large and
+     Extra Large; 44 × 44, 48 dp), then **⋯** (44 × 44, 48 dp; 8 apart). ⋯
      never moves. Apple uses `ellipsis.circle`; Android a 36 dp `Palette.chipOff` circle with
      `MoreHoriz`. The accessibility label stays "Settings and more".
    - There is no "Bearings" title on the main screen: iOS keeps it as the accessibility screen title,
      the Mac window's title says Bearings, and Android sets `paneTitle = "Bearings"`.
    - Accessibility text sizes: line 1 may wrap to two lines, line 2 moves under it.
    - The bar is one accessibility element with the header trait ("Aspen, Colorado, Sat, Nov 1 · 9:41 AM").
-2. **Below the header**, the gaps are the planner's (docs/LAYOUTS.md §3): 4 above the header, 12 to the
-   dial, **12 from the dial's bottom edge to the readout's cap height** (the line box trimmed), 6 to the
-   status line. The lock row, spot row and tile grid are described in docs/LAYOUTS.md §2; their colours
+2. **Below the header**, the gaps are the planner's frozen tokens (docs/LAYOUTS.md §3): 12 to the dial,
+   **12 from the dial's bottom edge to the readout's cap height** (the line box trimmed), 6 to the status
+   line, 8 to the lock row, 8 to the spot row, 8 to the grid. The lock row, spot row and tile grid are described in docs/LAYOUTS.md §2; their colours
    and glyphs are below.
 3. **Dial**, on black, sized by the layout's rule. Restyled:
    - Disc: `Palette.tileFill` with a 1-point ring of `Palette.tileStroke`.
@@ -112,21 +114,27 @@ blocks are the planner's spacing tokens, 4 / 8 / 12 / 16 / 24 only (docs/LAYOUTS
    - Fixed parts: the lubber triangle **white**. Cross lines stay white at 7%. Both inner rings are
      white at 15%, 1.5 wide.
    - Level bubble: white, green `Palette.level` within 2° of flat.
-4. **Readout**: "228°", 56 (64 on iPad; × 1.25 at Extra Large), weight **light** (Android: Normal),
-   tracking −2, white. The point "SW" is half that size, medium, white at 60%. With no compass: "—°" (U+2014,
-   the degree on the same baseline) in white at 40%, and "NO HEADING" 4 below in the caption style.
+4. **Readout**: "228°", 56 (96 on iPad; × 1.25 at Extra Large), weight **light** (Android: Normal),
+   tracking −2, white. The point "SW" is half that size, medium, white at 60%. **With no compass the dash
+   is a shape, not a glyph:** a rounded rect 0.5 em × 0.08 em (28 × 4.5 at 56), white at 40%, centred on the
+   digits' cap-height midline, then "°" at the same size and weight exactly where it sits after "228". (A
+   typed "—" sits on the baseline after cap-height trimming and drew as `_ °`.)
 5. **Status line**: 13 regular, white at 60%, centred. A warning is `Palette.notice` semibold. With no
-   compass: "No compass · position, sun and map still work", same style, two lines allowed.
-6. **Lock row and spot row**: full-width `frostedTile()` rows, 44 high, leading-aligned. Lock: `lock.fill`
-   13, "Locked 240°" 15 semibold white, "turn 12° right" 15 white at 70%. Spot: `mappin` 17 white, "Marked
-   spot" 15 medium white, "9.2 mi · 46° NE" 15 tabular white at 70%. The ✕ sits 8 after the text: on Apple
-   13 semibold white at 60% in a 44 × 44 target; on Android an 18 dp `Icons.Rounded.Close` in
-   `onSurfaceVariant` at 100% in a 48 dp `IconButton` (night: red at 4.5:1 or more).
-7. **Tiles**, each `frostedTile()`, radius 16, padding 12 × 10, gutters 8. The caption is pinned to the top
-   and the value block to the bottom (a spacer between), so grown tiles are never half empty.
-   - Caption: 11 semibold caps, tracking 0.6, white at 60% (widgets keep 10). Value: 17 medium tabular,
-     white (15 in the compact row; white at 60% when stale). Secondary: 13 regular, white at 60%.
-   - Sun on both ports: ↑ / ↓ before the times, with a 13 pt sun glyph in the caption; in the compact row
+   compass: "No compass · position, sun and map still work", same style, two lines allowed; this replaces
+   the old NO HEADING caption.
+6. **Lock row and spot row**: one component on both ports, 52 high, two columns with 12 minimum between.
+   Lock: fill `#3D2128` (night: red at 15% luminance), 1-point border `#5A2C38`; "Locked 240°" leading 17
+   regular white, "turn 12° right" trailing 17 semibold white; non-breaking spaces inside values; at k ≥ 1.5
+   the cue drops to line 2 at 15. Spot: the same on `frostedTile()`, "Marked spot" leading, "9.2 mi · 46° NE"
+   trailing, tabular. ✕: 18 white at 60% (Android `Icons.Rounded.Close`) in a 44 pt / 48 dp target, 4 from
+   the trailing edge (night: red at 4.5:1 or more).
+7. **Tiles**, each `frostedTile()`, radius 16, insets 10 (14 on iPad), gutters 8. The caption sits at
+   inset 10 top and leading; the **last baseline of the value block sits at inset 10 from the bottom** in
+   every tile (MGRS and Moon included), so values line up across a row.
+   - Caption: 11 semibold caps, tracking 0.6, white at 60%, text only (13 on iPad). Value: 17 medium
+     tabular, white (22 semibold on iPad; 15 in the compact row; white at 60% when stale). Secondary: 13
+     regular, white at 60% (15 on iPad). Position's two lines share one size; MGRS and Plus Code are 20.
+   - Sun on both ports: ↑ / ↓ before the times, no glyph in the caption; in the compact row
      the caption is `SUN · ◐ 53%` and the times are 15 semibold, scaling to 0.85, then "6:36" over an 11 pt
      "AM". Nothing ever ends in "…".
    - The tap, long-press, copy and context-menu behaviours are unchanged. Before location is allowed, the
@@ -134,12 +142,17 @@ blocks are the planner's spacing tokens, 4 / 8 / 12 / 16 / 24 only (docs/LAYOUTS
      Location" / "Settings" as a compact `LookButtonStyle`.
 8. **Map** (tile, card and sheet), clipped to radius 16 with a 1-point `Palette.tileStroke` edge;
    `Palette.tileFill` before it loads.
-   - The MAP caption sits bottom-leading on a 40% black scrim on both ports; the attribution bottom-trailing.
+   - The Map tile: one 24 bottom scrim band with `MAP` (11 caps, inset 10) and a 12 expand glyph leading,
+     the attribution trailing at 9–10. On Apple under 160 wide, a still `MKMapSnapshotter` image with the
+     user dot (full Legal in the sheet). It is the only caption at the bottom: it labels an image.
    - Controls: one vertical stack top-trailing on every layout and port: 36 circles in 44 pt / 48 dp
      targets, 8 apart, inset 12. Apple fill `.ultraThinMaterial` (dark), Android `Palette.mapControl`.
      White glyph, 15 semibold; Follow Heading on is a **white** circle with a black glyph.
-   - Android's map style is dark (land about `#0F3B3A`, roads `#5A6470`, water `#22348A`), with a visible
-     "© OpenStreetMap" 10–11 sp bottom-leading, 8 dp in, 4.5:1 or more, and (i) as a 48 dp target.
+   - Android's map style is dark (land about `#0F3B3A`, roads `#5A6470`, water `#22348A`). Labels:
+     `#C9D3D6` regular, never italic or cyan, 11–12 sp, a 1.5 dp `#0F3B3A` halo, 70% in the tile; POI labels
+     hidden under 160 dp of map height, road shields under 200 dp of width, 48 dp collision padding around
+     the speed chip and the controls. Card and sheet: `© OpenStreetMap ⓘ` in one pill bottom-leading, 8 dp
+     in, ⓘ with a 48 dp hit area. Night: red-tinted at 35% luminance, not near-black.
    - The speed chip uses the same fill: white 13 semibold, a capsule 10 × 5, inset 12 top-leading.
    - Your position: a white dot 16 with a 3-wide black-at-35% ring and a soft shadow. The heading cone is
      white, 45% at the dot to 0. The accuracy circle is white at 10% fill with a 1-wide white-at-40% edge.
@@ -148,11 +161,12 @@ blocks are the planner's spacing tokens, 4 / 8 / 12 / 16 / 24 only (docs/LAYOUTS
 
 ## iPad and Mac
 
-The same panel in one centred column (C = min(W − 2 × margin, 640): W − 40 on iPad, W − 32 or W − 48 on a Mac), or two panes in wide windows (docs/LAYOUTS.md
-§5), with the header full width across the top.
+The same panel in one centred column (iPad min(W − 48, 720), with the regular-width type ramp: header
+22 / 15, captions 13, values 22, readout 96, tiles 96; Mac W − 48), or two panes in wide windows
+(docs/LAYOUTS.md §5), with the header full width across the top.
 
-- **Mac**: `.windowStyle(.hiddenTitleBar)`; the content keeps 16 from every window edge (24 at widths of
-  600 or more). The minimum window (380 × 740) and the self-test's 420 × 840 drawing fit without scrolling.
+- **Mac**: `.windowStyle(.hiddenTitleBar)`; the content keeps 24 from all four window edges and the header
+  is pinned. The minimum window and the self-test's 420 × 840 drawing fit without scrolling.
   The update banner ("Bearings 0.2.0 is available."): `frostedTile()`, 44 high, 13 medium white, with
   "Download" as a compact `LookButtonStyle`, under the header.
 - **Footer**: "Made by Bradley Cowdrey" is an item in the ⋯ menu on every layout and platform; there is no
@@ -172,7 +186,9 @@ The same panel in one centred column (C = min(W − 2 × margin, 640): W − 40 
   Bearings already follows. The background stays `Palette.bg` `#1A1816`. The app mark is 56. The title
   is 28 semibold, tracking −0.4. The summary is 17 in `Palette.textSecondary`. The agreement line is 15
   in `Palette.textMuted`. "I Agree" is a full-width cream capsule, 50 high, 17 semibold, with
-  `Palette.bg` text (Two Degrees' terms button). "Read the Terms" is 17 medium white, 44 high. The content
+  `Palette.bg` text (Two Degrees' terms button). "Read the Terms" is 17 medium white, 44 high; the buttons
+  are 12 apart, pinned 16 above the bottom safe area, with the note ("Next, Bearings asks for your
+  location.", 13 secondary) 16 above the primary and 24 below the content. The content
   block is centred in the space above the buttons (at least the safe area + 48 from the top); on iPad the
   column is at most 480 and the buttons sit 32 below the text. The rows wrap rather than run to the edge.
   iOS styles the terms link underlined in the accent with a 44 pt hit height; Android's row icons are
@@ -194,15 +210,14 @@ Two Degrees).
     string at its last space). Under that, the other unit ("2,922 m") is 15 medium `textMuted`.
   - Then a spacer. At the foot, the coordinates (one or two lines), 12 semibold `textSecondary`, then
     the time ("9:41 AM"), 11 medium `textMuted`. All tabular figures, shrinking to 0.7 before cutting.
-- **Medium**: the small block 128 wide | 0.5 divider | on the right, Two Degrees' hours row with three
-  columns of equal width. Each column has a label 10 (the first semibold cream, like Two Degrees'
-  "Now", the others medium `textMuted`), a symbol in an 18-high frame, a value 13 semibold white and a
-  sub 10 `textMuted`:
+- **Medium**: the small block 128 wide (its place on one line, scaling to 0.8) | 0.5 divider | on the
+  right, Two Degrees' hours row with three columns of equal width. Each column has a caption in the app's
+  style (11 semibold caps, tracking 0.6, `textSecondary`): **SUN**, **RISE**, **SET**; a symbol in an
+  18-high frame, a value 13 semibold white and a sub 10 `textMuted`. Content inset 16 on all four edges.
   - **Sun**: the `SunRose` 34, the sun's direction "228° SW", and "23° up" or "Below".
-  - **Sunrise**: `sunrise.fill` 14 in `SkyMarks.sun`, the time without AM/PM (as `MainView.shortTime`
-    does, but in WidgetViews.swift, because MainView isn't in the widget target), and the AM/PM or
-    nothing in 24-hour time.
-  - **Sunset**: the same, with `sunset.fill`.
+  - **Rise**: "↑" (as the app's Sun tile) and the time without AM/PM (in WidgetViews.swift, because
+    MainView isn't in the widget target), and the AM/PM or nothing in 24-hour time.
+  - **Set**: the same, with "↓".
   - Polar day or night: the Sunrise and Sunset columns become one wide column reading "Sun up all day"
     or "Sun down all day".
   - Under the row, across the right half: the moon glyph 12 and "Waxing Gibbous · 82%", 11 medium

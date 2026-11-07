@@ -5,12 +5,12 @@ name: Android
 # emulator placed at Maroon Bells, Colorado (the self-test: location fix, live ground elevation, place
 # name, compass and declination, the widget's data, the layout planner's golden table) and photographs the
 # terms, the live screen, the sample place, night mode, larger and accessibility text, every layout, the map
-# sheet and the no-compass state. Results go
+# sheet, the no-compass state (Medium and Extra Large) and the sample with nothing locked. Results go
 # to the ci-shots-android branch; the job fails if any check fails. The APKs are kept as an artifact.
 on:
   push:
     branches: [main]
-    paths: ["android/**", "Tests/fixtures/**", "Resources/Cities.tsv", "VERSION", "scripts/android-selftest.sh", ".github/workflows/android.yml"]
+    paths: ["android/**", "Tests/fixtures/**", "docs/*.json", "Resources/Cities.tsv", "VERSION", "scripts/android-selftest.sh", ".github/workflows/android.yml"]
   pull_request:
   workflow_dispatch:
 
@@ -103,4 +103,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A && git commit -qm "Android CI screenshots for $(cat commit.txt)"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-shots-android
+          # Every layout, the map sheet and the no-compass states photographed (docs/LAYOUTS.md §8).
+          for F in android-3-sample android-7-small android-8-large android-9-xl android-11-map-sheet android-12-no-compass android-14-no-compass-xl; do
+            [ -s "$F.png" ] || { echo "::error::No $F.png"; exit 1; }
+          done
           head -1 report.txt | grep -q "^ALL PASSED"

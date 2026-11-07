@@ -73,6 +73,13 @@ enum Palette {
         static let rowFill = 0.07
     }
 
+    // MARK: The lock row (docs/REFINE.md C3.4 #7, the same on both ports)
+
+    /// The lock row's fill, #3D2128 (night mode's red tint takes it to a dark red of about 15% luminance).
+    static let lockFill = rgb(0x3D2128)
+    /// The lock row's 1 pt border, #5A2C38.
+    static let lockBorder = rgb(0x5A2C38)
+
     // MARK: Night (docs/REFINE.md §4.3)
 
     /// Night mode's red, multiplied over everything, so whites turn red and nothing stays blue or green.
@@ -181,6 +188,32 @@ enum Look {
         let t = time(date)
         return t.period.map { "\(t.clock)\u{202F}\($0)" } ?? t.clock
     }
+}
+
+/// The panel's type ramp (docs/REFINE.md §3.2; iPad's regular-width ramp, C3.4 #10): one for phones and
+/// Mac windows, one for iPad, so tablet-sized tiles don't carry phone type.
+struct Ramp {
+    /// The header bar: the place, and the date line.
+    var title: CGFloat
+    var subtitle: CGFloat
+    /// A tile's caption (uppercase, tracking 0.6), its value, and its second line.
+    var caption: CGFloat
+    var value: CGFloat
+    var valueWeight: Font.Weight
+    var secondary: CGFloat
+    /// Values in the compact row (Position, Sun).
+    var compactValue: CGFloat
+    /// A one-line Position (MGRS, Plus Code), which has the room of two lines (C3.4 #12).
+    var singleValue: CGFloat
+    /// Inside a tile.
+    var insetH: CGFloat
+    var insetV: CGFloat
+
+    static let phone = Ramp(title: 17, subtitle: 13, caption: Look.tileCaptionSize, value: Look.tileValueSize,
+                            valueWeight: .medium, secondary: Look.tileSecondarySize, compactValue: Look.compactValueSize,
+                            singleValue: 20, insetH: Look.tilePaddingH, insetV: Look.tilePaddingV)
+    static let tablet = Ramp(title: 22, subtitle: 15, caption: 13, value: 22, valueWeight: .semibold, secondary: 15,
+                             compactValue: 20, singleValue: 26, insetH: 14, insetV: 14)
 }
 
 /// The sky behind the place card, as in Two Degrees, following the sun's real altitude where you are: deep

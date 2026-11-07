@@ -160,7 +160,7 @@ private fun SunColumns(entry: WidgetEntry) {
     Row(GlanceModifier.fillMaxWidth()) {
         val az = entry.sunAzimuth
         val altitude = entry.snapshot?.let { Sky.sunPosition(System.currentTimeMillis().toDouble(), it.latitude, it.longitude).altitude }
-        SunColumn("Sun", Palette.cream, az?.let { "${Geo.jsRound(it) % 360}° ${Geo.point(it)}" } ?: "—",
+        SunColumn("SUN", Palette.cream, az?.let { "${Geo.jsRound(it) % 360}° ${Geo.point(it)}" } ?: "—",
             if (altitude == null || altitude <= 0) "Below" else "${Geo.jsRound(altitude)}° up") { Rose(entry, 34) }
         val allDay = entry.sunAllDay
         if (allDay != null) {
@@ -174,10 +174,10 @@ private fun SunColumns(entry: WidgetEntry) {
         } else {
             val (riseTime, riseSub) = splitClock(entry.sunrise)
             val (setTime, setSub) = splitClock(entry.sunset)
-            SunColumn("Sunrise", Palette.textMuted, riseTime, riseSub) {
+            SunColumn("↑ RISE", Palette.textMuted, riseTime, riseSub) {
                 Image(ImageProvider(horizonBitmap(true, 54)), null, GlanceModifier.size(18.dp))
             }
-            SunColumn("Sunset", Palette.textMuted, setTime, setSub) {
+            SunColumn("↓ SET", Palette.textMuted, setTime, setSub) {
                 Image(ImageProvider(horizonBitmap(false, 54)), null, GlanceModifier.size(18.dp))
             }
         }
@@ -191,7 +191,7 @@ private fun splitClock(clock: String?): Pair<String, String> {
     return if (i > 0) c.substring(0, i) to c.substring(i + 1) else c to ""
 }
 
-/** One column: a label, a picture in a 34 dp band, the value and a line under it. */
+/** One column: a label in the app's caption language (SUN, ↑ RISE, ↓ SET; C3.4 #19), a picture in a 34 dp band, the value and a line under it. */
 @Composable
 private fun RowScope.SunColumn(label: String, labelColor: Color, value: String, sub: String, picture: @Composable () -> Unit) {
     Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -247,7 +247,7 @@ private fun Large(entry: WidgetEntry) {
             }
             val allDay = entry.sunAllDay
             if (allDay != null) GridRow("Sun", allDay, "Moon", entry.moonLine)
-            else GridRow("Sunrise", entry.sunrise ?: "—", "Sunset", entry.sunset ?: "—")
+            else GridRow("↑ Rise", entry.sunrise ?: "—", "↓ Set", entry.sunset ?: "—")
             if (allDay == null) GridRow("Moon", entry.moonLine, null, null)
         }
         Spacer(GlanceModifier.defaultWeight())

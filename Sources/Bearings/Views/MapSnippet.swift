@@ -7,10 +7,12 @@ import SwiftUI
 /// top-trailing corner: +, −, follow heading, open in Maps, or on a card under 192 tall +, − and ⋯ (follow
 /// and open in Maps in its menu). Your speed shows top left while you're moving; the bottom stays clear for
 /// Apple Maps' logo and Legal link. In the map sheet (`bleed`) it runs edge to edge under the sheet's
-/// translucent bar (`topInset`). As a **thumbnail** (the Map tile) it is north up with the heading cone,
-/// no controls and no gestures, with a "MAP" caption bottom-leading on a 40% scrim (C2.3 #12) and Apple
-/// Maps' attribution lifted above it. There is no fade over it. At night it is grey and at 15% brightness
-/// or less, so it is never the brightest thing on screen.
+/// translucent bar (`topInset`). As a **thumbnail** (the Map tile, C3.4 #9) it is a still picture
+/// (MKMapSnapshotter) north up with your dot and heading cone, no controls and no gestures, on a 24 pt
+/// bottom band (40% scrim) with "MAP" and an expand glyph leading and the Maps attribution trailing; the
+/// live map's Legal link no longer lands in the middle of a 130 pt tile (the map sheet carries it). There
+/// is no fade over it. At night it is grey and at 15% brightness or less, so it is never the brightest
+/// thing on screen.
 struct MapSnippet: View {
     var fix: Fix?
     var heading: Double?
@@ -40,13 +42,22 @@ struct MapSnippet: View {
 
     /// A card shorter than this shows +, − and ⋯ (C2.3 #10): four 44 targets and 8 at each end.
     static let fullControlsHeight: CGFloat = 192
-    /// The thumbnail's caption band at the bottom, which Apple Maps' attribution sits above.
-    static let captionBand: CGFloat = 20
+    /// The thumbnail's band at the bottom: "MAP" and the attribution (C3.4 #9).
+    static let captionBand: CGFloat = 24
 
     /// The thumbnail is always north up.
     private var follows: Bool { followHeading && !thumbnail }
 
     var body: some View {
+        if thumbnail {
+            MapThumbnail(fix: fix, heading: heading, dimmed: dimmed)
+                .modifier(CardFrame(bleed: false))
+        } else {
+            live
+        }
+    }
+
+    private var live: some View {
         ZStack(alignment: .topTrailing) {
             if let fix {
                 let here = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
@@ -61,8 +72,6 @@ struct MapSnippet: View {
                     .annotationTitles(.hidden)
                 }
                 .mapStyle(satellite ? MapStyle.imagery(elevation: .flat) : MapStyle.standard(elevation: .flat, pointsOfInterest: .excludingAll))
-                // The thumbnail keeps Apple Maps' logo and Legal link above its "MAP" caption.
-                .safeAreaPadding(.bottom, thumbnail ? Self.captionBand : 0)
                 .grayscale(dimmed ? 1 : 0)
                 .colorMultiply(dimmed ? Color(white: Self.nightBrightness) : Color.white)
                 .onAppear { move(to: here, animated: false) }
@@ -103,11 +112,6 @@ struct MapSnippet: View {
                             .accessibilityLabel("Speed, \(speed)")
                     }
                 }
-            } else if thumbnail {
-                Image(systemName: "map")
-                    .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(Palette.Op.faint))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Text("The map appears once Bearings knows where you are.")
                     .font(.system(size: 13))
@@ -115,18 +119,6 @@ struct MapSnippet: View {
                     .multilineTextAlignment(.center)
                     .padding(16)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            if thumbnail {
-                // Bottom-leading on a 40% scrim, as on Android; Apple Maps' attribution sits above the band.
-                Text("MAP")
-                    .font(.system(size: Look.tileCaptionSize * k, weight: .semibold))
-                    .tracking(Look.tileCaptionTracking)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Look.tilePaddingH)
-                    .frame(maxWidth: .infinity, minHeight: Self.captionBand, alignment: .leading)
-                    .background(Color.black.opacity(0.4))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .accessibilityHidden(true)
             }
         }
         .background(Palette.tileFill)
@@ -166,6 +158,81 @@ struct MapSnippet: View {
         cameraHeading = turn
         let camera = MapCameraPosition.camera(MapCamera(centerCoordinate: here, distance: distance, heading: turn))
         if animated { withAnimation(.easeInOut(duration: 0.4)) { position = camera } } else { position = camera }
+    }
+}
+
+/// The Map tile's picture (C3.4 #9): a dark MKMapSnapshotter image of where you are, north up, your dot
+/// and heading cone in the middle, and a 24 pt band with "MAP", the expand glyph and the Maps attribution.
+private struct MapThumbnail: View {
+    var fix: Fix?
+    var heading: Double?
+    var dimmed: Bool
+    @Environment(\.uiScale) private var k
+    @State private var picture: PlatformImage?
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .bottom) {
+                ZStack {
+                    Palette.tileFill
+                    if let picture {
+                        Self.image(picture)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .clipped()
+                    } else {
+                        Image(systemName: "map")
+                            .font(.system(size: 22, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(Palette.Op.faint))
+                            .padding(.bottom, MapSnippet.captionBand)
+                    }
+                    if fix != nil {
+                        // The picture is centred on you.
+                        MeDot(heading: heading, scale: 0.6)
+                    }
+                }
+                .grayscale(dimmed ? 1 : 0)
+                .colorMultiply(dimmed ? Color(white: MapSnippet.nightBrightness) : Color.white)
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("MAP")
+                        .font(.system(size: Look.tileCaptionSize * k, weight: .semibold))
+                        .tracking(Look.tileCaptionTracking)
+                    Spacer(minLength: 2)
+                    // A still map carries its attribution itself.
+                    Text("\u{F8FF}Maps")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(Palette.Op.label))
+                }
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(width: geo.size.width, height: MapSnippet.captionBand)
+                .background(Color.black.opacity(0.4))
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .task(id: Self.key(fix, geo.size)) {
+                guard let fix, geo.size.width > 0, geo.size.height > 0 else { picture = nil; return }
+                picture = await MapSnapshot.make(latitude: fix.latitude, longitude: fix.longitude, size: geo.size, span: 2000)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// A new picture when you have moved about 10 m or the tile's size changes.
+    private static func key(_ fix: Fix?, _ size: CGSize) -> String {
+        guard let fix else { return "none" }
+        return String(format: "%.4f,%.4f,%.0fx%.0f", fix.latitude, fix.longitude, size.width, size.height)
+    }
+
+    private static func image(_ image: PlatformImage) -> Image {
+        #if os(iOS)
+        return Image(uiImage: image)
+        #else
+        return Image(nsImage: image)
+        #endif
     }
 }
 

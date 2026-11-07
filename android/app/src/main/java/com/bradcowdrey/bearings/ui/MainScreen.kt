@@ -16,6 +16,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,7 +35,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -51,11 +51,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.NightsStay
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.filled.ZoomOutMap
@@ -119,7 +117,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -138,6 +135,7 @@ import com.bradcowdrey.bearings.Sky
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
@@ -210,14 +208,62 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
                     val noCompass = nav.compass == CompassStatus.UNAVAILABLE && nav.heading == null
                     val locked = nav.lock != null && !noCompass
                     val landscapePhone = w > h && s < LayoutPlan.LANDSCAPE_PHONE
+                    // What the planner can't know by itself, measured with the screen's own type (C3.4 #4, C3.2 #3):
+                    // whether the status line wraps, and whether the header's place name or date runs to a second line.
+                    val measurer = rememberTextMeasurer()
+                    val density = LocalDensity.current
+                    val column = LayoutPlan.columnWidth(w, h, landscapePhone)
+                    val statusText = status(nav, noCompass).first
+                    val sStyle = statusStyle(); val tStyle = titleStyle(); val dStyle = dateStyle()
+                    val pill = if (nav.sample && !bigText) pillWidth(measurer) + with(density) { 6.dp.toPx() } else 0f
+                    val statusLines = remember(statusText.text, column, density, noCompass, sStyle) {
+                        // Every number as 88, so the line count doesn't flicker as the accuracy changes.
+                        val probe = statusText.text.replace(Regex("[0-9]+"), "88")
+                        val px = with(density) { (column - if (noCompass) 32f else 0f).dp.roundToPx() }.coerceAtLeast(1)
+                        measurer.measure(AnnotatedString(probe), sStyle, constraints = Constraints(maxWidth = px)).lineCount.coerceIn(1, 2)
+                    }
+                    val title = nav.title
+                    val dates = Triple(nav.dateText(), nav.dateText(short = true), nav.clock(nav.now))
+                    // The header's room for its text: the bar (the column, or the full width less the margins in two
+                    // panes) less its fixed parts and, for Large and Extra Large, the map button.
+                    val twoPane = landscapePhone || (w > h && w >= LayoutPlan.TWO_PANE_WIDTH)
+                    val tablet = min(w, h) >= LayoutPlan.TABLET_WIDTH && !landscapePhone
+                    val bar = if (twoPane) w - 2 * (if (tablet) LayoutPlan.MARGIN_TABLET else LayoutPlan.MARGIN) else column
+                    val wraps = { button: Boolean ->
+                        val px = with(density) { (bar - HEADER_FIXED - (if (button) 48f else 0f)).dp.toPx() }
+                        val titleWraps = measurer.measure(AnnotatedString(title), tStyle, softWrap = false, maxLines = 1).size.width > px
+                        val dateWraps = TextFit.headerLines(dates.first, dates.second, dates.third) {
+                            measurer.measure(AnnotatedString(it), dStyle, softWrap = false, maxLines = 1).size.width <= px - pill
+                        }.size > 1
+                        titleWraps to dateWraps
+                    }
+                    // The lock and spot rows' two columns side by side, or the second under the first (C3.4 #7): the
+                    // widest lock ("Locked 360°", "turn 180° right") and this spot, in the row less 14 + 48 + 4 and 12 between.
+                    val leadStyle = rowLeadStyle(); val trailStyle = rowTrailStyle(false)
+                    val markValue = nav.markText?.let(::spotValue)
+                    val twoLines = { l: Layout, value: String, lead: String ->
+                        val row = if (twoPane) LayoutPlan.trailingWidth(l, w) else column
+                        val px = with(density) { (row - 66f - 12f).dp.toPx() }
+                        measurer.measure(AnnotatedString(lead), leadStyle, softWrap = false, maxLines = 1).size.width +
+                            measurer.measure(AnnotatedString(value), trailStyle, softWrap = false, maxLines = 1).size.width > px
+                    }
                     // The planner clamps the multiplier at 1.3 for the panel; the list estimates with the real one.
-                    val planFor = { l: Layout ->
+                    // Large and Extra Large have the header's map button; Small and Medium gain it when they give up
+                    // their map surface for the owner's floor, so the header is measured again with it.
+                    val planWith = { l: Layout, button: Boolean ->
+                        val (titleWraps, dateWraps) = wraps(button)
                         LayoutPlan.plan(w, h, s, l, fontScale.coerceAtLeast(1f), bigText, locked = locked, hasSpot = nav.markText != null,
-                            isLandscapePhone = landscapePhone, noHeading = noCompass)
+                            isLandscapePhone = landscapePhone, statusLines = statusLines, noHeading = noCompass,
+                            titleWraps = titleWraps, dateWraps = dateWraps,
+                            lockTwoLines = twoLines(l, TextFit.lockParts("Locked 360° · turn 180° right").second ?: "", "Locked\u00A0360°"),
+                            spotTwoLines = markValue?.let { twoLines(l, it, SPOT_LABEL) } ?: false)
+                    }
+                    val planFor = { l: Layout ->
+                        val button = l == Layout.LARGE || l == Layout.EXTRA_LARGE
+                        planWith(l, button).let { if (it.mapButton != button) planWith(l, it.mapButton) else it }
                     }
                     val plan = planFor(nav.layout)
-                    // The layout menu says what each layout gives on this screen: "Dial 386 · map in header" (C2.2 #2).
-                    val acts = actions.withResults(Layout.entries.associateWith { planFor(it).resultLine })
+                    val acts = actions
                     SideEffect { LayoutPlan.last = plan; LayoutPlan.lastWidth = w; LayoutPlan.lastHeight = h; LayoutPlan.lastSafeHeight = s }
                     val spec: AnimationSpec<Dp> = if (reduceMotion) snap<Dp>() else spring<Dp>(stiffness = Spring.StiffnessMediumLow)
                     val dial by animateDpAsState(plan.dial.dp, spec, label = "dial")
@@ -243,7 +289,7 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
     }
 }
 
-/** What the screen's parts can ask for, and what each layout gives on this screen (for the layout menu). */
+/** What the screen's parts can ask for. */
 private class Actions(
     val copy: () -> Unit,
     val details: () -> Unit,
@@ -253,18 +299,16 @@ private class Actions(
     val openSettings: () -> Unit,
     val about: () -> Unit,
     val website: () -> Unit,
-    val results: Map<Layout, String> = emptyMap(),
-) {
-    fun withResults(r: Map<Layout, String>) = Actions(copy, details, map, openMap, useLocation, openSettings, about, website, r)
-}
+)
 
 // ---------- The three arrangements ----------
 
 /**
- * One fixed column (§3.1, §3.3): every block at the planner's size and gap. It sits in a scroll view only as a
- * guard: when the plan fits (it always does at font scales up to 1.3) nothing moves, and if text ever runs
- * taller than planned the last block scrolls into view instead of being cut, with a fade and an indicator to
- * say so.
+ * One fixed column (C3.3): the header pinned 8 under the status bar, then every block at the planner's size
+ * with the planner's frozen gaps (tokens × k, never widened); step 4's spare sits only over the dial and at the
+ * bottom. It sits in a scroll view only as a guard: when the plan fits (it always does at font scales up to 1.3)
+ * nothing moves, and if text ever runs taller than planned the last block scrolls into view instead of being
+ * cut, with a fade and an indicator to say so.
  */
 @Composable
 private fun SingleColumn(nav: Navigator, plan: Plan, dial: Dp, k: Float, noCompass: Boolean, a: Actions) {
@@ -273,57 +317,65 @@ private fun SingleColumn(nav: Navigator, plan: Plan, dial: Dp, k: Float, noCompa
     val cue = rememberScrollCue(scroll, flash = false)
     Column(
         Modifier.fillMaxSize().scrollCue(scroll, cue).verticalScroll(scroll)
-            .padding(top = LayoutPlan.TOP.dp, bottom = LayoutPlan.BOTTOM.dp),
+            .padding(top = LayoutPlan.TOP.dp, bottom = plan.bottom.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (plan.topExtra > 0f) Spacer(Modifier.height(plan.topExtra.dp))
         HeaderBar(nav, plan, k, a, wrap = false, Modifier.width(column))
         Spacer(Modifier.height(plan.headerGap.dp))
-        DialBlock(nav, dial, plan.layout.e.dp, noCompass)
+        DialBlock(nav, dial, noCompass)
         Spacer(Modifier.height(plan.dialGap.dp))
-        ReadoutGroup(nav, plan, k, noCompass, Modifier.width(column))
-        Spacer(Modifier.height(plan.groupGap.dp))
-        if (nav.markText != null) {
-            SpotRow(nav, LayoutPlan.spotHeight(k).dp, Modifier.width(column))
-            Spacer(Modifier.height(LayoutPlan.ROW_GAP.dp))
+        ReadoutGroup(nav, plan, k, noCompass, withLock = !plan.mergedRows, Modifier.width(column))
+        if (plan.mergedRows) {
+            // The owner's floor's last give-up before the list: the lock and the spot share one 44 row.
+            Spacer(Modifier.height(plan.lockGap.dp))
+            MergedRow(nav, noCompass, plan.mergedHeight.dp, Modifier.width(column))
+        } else if (nav.markText != null) {
+            Spacer(Modifier.height(plan.spotGap.dp))
+            SpotRow(nav, plan.spotHeight.dp, plan.spotTwoLines, Modifier.width(column))
         }
+        Spacer(Modifier.height(plan.gridGap.dp))
         TileGrid(nav, plan, a)
-        if (plan.map == MapMode.CARD) {
-            Spacer(Modifier.height(LayoutPlan.MAP_GAP.dp))
+        // Small's map card, or the map tile it shrinks to under the owner's floor (a strip under the compact row).
+        if (plan.map == MapMode.CARD || plan.mapStrip) {
+            Spacer(Modifier.height(plan.mapGap.dp))
             MapCard(nav, a, Modifier.width(column).height(plan.mapHeight.dp))
         }
     }
 }
 
 /**
- * Two panes (§3.5): one full-width header; the dial, readout, status line and lock row centred in the leading
- * pane; the spot row, the grid and the map card in the trailing pane, top-aligned with the dial (or centred
- * against it when there is no map card).
+ * Two panes (C3.4 #5): one full-width header; the dial and readout centred in the leading pane, 12 between
+ * them; in the trailing pane the lock row, the spot row, the tile rows at a fixed 80 and the map card with the
+ * rest (top-aligned), or, with no card, the pane's stack centred.
  */
 @Composable
 private fun TwoPanes(nav: Navigator, plan: Plan, dial: Dp, k: Float, noCompass: Boolean, a: Actions) {
     val margin = plan.margin.dp
-    Column(Modifier.fillMaxSize().padding(top = LayoutPlan.TOP.dp, bottom = LayoutPlan.BOTTOM.dp)) {
+    Column(Modifier.fillMaxSize().padding(top = LayoutPlan.TOP.dp, bottom = plan.bottom.dp)) {
         HeaderBar(nav, plan, k, a, wrap = false, Modifier.padding(horizontal = margin).fillMaxWidth())
-        Spacer(Modifier.height(LayoutPlan.HEADER_GAP.dp))
+        Spacer(Modifier.height(plan.headerGap.dp))
         Row(Modifier.fillMaxWidth().weight(1f).padding(horizontal = margin)) {
             Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                    DialBlock(nav, dial, 16.dp, noCompass)
-                    Spacer(Modifier.height(LayoutPlan.DIAL_GAP.dp))
-                    ReadoutGroup(nav, plan, k, noCompass, Modifier.fillMaxWidth())
+                    DialBlock(nav, dial, noCompass)
+                    Spacer(Modifier.height(plan.dialGap.dp))
+                    ReadoutGroup(nav, plan, k, noCompass, withLock = false, Modifier.fillMaxWidth())
                 }
             }
             Spacer(Modifier.width(margin))
             Column(Modifier.width(plan.trailingWidth.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
                 if (plan.trailingTop > 0f) Spacer(Modifier.height(plan.trailingTop.dp))
+                if (nav.lock != null && !noCompass) {
+                    LockRow(nav, plan.lockHeight.dp, plan.lockTwoLines, Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(plan.rowGap.dp))
+                }
                 if (nav.markText != null) {
-                    SpotRow(nav, LayoutPlan.spotHeight(k).dp, Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(LayoutPlan.ROW_GAP.dp))
+                    SpotRow(nav, plan.spotHeight.dp, plan.spotTwoLines, Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(plan.rowGap.dp))
                 }
                 TileGrid(nav, plan, a)
                 if (plan.map == MapMode.CARD) {
-                    Spacer(Modifier.height(LayoutPlan.MAP_GAP.dp))
+                    Spacer(Modifier.height(plan.mapGap.dp))
                     MapCard(nav, a, Modifier.fillMaxWidth().height(plan.mapHeight.dp))
                 }
             }
@@ -332,10 +384,11 @@ private fun TwoPanes(nav: Navigator, plan: Plan, dial: Dp, k: Float, noCompass: 
 }
 
 /**
- * Accessibility text sizes (§3.6): the whole screen is one list. The header wraps, the dial is min(C − 32,
- * 40% of H) (a little less when that would put the fold right at a block's edge), the tiles are full-width rows
- * whose values wrap, and the map card is 200. Every block is whole; a 24 fade at the bottom and an indicator
- * shown when the list appears say there is more below (C2.3 #15).
+ * Accessibility text sizes (§3.6, C3.4 #6): the whole screen is one list. The header wraps, the dial is
+ * min(C − 48, 36% of H) (less where Position and Elevation would not be whole on the first screen), the lock
+ * and the spot share one two-line Targets card, the tiles are 64 high rows (caption leading, value trailing)
+ * whose values wrap, and the map card is 200. A 24 fade at the bottom and an indicator shown when the list
+ * appears say there is more below (C2.3 #15, C3.4 #20).
  */
 @Composable
 private fun ListScreen(nav: Navigator, plan: Plan, dial: Dp, k: Float, noCompass: Boolean, a: Actions) {
@@ -347,17 +400,17 @@ private fun ListScreen(nav: Navigator, plan: Plan, dial: Dp, k: Float, noCompass
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         HeaderBar(nav, plan, k, a, wrap = true, Modifier.fillMaxWidth())
-        Spacer(Modifier.height(LayoutPlan.HEADER_GAP.dp))
-        DialBlock(nav, dial, 0.dp, noCompass)
-        Spacer(Modifier.height(LayoutPlan.DIAL_GAP.dp))
-        ReadoutGroup(nav, plan, k, noCompass, Modifier.fillMaxWidth())
-        Spacer(Modifier.height(plan.groupGap.dp))
-        if (nav.markText != null) {
-            SpotRow(nav, LayoutPlan.spotHeight(k).dp, Modifier.fillMaxWidth())
-            Spacer(Modifier.height(LayoutPlan.ROW_GAP.dp))
+        Spacer(Modifier.height(plan.headerGap.dp))
+        DialBlock(nav, dial, noCompass)
+        Spacer(Modifier.height(plan.dialGap.dp))
+        ReadoutGroup(nav, plan, k, noCompass, withLock = false, Modifier.fillMaxWidth())
+        if ((nav.lock != null && !noCompass) || nav.markText != null) {
+            Spacer(Modifier.height(plan.spotGap.dp))
+            TargetsCard(nav, noCompass, Modifier.fillMaxWidth())
         }
+        Spacer(Modifier.height(plan.gridGap.dp))
         TileGrid(nav, plan, a)
-        Spacer(Modifier.height(LayoutPlan.MAP_GAP.dp))
+        Spacer(Modifier.height(plan.mapGap.dp))
         MapCard(nav, a, Modifier.fillMaxWidth().height(LayoutPlan.LIST_MAP.dp))
     }
 }
@@ -394,40 +447,59 @@ private fun Modifier.scrollCue(state: ScrollState, cue: androidx.compose.runtime
 
 // ---------- The header bar ----------
 
+/** The header's fixed parts beside the text: its 14 inset, 8, the sky symbol 20, 4 and the ⋯ menu's 48. */
+private const val HEADER_FIXED = 14f + 8f + 20f + 4f + 48f
+
+@Composable private fun titleStyle(): TextStyle = text(17f, FontWeight.SemiBold).copy(lineHeight = 22.sp)
+@Composable private fun dateStyle(): TextStyle = text(13f, color = headerSecondary()).copy(lineHeight = 16.sp, fontFeatureSettings = "tnum")
+@Composable private fun pillStyle(): TextStyle = text(13f, FontWeight.SemiBold).copy(lineHeight = 16.sp)
+@Composable private fun statusStyle(): TextStyle = text(13f, color = secondary()).copy(lineHeight = 18.sp)
+
+/** The Sample pill's width in px: "Sample" at 13 semibold and 8 each side. */
+@Composable
+private fun pillWidth(measurer: TextMeasurer): Float {
+    val style = pillStyle()
+    val density = LocalDensity.current
+    return measurer.measure(AnnotatedString("Sample"), style, softWrap = false, maxLines = 1).size.width + with(density) { 16.dp.toPx() }
+}
+
 /**
- * The header bar (§3.2): on the sky, "Maroon Bells, Colorado" (the state goes first when it is too long)
- * over "Sun, Nov 1 · 9:41 AM" and the Sample pill; then, at a fixed place at the trailing end, the sky's
- * symbol, the map button (only when the map is neither a tile nor a card) and the ⋯ menu. Read as one heading.
- * The time is never cut (C2.3 #14): the date shortens to "Nov 1", then line 2 wraps at the "·"; at larger
- * text, or beside the map button, the Sample pill moves up to line 1.
+ * The header bar (§3.2, C3.4 #4), pinned 8 under the status bar in every layout and state: on the sky, the whole
+ * place name, "Maroon Bells, Colorado" (wrapped to a second line rather than shortened or cut), over "Sun, Nov 1
+ * · 9:41 AM" and the Sample pill trailing it; then, at a fixed place at the trailing end, the sky's symbol, the
+ * map button (Large and Extra Large) and the ⋯ menu. Read as one heading. The time is never cut (C2.3 #14): the
+ * date shortens to "Nov 1", then line 2 wraps at the "·". Only at accessibility sizes does the pill move up to
+ * line 1.
  */
 @Composable
 private fun HeaderBar(nav: Navigator, plan: Plan, k: Float, a: Actions, wrap: Boolean, modifier: Modifier) {
     val sun = nav.fix?.let { Sky.sunPosition(nav.now.toDouble(), it.latitude, it.longitude) }
     val night = LocalNight.current
-    val pillUp = nav.sample && (k > 1.1f || plan.mapButton || wrap)
+    val pillUp = nav.sample && wrap
     Row(
-        modifier.heightIn(min = plan.header.dp).skyCard(sun?.altitude, Look.headerShape).padding(start = 14.dp),
+        // In the list the header takes what its wrapped lines need (the planner's figure is only an estimate there).
+        modifier.heightIn(min = (if (wrap) LayoutPlan.headerHeight(k, plan.tablet) else plan.header).dp)
+            .skyCard(sun?.altitude, Look.headerShape).padding(start = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
-            Modifier.weight(1f).padding(vertical = 4.dp).semantics(mergeDescendants = true) {
+            Modifier.weight(1f).padding(vertical = 3.dp).semantics(mergeDescendants = true) {
                 heading()
                 contentDescription = "${nav.title}, ${nav.dateTimeText}${if (nav.sample) ", sample place" else ""}"
             },
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f, fill = false)) { PlaceLine(nav.title, wrap) }
+                Text(nav.title, style = titleStyle(), modifier = Modifier.weight(1f, fill = false))
                 if (pillUp) {
                     Spacer(Modifier.width(6.dp))
-                    SampleBadge()
+                    SampleBadge(night)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 DateTimeLines(nav, Modifier.weight(1f, fill = false))
                 if (nav.sample && !pillUp) {
                     Spacer(Modifier.width(6.dp))
-                    SampleBadge()
+                    SampleBadge(night)
                 }
             }
         }
@@ -443,7 +515,7 @@ private fun HeaderBar(nav: Navigator, plan: Plan, k: Float, a: Actions, wrap: Bo
 /** Header line 2: the date and time on one line where they fit, otherwise shortened, then wrapped; never "…". */
 @Composable
 private fun DateTimeLines(nav: Navigator, modifier: Modifier) {
-    val style = text(13f, color = headerSecondary()).copy(lineHeight = 16.sp, fontFeatureSettings = "tnum")
+    val style = dateStyle()
     val measurer = rememberTextMeasurer()
     val time = nav.clock(nav.now)
     val long = nav.dateText()
@@ -457,29 +529,17 @@ private fun DateTimeLines(nav: Navigator, modifier: Modifier) {
     }
 }
 
-/** The place on one line: the whole name when it fits, otherwise without the state, then cut short. */
+/**
+ * The Sample pill (C3.4 #4, #15): 13 semibold in a 20 high capsule; amber with black text by day, and at night
+ * a black capsule with a red outline and red text (white through the screen's red multiply), never red on red.
+ */
 @Composable
-private fun PlaceLine(title: String, wrap: Boolean) {
-    val style = text(17f, FontWeight.SemiBold).copy(lineHeight = 22.sp)
-    if (wrap) {
-        Text(title, style = style, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        return
-    }
-    val measurer = rememberTextMeasurer()
-    BoxWithConstraints {
-        val max = constraints.maxWidth
-        val shown = remember(title, max, style) {
-            val fits = measurer.measure(AnnotatedString(title), style, softWrap = false, maxLines = 1).size.width <= max
-            if (fits) title else title.substringBefore(", ")
-        }
-        Text(shown, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-@Composable
-private fun SampleBadge() {
-    Text("Sample", style = text(11f, FontWeight.SemiBold, Color.Black), maxLines = 1,
-        modifier = Modifier.clip(CircleShape).background(Palette.notice).padding(horizontal = 6.dp, vertical = 1.dp))
+private fun SampleBadge(night: Boolean) {
+    val shape = CircleShape
+    val m = if (night) Modifier.clip(shape).background(Color.Black).border(1.dp, Color.White, shape)
+        else Modifier.clip(shape).background(Palette.notice)
+    Text("Sample", style = pillStyle().copy(color = if (night) Color.White else Color.Black), maxLines = 1,
+        modifier = m.heightIn(min = 20.dp).padding(horizontal = 8.dp, vertical = 2.dp))
 }
 
 /** The sun by day, sunrise or sunset in twilight, the moon at night, a pin before a fix (SkyTone.phase). */
@@ -528,7 +588,7 @@ private fun MenuButton(nav: Navigator, night: Boolean, a: Actions) {
             val fix = nav.fix
             val hasFix = fix != null
             MenuSection("Layout", night)
-            for (l in Layout.entries) LayoutItem(l, a.results[l] ?: l.subtitle, nav.layout == l, night) { nav.setLayout(l); open = false }
+            for (l in Layout.entries) LayoutItem(l, l.subtitle, nav.layout == l, night) { nav.setLayout(l); open = false }
             MenuSection("Coordinates", night)
             for (f in Geo.Format.entries) Check(f.title, nav.format == f, night) { nav.setFormat(f); open = false }
             MenuSection("Units", night)
@@ -579,8 +639,9 @@ private fun menuSecondary(night: Boolean) = white(if (night) Op.NIGHT_SECONDARY 
         onClick = onClick, enabled = enabled, leadingIcon = { Spacer(Modifier.widthIn(min = 14.dp)) })
 
 /**
- * A layout in the menu (§4.4): its symbol, its name over a one-line subtitle that states what it gives on this
- * screen ("Dial 386 · map in header", C2.2 #2), and a check on the current one.
+ * A layout in the menu (§4.4): its symbol, its name over a one-line subtitle that says what changes (C3.2 #2:
+ * "Compass + big map", "Balanced · map tile", "Bigger compass · map in header", "Biggest compass · one row"),
+ * and a check on the current one.
  */
 @Composable private fun LayoutItem(layout: Layout, result: String, on: Boolean, night: Boolean, onClick: () -> Unit) =
     DropdownMenuItem(
@@ -606,7 +667,7 @@ private fun layoutIcon(layout: Layout): ImageVector = when (layout) {
 // ---------- The dial, the readout, the status line and the lock row ----------
 
 @Composable
-private fun DialBlock(nav: Navigator, side: Dp, margin: Dp, noCompass: Boolean) {
+private fun DialBlock(nav: Navigator, side: Dp, noCompass: Boolean) {
     // TalkBack hears the heading at most every few seconds, not at the sensor's rate.
     var spoken by remember { mutableStateOf<Double?>(null) }
     LaunchedEffect(Unit) {
@@ -624,7 +685,7 @@ private fun DialBlock(nav: Navigator, side: Dp, margin: Dp, noCompass: Boolean) 
         layout.larger?.let { add(CustomAccessibilityAction("Larger Compass") { nav.setLayout(it); true }) }
         layout.smaller?.let { add(CustomAccessibilityAction("Smaller Compass") { nav.setLayout(it); true }) }
     }
-    Box(Modifier.fillMaxWidth().padding(horizontal = margin), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Box(
             Modifier.size(side).clip(CircleShape)
                 .clickable(role = Role.Button, enabled = nav.heading != null,
@@ -683,28 +744,30 @@ private fun spokenDistance(s: String): String = when {
 }
 
 /**
- * The readout, the status line (read with it) and, when a bearing is locked, the lock row 8 × k below
- * (C2.2 #3, C2.3 #16). Status stays centred; the lock row is a full-width, leading-aligned row like the spot row.
+ * The readout, the status line (read with it) 6 × k below and, when a bearing is locked and [withLock], the lock
+ * row 8 × k below that (C3.2 #1). Status stays centred; the lock row is a full-width two-column row.
  */
 @Composable
-private fun ReadoutGroup(nav: Navigator, plan: Plan, k: Float, noCompass: Boolean, modifier: Modifier) {
+private fun ReadoutGroup(nav: Navigator, plan: Plan, k: Float, noCompass: Boolean, withLock: Boolean, modifier: Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
             Readout(nav, plan.headingSize, noCompass)
-            Spacer(Modifier.height(LayoutPlan.STATUS_GAP.dp))
-            StatusLine(nav, k, noCompass)
+            Spacer(Modifier.height(plan.statusGap.dp))
+            StatusLine(nav, plan.statusLines, noCompass)
         }
-        if (nav.lock != null && !noCompass) {
-            Spacer(Modifier.height((LayoutPlan.CHIP_GAP * k).dp))
-            LockRow(nav, LayoutPlan.chipHeight(k).dp, Modifier.fillMaxWidth())
+        if (withLock && nav.lock != null && !noCompass) {
+            Spacer(Modifier.height(plan.lockGap.dp))
+            LockRow(nav, plan.lockHeight.dp, plan.lockTwoLines, Modifier.fillMaxWidth())
         }
     }
 }
 
 /**
- * "228° SW", or with no heading "—°" (an em dash in Inter's case-sensitive form, level with the degree sign)
- * at white 40% with "NO HEADING" under it when the phone has no compass (§4.2, C2.3 #13). The line box is
- * trimmed to the digits' cap height, so the 12 above the readout runs from the dial's edge to the digits (C2.2 #3).
+ * "228° SW", or with no heading the no-heading readout (C3.2 #3): a dash drawn as a shape, not a glyph, a rounded
+ * bar 0.5 em × 0.08 em at white 40%, in an inline placeholder that is cap height tall and stands on the baseline,
+ * so the bar's centre is on the digits' cap-height midline whatever the font does with "—"; then "°" at the same
+ * size and weight, where it sits after "228". TalkBack hears "Heading unavailable". The line box is trimmed to the
+ * digits' cap height, so the 12 above the readout runs from the dial's edge to the digits (C2.2 #3).
  */
 @Composable
 private fun Readout(nav: Navigator, baseSize: Float, noCompass: Boolean) {
@@ -712,56 +775,66 @@ private fun Readout(nav: Navigator, baseSize: Float, noCompass: Boolean) {
     // The number follows the font size only up to 1.3 times, like the layout's heights.
     val density = LocalDensity.current
     val fs = density.fontScale
-    val size = if (fs > LayoutPlan.MAX_K) baseSize * LayoutPlan.MAX_K / fs else baseSize
+    val sz = if (fs > LayoutPlan.MAX_K) baseSize * LayoutPlan.MAX_K / fs else baseSize
     // Tabular figures, so the number doesn't jiggle as it changes. Light in Two Degrees; Inter has no Light here, so Normal.
-    val big = text(size, FontWeight.Normal, if (h == null) white(Op.NO_HEADING) else Color.White)
-        .copy(letterSpacing = (-2).sp, lineHeight = (size * LayoutPlan.READOUT_LINE).sp,
-            fontFeatureSettings = if (h == null) "tnum, case" else "tnum")
+    val faint = white(Op.NO_HEADING)
+    val big = text(sz, FontWeight.Normal, if (h == null) faint else Color.White)
+        .copy(letterSpacing = (-2).sp, lineHeight = (sz * LayoutPlan.READOUT_LINE).sp, fontFeatureSettings = "tnum")
     val measurer = rememberTextMeasurer()
     // From the top of the line box to the top of the digits.
     val trim = remember(big, density) {
         val baseline = measurer.measure(AnnotatedString("0"), big).firstBaseline
-        with(density) { (baseline - (size * LayoutPlan.CAP_HEIGHT).sp.toPx()).roundToInt().coerceAtLeast(0) }
+        with(density) { (baseline - (sz * LayoutPlan.CAP_HEIGHT).sp.toPx()).roundToInt().coerceAtLeast(0) }
     }
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(
-            Modifier.fillMaxWidth()
-                .layout { measurable, constraints ->
-                    val p = measurable.measure(constraints)
-                    val t = trim.coerceAtMost(p.height)
-                    layout(p.width, p.height - t) { p.place(0, -t) }
-                }
-                .then(if (h == null) Modifier.clearAndSetSemantics { contentDescription = "Heading unavailable" } else Modifier),
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            Text(if (h == null) LayoutPlan.NO_HEADING_READOUT else "${Math.round(h) % 360}°", style = big, modifier = Modifier.alignByBaseline())
-            if (h != null) {
-                Spacer(Modifier.width(10.dp))
-                Text(Geo.point(h), style = text(size / 2, FontWeight.Medium, secondary()),
-                    modifier = Modifier.alignByBaseline().widthIn(min = (size * 1.1f).dp))
+    Row(
+        Modifier.fillMaxWidth()
+            .layout { measurable, constraints ->
+                val p = measurable.measure(constraints)
+                val t = trim.coerceAtMost(p.height)
+                layout(p.width, p.height - t) { p.place(0, -t) }
             }
-        }
-        if (noCompass) {
-            Spacer(Modifier.height(LayoutPlan.NO_HEADING_GAP.dp))
-            Text("NO HEADING", style = text(Look.TILE_CAPTION, FontWeight.SemiBold, secondary())
-                .copy(letterSpacing = Look.TILE_CAPTION_TRACKING.sp, lineHeight = LayoutPlan.NO_HEADING_LINE.sp),
-                modifier = Modifier.clearAndSetSemantics {})
+            .then(if (h == null) Modifier.clearAndSetSemantics { contentDescription = LayoutPlan.NO_HEADING_SPOKEN } else Modifier),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        if (h == null) {
+            val dash = "dash"
+            // The placeholder: the bar's width and a little air before "°", cap height tall, on the baseline.
+            val air = 0.08f
+            val content = buildAnnotatedString { appendInlineContent(dash, "\u2014"); append("°") }
+            val inline = mapOf(dash to InlineTextContent(
+                Placeholder((LayoutPlan.DASH_WIDTH + air).em, LayoutPlan.CAP_HEIGHT.em, PlaceholderVerticalAlign.AboveBaseline),
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    // In the placeholder's own units: it is CAP_HEIGHT em tall, so one em is this many px.
+                    val em = size.height / LayoutPlan.CAP_HEIGHT
+                    val bar = LayoutPlan.DASH_HEIGHT * em
+                    val wide = LayoutPlan.DASH_WIDTH * em
+                    drawRoundRect(faint, topLeft = Offset((size.width - wide) / 2f, (size.height - bar) / 2f),
+                        size = Size(wide, bar), cornerRadius = CornerRadius(bar / 2f))
+                }
+            })
+            Text(content, style = big, inlineContent = inline, modifier = Modifier.alignByBaseline())
+        } else {
+            Text("${Math.round(h) % 360}°", style = big, modifier = Modifier.alignByBaseline())
+            Spacer(Modifier.width(10.dp))
+            Text(Geo.point(h), style = text(sz / 2, FontWeight.Medium, secondary()),
+                modifier = Modifier.alignByBaseline().widthIn(min = (sz * 1.1f).dp))
         }
     }
 }
 
 /**
- * The status line (§3.2): "True north · 8° E declination · ±8° accuracy", one line (two at a larger font
- * size, breaking only after a dot). Warnings in amber take its place; with no compass, "No compass · position,
- * sun and map still work" on two lines within C − 32. It wraps rather than end in "…".
+ * The status line (§3.2): "True north · 8° E declination · ±8° accuracy", on as many lines as the planner keeps
+ * for it ([lines], measured), breaking only after a dot. Warnings in amber take its place; with no compass, "No
+ * compass · position, sun and map still work" within C − 32 (C3.2 #3: the only line under the dash). It wraps
+ * rather than end in "…".
  */
 @Composable
-private fun StatusLine(nav: Navigator, k: Float, noCompass: Boolean) {
+private fun StatusLine(nav: Navigator, lines: Int, noCompass: Boolean) {
     val (line, spoken) = status(nav, noCompass)
-    val two = k > 1.1f || noCompass
-    Text(line, style = text(13f, color = secondary()).copy(lineHeight = 18.sp), textAlign = TextAlign.Center,
+    Text(line, style = statusStyle(), textAlign = TextAlign.Center,
         // As many lines as the planner keeps for it, so the blocks under it stay where it put them.
-        minLines = if (two) 2 else 1,
+        minLines = lines.coerceAtLeast(1),
         modifier = Modifier.fillMaxWidth().padding(horizontal = if (noCompass) 16.dp else 0.dp).heightIn(min = 18.dp).semantics {
             contentDescription = spoken
             // Said once, politely, when the phone turns out to have no compass.
@@ -812,67 +885,176 @@ private fun dotted(parts: List<String>): AnnotatedString = buildAnnotatedString 
 }
 
 /**
- * The lock row (C2.3 #16): the spot row's form, a full-width 44 high tile, leading-aligned: the lock, "Locked
- * 240° · turn 12° right" and ✕ to unlock.
+ * The lock row (C3.4 #7), one component on both ports: 52 high, maroon (#3D2128, a 1 dp #5A2C38 edge; red at
+ * night through the multiply), "Locked 240°" leading at 17 regular and "turn 12° right" trailing at 17
+ * semibold, at least 12 apart, with no-break spaces inside each value so neither splits; ✕ 18 dp in a 48 dp
+ * target 4 in from the trailing edge. With [twoLines] (accessibility sizes) the cue drops to a second line at 15.
  */
 @Composable
-private fun LockRow(nav: Navigator, height: Dp, modifier: Modifier) {
+private fun LockRow(nav: Navigator, height: Dp, twoLines: Boolean, modifier: Modifier) {
+    Box(modifier.clip(Look.shape).background(Palette.lockFill).border(Look.stroke, Palette.lockStroke, Look.shape)) {
+        LockLine(nav, height, twoLines)
+    }
+}
+
+@Composable
+private fun LockLine(nav: Navigator, height: Dp, twoLines: Boolean) {
     val l = nav.lock ?: return
     val label = nav.lockText ?: "Locked ${Math.round(l) % 360}°"
+    val (locked, cue) = TextFit.lockParts(label)
     val spoken = label.replace("°", " degrees").replace(" · ", ", ")
     Row(
-        modifier.heightIn(min = height).frostedTile()
+        Modifier.fillMaxWidth().heightIn(min = height)
             .semantics(mergeDescendants = true) {
                 contentDescription = spoken
                 customActions = listOf(CustomAccessibilityAction("Unlock") { nav.lock = null; true })
             }
-            .padding(start = 12.dp, end = 4.dp),
+            .padding(start = 14.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(17.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = text(15f, FontWeight.Medium).copy(lineHeight = 20.sp, fontFeatureSettings = "tnum"),
-            modifier = Modifier.weight(1f).padding(vertical = 4.dp))
+        TwoColumns(locked, cue, twoLines, Modifier.weight(1f))
         CloseButton("Unlock the bearing") { nav.lock = null }
     }
 }
 
 /**
- * ✕ (C2.3 #18): an 18 dp rounded glyph at full strength (onSurfaceVariant; white at night, which the red
- * multiply leaves at about 5.7:1), centred in a 48 dp target that reaches 2 into the gaps around a 44 row.
+ * The lock and spot rows' two columns: [lead] at 17 regular, [trail] at 17 semibold pushed to the trailing edge
+ * with 12 or more between; with [twoLines], [trail] under [lead] at 15.
  */
 @Composable
-private fun CloseButton(label: String, onClick: () -> Unit) {
-    val night = LocalNight.current
-    Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-        Box(
-            Modifier.requiredSize(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick)
-                .semantics { contentDescription = label },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.Close, null, tint = if (night) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp))
+private fun TwoColumns(lead: String, trail: String?, twoLines: Boolean, modifier: Modifier) {
+    val leadStyle = rowLeadStyle()
+    val trailStyle = rowTrailStyle(twoLines)
+    if (twoLines || trail == null) {
+        Column(modifier.padding(vertical = 6.dp)) {
+            Text(lead, style = leadStyle)
+            if (trail != null) Text(trail, style = trailStyle)
         }
+    } else {
+        Row(modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(lead, style = leadStyle)
+            Spacer(Modifier.weight(1f).widthIn(min = 12.dp))
+            Text(trail, style = trailStyle, textAlign = TextAlign.End)
+        }
+    }
+}
+
+/**
+ * The lock and spot rows merged into one row [height] high (44 at text size 1.0): what the planner gives up last
+ * before the list, to keep the dial at 40% of the screen. The lock (maroon) and the spot (tile fill) each take
+ * half, or the whole row when there is only one: the label at 15 over the cue or distance at 13, ✕ in a 44 target.
+ * The spot half opens the same menu as the spot row.
+ */
+@Composable
+private fun MergedRow(nav: Navigator, noCompass: Boolean, height: Dp, modifier: Modifier) {
+    val l = nav.lock?.takeIf { !noCompass }
+    val mark = nav.markText
+    Row(modifier.height(height), horizontalArrangement = Arrangement.spacedBy(LayoutPlan.ROW_GAP.dp)) {
+        if (l != null) {
+            val label = nav.lockText ?: "Locked ${Math.round(l) % 360}°"
+            val (locked, cue) = TextFit.lockParts(label)
+            Row(
+                Modifier.weight(1f).fillMaxHeight().clip(Look.shape).background(Palette.lockFill)
+                    .border(Look.stroke, Palette.lockStroke, Look.shape)
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = label.replace("°", " degrees").replace(" · ", ", ")
+                        customActions = listOf(CustomAccessibilityAction("Unlock") { nav.lock = null; true })
+                    }
+                    .padding(start = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MergedText(locked, cue, Modifier.weight(1f))
+                CloseButton("Unlock the bearing", 44.dp) { nav.lock = null }
+            }
+        }
+        if (mark != null) {
+            var open by remember { mutableStateOf(false) }
+            val night = LocalNight.current
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                Row(
+                    Modifier.fillMaxSize().clip(Look.shape).frostedTile()
+                        .clickable(role = Role.Button, onClickLabel = "Show what you can do with the marked spot") { open = true }
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = spotSpoken(nav)
+                            customActions = listOf(
+                                CustomAccessibilityAction("Lock to Spot") { nav.lockToSpot(); true },
+                                CustomAccessibilityAction("Clear") { nav.clearMark(); true },
+                            )
+                        }
+                        .padding(start = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MergedText(SPOT_LABEL, spotValue(mark), Modifier.weight(1f))
+                    CloseButton("Clear the marked spot", 44.dp) { nav.clearMark() }
+                }
+                DropdownMenu(open, onDismissRequest = { open = false }) {
+                    Item("Lock to Spot", night, nav.markBearing != null) { nav.lockToSpot(); open = false }
+                    Item("Clear Marked Spot", night) { nav.clearMark(); open = false }
+                }
+            }
+        }
+    }
+}
+
+/** The merged row's half: [lead] at 15 over [trail] at 13 semibold, each on one line. */
+@Composable
+private fun MergedText(lead: String, trail: String?, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.Center) {
+        Text(lead, style = text(15f).copy(lineHeight = 18.sp, fontFeatureSettings = "tnum"), softWrap = false, maxLines = 1)
+        if (trail != null) Text(trail, style = text(13f, FontWeight.SemiBold, white(Op.BODY)).copy(lineHeight = 16.sp, fontFeatureSettings = "tnum"),
+            softWrap = false, maxLines = 1)
+    }
+}
+
+/**
+ * ✕ (C2.3 #18): an 18 dp rounded glyph at full strength (onSurfaceVariant; white at night, which the red
+ * multiply leaves at about 5.7:1), centred in a 48 dp target 4 in from the row's trailing edge.
+ */
+@Composable
+private fun CloseButton(label: String, target: Dp = 48.dp, onClick: () -> Unit) {
+    val night = LocalNight.current
+    Box(
+        Modifier.size(target).clip(CircleShape).clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Rounded.Close, null, tint = if (night) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp))
     }
 }
 
 // ---------- The marked spot ----------
 
 /**
- * The spot row (§3.2): a full-width 44 high tile with the pin, "Marked spot", "9.2 mi · 46° NE" at the trailing
- * side and ✕ in a 48 dp target 4 in from the edge (C2.3 #18). The row opens a small menu: Lock to Spot, Clear
- * Marked Spot.
+ * The spot row (§3.2, C3.4 #7): the lock row's two-column form on the neutral tile fill, 52 high: "Marked spot"
+ * leading, "9.2 mi · 46° NE" trailing, ✕ in a 48 dp target 4 in from the edge. The row opens a small menu: Lock
+ * to Spot, Clear Marked Spot.
  */
 @Composable
-private fun SpotRow(nav: Navigator, height: Dp, modifier: Modifier) {
+private fun SpotRow(nav: Navigator, height: Dp, twoLines: Boolean, modifier: Modifier) {
+    Box(modifier.clip(Look.shape).frostedTile()) { SpotLine(nav, height, twoLines) }
+}
+
+/** "Marked spot", with a no-break space. */
+private const val SPOT_LABEL = "Marked\u00A0spot"
+
+/** "9.2 mi · 46° NE" with no-break spaces inside "9.2 mi" and "46° NE", so a value never splits; it may break only at the "·". */
+private fun spotValue(label: String): String = label.split(" · ").joinToString(" · ") { it.replace(' ', '\u00A0') }
+
+@Composable private fun rowLeadStyle(): TextStyle = text(17f).copy(lineHeight = 22.sp, fontFeatureSettings = "tnum")
+@Composable private fun rowTrailStyle(twoLines: Boolean): TextStyle =
+    text(if (twoLines) 15f else 17f, FontWeight.SemiBold).copy(lineHeight = (if (twoLines) 20f else 22f).sp, fontFeatureSettings = "tnum")
+
+@Composable
+private fun SpotLine(nav: Navigator, height: Dp, twoLines: Boolean) {
     val label = nav.markText ?: return
     var open by remember { mutableStateOf(false) }
     val night = LocalNight.current
-    Box(modifier) {
+    val value = spotValue(label)
+    Box(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = height).clip(Look.shape)
+            Modifier.fillMaxWidth().heightIn(min = height)
                 .clickable(role = Role.Button, onClickLabel = "Show what you can do with the marked spot") { open = true }
-                .frostedTile()
                 .semantics(mergeDescendants = true) {
                     contentDescription = spotSpoken(nav)
                     customActions = listOf(
@@ -880,21 +1062,32 @@ private fun SpotRow(nav: Navigator, height: Dp, modifier: Modifier) {
                         CustomAccessibilityAction("Clear") { nav.clearMark(); true },
                     )
                 }
-                .padding(start = 12.dp, end = 4.dp),
+                .padding(start = 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Place, null, tint = Color.White, modifier = Modifier.size(17.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Marked spot", style = text(15f, FontWeight.Medium).copy(lineHeight = 20.sp), maxLines = 1)
-            Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
-            Text(label, style = text(15f).copy(lineHeight = 20.sp, fontFeatureSettings = "tnum"), textAlign = TextAlign.End,
-                modifier = Modifier.padding(vertical = 4.dp))
+            TwoColumns(SPOT_LABEL, value, twoLines, Modifier.weight(1f))
             CloseButton("Clear the marked spot") { nav.clearMark() }
         }
         DropdownMenu(open, onDismissRequest = { open = false }) {
             Item("Lock to Spot", night, nav.markBearing != null) { nav.lockToSpot(); open = false }
             Item("Clear Marked Spot", night) { nav.clearMark(); open = false }
         }
+    }
+}
+
+/**
+ * Accessibility sizes (C3.4 #6): the lock and the marked spot in one "Targets" card, each on two lines (the cue
+ * or the distance under the label at 15), a rule between.
+ */
+@Composable
+private fun TargetsCard(nav: Navigator, noCompass: Boolean, modifier: Modifier) {
+    val locked = nav.lock != null && !noCompass
+    Column(modifier.clip(Look.shape).frostedTile()) {
+        if (locked) {
+            Box(Modifier.fillMaxWidth().background(Palette.lockFill)) { LockLine(nav, LayoutPlan.LOCK.dp, twoLines = true) }
+        }
+        if (locked && nav.markText != null) HorizontalDivider(color = Palette.tileStroke)
+        if (nav.markText != null) SpotLine(nav, LayoutPlan.SPOT.dp, twoLines = true)
     }
 }
 
@@ -917,18 +1110,19 @@ private fun rememberTick(): Long {
 }
 
 /**
- * The tile grid (§3.2, C2.2 #1): the planner's rows, whose widths and 8 dp gaps add up to the column. Full:
- * Position (2u) | Elevation, then Sun | Moon | Map (Sun | Moon at half each when the map is a card or a button).
- * Compact: Position (C − 16 − 2w) | Elevation (w) | Sun (w), w = max(104, 0.27 C), with the moon in the Sun
- * caption. In a pane under 360 wide, 2 columns. In the scrolling list, full-width rows. Tiles in a row share
- * the tallest one's height, at least the planned height. Before a location is allowed, the request for it
+ * The tile grid (§3.2, C3.3): the planner's rows, whose widths and 8 dp gaps add up to the column, rows
+ * [Plan.rowGap] apart. Full (Medium): Position (2u) | Elevation, then Sun | Moon | Map (Sun | Moon at half each
+ * when the map is a card). Quad (Large): Position | Elevation, Sun | Moon at half each. Compact (Small, Extra
+ * Large): Position (C − 16 − 2w) | Elevation (w) | Sun (w), w = max(104, 0.27 C), with the moon in the Sun
+ * caption. In the scrolling list, 64 high rows with the caption leading and the value trailing. Tiles in a row
+ * share the tallest one's height, at least the planned height. Before a location is allowed, the request for it
  * takes the grid's place.
  */
 @Composable
 private fun TileGrid(nav: Navigator, plan: Plan, a: Actions) {
     val width = plan.column
     if (nav.fix == null && nav.access != Access.ALLOWED) {
-        val gridHeight = LayoutPlan.gridHeight(plan.grid, plan.tile, plan.gridColumns)
+        val gridHeight = LayoutPlan.gridHeight(plan.grid, plan.tile, plan.gridColumns, plan.k)
         AskForLocation(nav.access == Access.DENIED, a.useLocation, a.openSettings,
             Modifier.width(width.dp).heightIn(min = if (plan.grid == GridMode.ROWS) 0.dp else gridHeight.dp))
         return
@@ -939,17 +1133,19 @@ private fun TileGrid(nav: Navigator, plan: Plan, a: Actions) {
     val stale = !nav.sample && fix != null && tick - fix.time > 120_000
     val night = LocalNight.current
     val compact = plan.grid == GridMode.COMPACT
+    val listRow = plan.grid == GridMode.ROWS
     Box(Modifier.width(width.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(LayoutPlan.ROW_GAP.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(plan.rowGap.dp)) {
             for (row in plan.rows) {
-                TileRow(row.widths, width, if (plan.grid == GridMode.ROWS) 0f else plan.tile, mapIndex = row.tiles.indexOf(TileKind.MAP)) {
+                TileRow(row.widths, width, plan.tile, mapIndex = row.tiles.indexOf(TileKind.MAP)) {
                     row.tiles.forEachIndexed { i, kind ->
-                        val inner = (row.widths[i] - 24f).coerceAtLeast(1f).dp
+                        // The value's room: the tile less its 12 insets; in a list row, the trailing 60%.
+                        val inner = (if (listRow) (row.widths[i] - 36f) * 0.6f else row.widths[i] - 24f).coerceAtLeast(1f).dp
                         when (kind) {
-                            TileKind.POSITION -> PositionTile(nav, stale, inner, compact, { positionMenu = true }, a)
-                            TileKind.ELEVATION -> ElevationTile(nav, stale, inner, a)
-                            TileKind.SUN -> SunTile(nav, inner, compact, a)
-                            TileKind.MOON -> MoonTile(nav, inner, a)
+                            TileKind.POSITION -> PositionTile(nav, stale, inner, compact, listRow, { positionMenu = true }, a)
+                            TileKind.ELEVATION -> ElevationTile(nav, stale, inner, listRow, a)
+                            TileKind.SUN -> SunTile(nav, inner, compact, listRow, a)
+                            TileKind.MOON -> MoonTile(nav, inner, listRow, a)
                             TileKind.MAP -> MapTile(nav, a)
                         }
                     }
@@ -993,18 +1189,28 @@ private fun TileRow(widths: List<Float>, total: Float, minHeight: Float, mapInde
 }
 
 /**
- * One tile (§3.2), the widgets' pattern: the caption (11, caps, tracking 0.6, secondary) pinned to the top and
- * the value block (17, tabular, over a 13 secondary line) to the bottom, 12 in at the sides and 10 at top and
- * bottom (C2.2 #3), so a grown tile is never half empty at the bottom. TalkBack reads it as one element ([spoken]).
+ * One tile (§3.2, C3.4 #13), the widgets' pattern: the caption (11, caps, tracking 0.6, secondary, text only) pinned
+ * 10 from the top and the value block (17, tabular, over a 13 secondary line) with its last baseline 10 from the
+ * bottom, 12 in at the sides, so a grown tile is never half empty at the bottom. With [listRow] (the scrolling
+ * list) the caption leads and the value block trails, centred in a 64 high row. TalkBack reads it as one
+ * element ([spoken]).
  */
 @Composable
-private fun Tile(caption: @Composable () -> Unit, spoken: String, click: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+private fun Tile(caption: @Composable () -> Unit, spoken: String, click: Modifier = Modifier, listRow: Boolean = false,
+                 content: @Composable ColumnScope.() -> Unit) {
     // Clipped before the click, so the ripple keeps the rounded corners.
-    Column(
-        Modifier.fillMaxSize().clip(Look.shape).then(click).frostedTile()
-            .semantics(mergeDescendants = true) { contentDescription = spoken }
-            .padding(horizontal = Look.tilePaddingH, vertical = Look.tilePaddingV),
-    ) {
+    val base = Modifier.fillMaxSize().clip(Look.shape).then(click).frostedTile()
+        .semantics(mergeDescendants = true) { contentDescription = spoken }
+        .padding(horizontal = Look.tilePaddingH, vertical = Look.tilePaddingV)
+    if (listRow) {
+        Row(base, verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(0.4f)) { caption() }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(0.6f), horizontalAlignment = Alignment.End, content = content)
+        }
+        return
+    }
+    Column(base) {
         caption()
         Spacer(Modifier.weight(1f))
         content()
@@ -1012,40 +1218,35 @@ private fun Tile(caption: @Composable () -> Unit, spoken: String, click: Modifie
 }
 
 /**
- * A tile's caption: [title] in caps, shrunk to 0.85 and then wrapped rather than cut (POSITION · MGRS in a
- * narrow tile), after an optional 13 dp [icon]; with [moon], " · ◐ 53%" follows (the compact row's Sun tile,
- * C2.3 #3), the moon drawn for its phase.
+ * A tile's caption, text only (C3.4 #13): [title] in caps, shrunk to 0.85 and then wrapped rather than cut
+ * (POSITION · MGRS in a narrow tile); with [moon], " · ◐ 53%" follows (the compact row's Sun tile, C2.3 #3),
+ * the moon drawn for its phase.
  */
 @Composable
-private fun TileCaption(title: String, inner: Dp, icon: ImageVector? = null, moon: com.bradcowdrey.bearings.MoonPhase? = null) {
+private fun TileCaption(title: String, inner: Dp, moon: com.bradcowdrey.bearings.MoonPhase? = null) {
     val style = text(Look.TILE_CAPTION, FontWeight.SemiBold, secondary())
         .copy(letterSpacing = Look.TILE_CAPTION_TRACKING.sp, lineHeight = Look.TILE_CAPTION_LINE.sp)
-    Row(verticalAlignment = Alignment.Top) {
-        if (icon != null) {
-            Icon(icon, null, tint = secondary(), modifier = Modifier.padding(end = 4.dp).size(13.dp))
-        }
-        if (moon == null) {
-            FitWrapText(title.uppercase(), style, inner - (if (icon != null) 17.dp else 0.dp))
-        } else {
-            val glyph = "moon"
-            val caption = buildAnnotatedString {
-                append(title.uppercase()); append(" · ")
-                appendInlineContent(glyph, "◐")
-                append(" ${Geo.jsRound(moon.fraction * 100)}%")
-            }
-            val inline = mapOf(glyph to InlineTextContent(Placeholder(1.em, 1.em, PlaceholderVerticalAlign.TextCenter)) {
-                Canvas(Modifier.fillMaxSize()) { moonGlyph(Offset(size.width / 2, size.height / 2), size.minDimension / 2, moon.phase, 1f) }
-            })
-            // Like every other caption it shrinks (to 0.85) before it wraps: at text size 1.3 "SUN · ◐ 53%" is a
-            // few dp wider than a 104 tile, and a second caption line would make the row taller than planned.
-            val measurer = rememberTextMeasurer()
-            val density = LocalDensity.current
-            val max = with(density) { inner.roundToPx() }.coerceAtLeast(1)
-            val probe = "${title.uppercase()} · M ${Geo.jsRound(moon.fraction * 100)}%"
-            val scale = remember(probe, max, style, density) { fitScale(measurer, probe, style, max) ?: Look.MIN_TEXT_SCALE }
-            Text(caption, style = style.copy(fontSize = style.fontSize * scale), inlineContent = inline)
-        }
+    if (moon == null) {
+        FitWrapText(title.uppercase(), style, inner)
+        return
     }
+    val glyph = "moon"
+    val caption = buildAnnotatedString {
+        append(title.uppercase()); append(" · ")
+        appendInlineContent(glyph, "◐")
+        append(" ${Geo.jsRound(moon.fraction * 100)}%")
+    }
+    val inline = mapOf(glyph to InlineTextContent(Placeholder(1.em, 1.em, PlaceholderVerticalAlign.TextCenter)) {
+        Canvas(Modifier.fillMaxSize()) { moonGlyph(Offset(size.width / 2, size.height / 2), size.minDimension / 2, moon.phase, 1f) }
+    })
+    // Like every other caption it shrinks (to 0.85) before it wraps: at text size 1.3 "SUN · ◐ 53%" is a few dp
+    // wider than a 104 tile, and a second caption line would make the row taller than planned.
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val max = with(density) { inner.roundToPx() }.coerceAtLeast(1)
+    val probe = "${title.uppercase()} · M ${Geo.jsRound(moon.fraction * 100)}%"
+    val scale = remember(probe, max, style, density) { fitScale(measurer, probe, style, max) ?: Look.MIN_TEXT_SCALE }
+    Text(caption, style = style.copy(fontSize = style.fontSize * scale), inlineContent = inline)
 }
 
 @Composable
@@ -1079,6 +1280,21 @@ private fun FitWrapText(value: String, style: TextStyle, width: Dp) {
     val max = with(density) { width.roundToPx() }.coerceAtLeast(1)
     val scale = remember(value, max, style, density) { fitScale(measurer, value, style, max) ?: Look.MIN_TEXT_SCALE }
     Text(value, style = style.copy(fontSize = style.fontSize * scale), softWrap = true)
+}
+
+/**
+ * Lines that share one size (C3.4 #12): the largest scale from 1 down to 0.85 at which every line fits [width]
+ * (the longer line decides), so "39.09898° N" and "106.94117° W" are never drawn at two sizes; past 0.85 they wrap.
+ */
+@Composable
+private fun FitWrapLines(lines: List<String>, style: TextStyle, width: Dp) {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val max = with(density) { width.roundToPx() }.coerceAtLeast(1)
+    val scale = remember(lines, max, style, density) {
+        TextFit.sharedScale(lines) { fitScale(measurer, it, style, max) ?: Look.MIN_TEXT_SCALE }
+    }
+    for (line in lines) Text(line, style = style.copy(fontSize = style.fontSize * scale), softWrap = true)
 }
 
 /**
@@ -1131,12 +1347,13 @@ private fun Pending(note: String) {
 }
 
 /**
- * Position: the coordinates in the current format (15 in the compact row, 17 elsewhere). Tap: the next format.
- * Touch and hold: Copy, Details….
+ * Position: the coordinates in the current format, both lines at one size (15 in the compact row, 17
+ * elsewhere); a one-line format (MGRS, Plus Code, UTM) at 20 (17 in the compact row), and the tile never grows
+ * for it (C3.4 #12). Tap: the next format. Touch and hold: Copy, Details….
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PositionTile(nav: Navigator, stale: Boolean, inner: Dp, compact: Boolean, onLongPress: () -> Unit, a: Actions) {
+private fun PositionTile(nav: Navigator, stale: Boolean, inner: Dp, compact: Boolean, listRow: Boolean, onLongPress: () -> Unit, a: Actions) {
     val fix = nav.fix
     val f = fix?.let { Geo.format(nav.format, it.latitude, it.longitude) }
     val spoken = when (f) {
@@ -1154,11 +1371,10 @@ private fun PositionTile(nav: Navigator, stale: Boolean, inner: Dp, compact: Boo
                 CustomAccessibilityAction("Details") { a.details(); true },
             )
         }
-    Tile({ TileCaption("Position · ${shortName(nav.format)}", inner) }, spoken, click) {
-        val style = valueStyle(dim = stale, size = if (compact) 15f else Look.TILE_VALUE)
+    Tile({ TileCaption("Position · ${shortName(nav.format)}", inner) }, spoken, click, listRow) {
         when (f) {
-            is Geo.Formatted.Pair -> { FitWrapText(f.lat, style, inner); FitWrapText(f.lon, style, inner) }
-            is Geo.Formatted.Single -> FitWrapText(f.text, style, inner)
+            is Geo.Formatted.Pair -> FitWrapLines(listOf(f.lat, f.lon), valueStyle(dim = stale, size = if (compact) 15f else Look.TILE_VALUE), inner)
+            is Geo.Formatted.Single -> FitWrapText(f.text, valueStyle(dim = stale, size = if (compact) Look.TILE_VALUE else Look.TILE_VALUE_SINGLE), inner)
             null -> Pending("Finding position…")
         }
     }
@@ -1169,7 +1385,7 @@ private fun spokenUnits(s: String) = s.removeSuffix(" ft").let { if (it != s) "$
 
 /** Elevation: "9,587 ft" over "2,922 m" (the order follows the units setting). Opens the Details sheet. */
 @Composable
-private fun ElevationTile(nav: Navigator, stale: Boolean, inner: Dp, a: Actions) {
+private fun ElevationTile(nav: Navigator, stale: Boolean, inner: Dp, listRow: Boolean, a: Actions) {
     val click = Modifier.clickable(role = Role.Button, onClickLabel = "Show the details", onClick = a.details)
     val caption = @Composable { TileCaption("Elevation", inner) }
     when (val e = nav.elevation) {
@@ -1177,60 +1393,57 @@ private fun ElevationTile(nav: Navigator, stale: Boolean, inner: Dp, a: Actions)
             val (ft, m) = Geo.elevation(e.metres)
             val first = if (nav.feet) ft else m; val second = if (nav.feet) m else ft
             val spoken = "Elevation, ${spokenUnits(first)}, ${spokenUnits(second)}, ${if (e.fromGps) "from GPS" else "from terrain data"}"
-            Tile(caption, spoken, click) {
+            Tile(caption, spoken, click, listRow) {
                 FitWrapText(first, valueStyle(dim = stale), inner)
                 Text(second, style = secondaryStyle())
             }
         }
         is ElevationReading.Pending -> {
             val note = if (nav.fix == null) "Finding position…" else e.note.ifBlank { "Looking it up…" }
-            Tile(caption, "Elevation, $note", click) { Pending(note) }
+            Tile(caption, "Elevation, $note", click, listRow) { Pending(note) }
         }
     }
 }
 
 /**
- * Sun: "↑ 6:36 AM" over "↓ 5:08 PM" (the phone's 12- or 24-hour clock), or "Up all day" / "Down all day",
- * with the sun's glyph in the caption (C2.3 #19). In the compact row the value is 15 semibold and the caption
- * carries the moon, "SUN · ◐ 53%", so the moon is never dropped (C2.3 #3). Opens the Details sheet, which has
- * the moon in full.
+ * Sun: "↑ 6:36 AM" over "↓ 5:08 PM" (the phone's 12- or 24-hour clock), or "Up all day" / "Down all day". The
+ * caption is text only (C3.4 #13). In the compact row the value is 15 semibold and the caption carries the moon,
+ * "SUN · ◐ 53%", so the moon is never dropped (C2.3 #3). Opens the Details sheet, which has the moon in full.
  */
 @Composable
-private fun SunTile(nav: Navigator, inner: Dp, compact: Boolean, a: Actions) {
+private fun SunTile(nav: Navigator, inner: Dp, compact: Boolean, listRow: Boolean, a: Actions) {
     val click = Modifier.clickable(role = Role.Button, onClickLabel = "Show the details", onClick = a.details)
     val phase = nav.moonPhase
     val moonSpoken = if (compact) ". Moon, ${Geo.jsRound(phase.fraction * 100)} percent, ${Sky.phaseName(phase).lowercase()}" else ""
-    val caption = @Composable {
-        if (compact) TileCaption("Sun", inner, moon = phase) else TileCaption("Sun", inner, icon = Icons.Filled.WbSunny)
-    }
+    val caption = @Composable { TileCaption("Sun", inner, moon = if (compact) phase else null) }
     val style = if (compact) valueStyle(size = 15f, weight = FontWeight.SemiBold) else valueStyle()
     val fix = nav.fix
     if (fix == null) {
-        Tile(caption, "Sun, not known yet$moonSpoken", click) { Pending("Finding position…") }
+        Tile(caption, "Sun, not known yet$moonSpoken", click, listRow) { Pending("Finding position…") }
         return
     }
     val times = Sky.sunTimes(nav.now.toDouble(), fix.latitude, fix.longitude)
     val rise = times.sunrise; val set = times.sunset
     if (rise != null && set != null && times.polar == null) {
         val up = nav.clock(rise.toLong()); val down = nav.clock(set.toLong())
-        Tile(caption, "Sun, rises $up, sets $down$moonSpoken", click) {
+        Tile(caption, "Sun, rises $up, sets $down$moonSpoken", click, listRow) {
             SunTime("↑", up, style, inner)
             SunTime("↓", down, style, inner)
         }
     } else {
         val allDay = if (times.polar == com.bradcowdrey.bearings.Polar.DAY) "Up all day" else "Down all day"
-        Tile(caption, "Sun, $allDay$moonSpoken", click) { FitWrapText(allDay, style, inner) }
+        Tile(caption, "Sun, $allDay$moonSpoken", click, listRow) { FitWrapText(allDay, style, inner) }
     }
 }
 
-/** Moon: the phase's glyph and "53%" over "Last quarter". Opens the Details sheet. */
+/** Moon: the phase's glyph and "53%" over "Last quarter", its last baseline 10 from the bottom like every tile. Opens the Details sheet. */
 @Composable
-private fun MoonTile(nav: Navigator, inner: Dp, a: Actions) {
+private fun MoonTile(nav: Navigator, inner: Dp, listRow: Boolean, a: Actions) {
     val phase = nav.moonPhase
     val percent = "${Geo.jsRound(phase.fraction * 100)}%"
     val name = Sky.phaseName(phase)
     Tile({ TileCaption("Moon", inner) }, "Moon, ${Geo.jsRound(phase.fraction * 100)} percent, ${name.lowercase()}",
-        Modifier.clickable(role = Role.Button, onClickLabel = "Show the details", onClick = a.details)) {
+        Modifier.clickable(role = Role.Button, onClickLabel = "Show the details", onClick = a.details), listRow) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Canvas(Modifier.size(13.dp)) { moonGlyph(Offset(size.width / 2, size.height / 2), size.minDimension / 2, phase.phase, 1f) }
             Spacer(Modifier.width(6.dp))
@@ -1241,23 +1454,28 @@ private fun MoonTile(nav: Navigator, inner: Dp, a: Actions) {
 }
 
 /**
- * Map (one cell): a live north-up thumbnail with the heading cone and no controls, "MAP" bottom-leading on a
- * 40% black scrim and "© OSM" bottom-trailing (C2.3 #12). Tapping it opens the map sheet.
+ * Map (one cell, C3.4 #8): a live north-up thumbnail with the heading cone and no controls, its labels at 70%,
+ * under one 24 dp bottom scrim band holding "MAP" (11 caps, 10 in) leading and "© OSM" (10) trailing. It is
+ * the one caption at the bottom, because it labels an image (C3.4 #13). Tapping it opens the map sheet.
  */
 @Composable
 private fun MapTile(nav: Navigator, a: Actions) {
     Box(Modifier.fillMaxSize().clip(Look.shape)) {
         MapSnippet(
             nav.fix, nav.trueHeading, follow = false, night = nav.night, speed = null,
-            onToggleFollow = {}, onOpen = a.openMap, modifier = Modifier.fillMaxSize(), controls = false,
+            onToggleFollow = {}, onOpen = a.openMap, modifier = Modifier.fillMaxSize(), controls = false, attribution = false,
         )
-        Text("MAP", style = text(Look.TILE_CAPTION, FontWeight.SemiBold, Color.White)
-            .copy(letterSpacing = Look.TILE_CAPTION_TRACKING.sp, lineHeight = Look.TILE_CAPTION_LINE.sp),
-            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clip(RoundedCornerShape(6.dp))
-                .background(Color.Black.copy(alpha = 0.4f)).padding(horizontal = 6.dp, vertical = 2.dp))
+        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(24.dp).background(Color.Black.copy(alpha = 0.5f))) {
+            Text("MAP", style = text(Look.TILE_CAPTION, FontWeight.SemiBold, Color.White)
+                .copy(letterSpacing = Look.TILE_CAPTION_TRACKING.sp, lineHeight = Look.TILE_CAPTION_LINE.sp),
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 10.dp))
+            Text("© OSM", style = text(10f, FontWeight.Medium, white(Op.STRONG)),
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 10.dp)
+                    .semantics { contentDescription = "Map data from OpenStreetMap contributors" })
+        }
         // Over the map, so the tap opens the sheet rather than reaching the map view.
         Box(Modifier.matchParentSize().clickable(role = Role.Button, onClickLabel = "Open the map", onClick = a.map)
-            .semantics { contentDescription = "Map" })
+            .semantics { contentDescription = "Map, opens full map" })
     }
 }
 
@@ -1309,9 +1527,10 @@ private fun SheetTitle(title: String, onDone: () -> Unit) {
 }
 
 /**
- * The map sheet (§3.2, C2.3 #11): full height, the map full-bleed under a translucent bar ("Map" 20 and Done 16
- * on one baseline, 64 high, under the status bar), with the same control stack, speed chip, heading cone and
- * attribution as the map card, the attribution above the navigation bar.
+ * The map sheet (§3.2, C2.3 #11, C3.4 #16): full height under the status bar, which stays visible (black, its
+ * icons light), the map full-bleed under a translucent bar with a 32 × 4 grabber and "Map" 20 and Done 16 on one
+ * baseline, with the same control stack, speed chip, heading cone and attribution as the map card, the
+ * attribution above the navigation bar.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1326,24 +1545,32 @@ private fun MapSheet(nav: Navigator, night: Boolean, openMap: (Fix) -> Unit, onD
     ) {
         val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        Box(Modifier.fillMaxSize().nightMultiply(night)) {
-            MapSnippet(
-                nav.fix, nav.trueHeading, nav.followHeading, night,
-                speed = nav.speed?.let { Geo.speedText(it, nav.feet) },
-                onToggleFollow = { nav.setFollowHeading(!nav.followHeading) },
-                onOpen = openMap,
-                modifier = Modifier.fillMaxSize(),
-                shape = RectangleShape, edge = false, topInset = top + 64.dp, bottomInset = bottom,
-            )
-            Row(
-                Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.6f))
-                    .padding(top = top + 8.dp, bottom = 8.dp, start = 16.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Map", style = text(20f, FontWeight.SemiBold), modifier = Modifier.weight(1f).alignByBaseline().semantics { heading() })
-                Text("Done", style = text(16f, FontWeight.SemiBold),
-                    modifier = Modifier.alignByBaseline().heightIn(min = 48.dp).clip(CircleShape)
-                        .clickable(role = Role.Button, onClick = onDismiss).padding(horizontal = 12.dp, vertical = 13.dp))
+        // The status bar's band stays black, so the bar (and its icons) is never covered by the map.
+        Column(Modifier.fillMaxSize().nightMultiply(night)) {
+            Spacer(Modifier.height(top))
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                MapSnippet(
+                    nav.fix, nav.trueHeading, nav.followHeading, night,
+                    speed = nav.speed?.let { Geo.speedText(it, nav.feet) },
+                    onToggleFollow = { nav.setFollowHeading(!nav.followHeading) },
+                    onOpen = openMap,
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RectangleShape, edge = false, topInset = 76.dp, bottomInset = bottom,
+                )
+                Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.6f))) {
+                    Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(width = 32.dp, height = 4.dp).clip(CircleShape).background(white(Op.FAINT)))
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Map", style = text(20f, FontWeight.SemiBold), modifier = Modifier.weight(1f).alignByBaseline().semantics { heading() })
+                        Text("Done", style = text(16f, FontWeight.SemiBold),
+                            modifier = Modifier.alignByBaseline().heightIn(min = 48.dp).clip(CircleShape)
+                                .clickable(role = Role.Button, onClick = onDismiss).padding(horizontal = 12.dp, vertical = 13.dp))
+                    }
+                }
             }
         }
     }
