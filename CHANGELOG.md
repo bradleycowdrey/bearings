@@ -3,6 +3,20 @@
 On a Mac, Bearings shows a banner when a new version is out. Every version is on
 [Releases](https://github.com/bradleycowdrey/bearings/releases).
 
+## [2.2.0] - 2026-11-07
+
+The compass comes first.
+
+- **A much bigger compass**: at least 40% of the screen on a phone, nearly twice as wide as before on a
+  typical iPhone. Your place, heading, warnings and marked spot stay at the top; everything else scrolls
+  below it.
+- **A summary row** under the compass: your coordinates (tap to switch format, hold to copy), elevation,
+  sunrise and sunset. The map and the full tiles follow.
+- **Four layouts**, in the menu under Layout: Small, Medium (the default), Large and Extra Large. Pinch the
+  compass to change it; on the Mac, View › Layout (⌘=, ⌘−, ⌘0).
+- **iPad, Mac and phones on their side** show the compass beside the details.
+- The marked spot is one line: tap it to lock to the spot or clear it.
+
 ## [2.1.0] - 2026-11-07
 
 A new look, in the style of Two Degrees.

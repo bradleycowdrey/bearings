@@ -762,6 +762,17 @@ private fun rememberTick(): Long {
  */
 @Composable
 private fun SummaryStrip(nav: Navigator, vertical: Boolean, onCopy: () -> Unit, onShowTiles: () -> Unit) {
+    // The strip is a compact summary: its text grows with the font size up to 1.15×, so its cells never cut
+    // the numbers off. The full tiles below it follow the font size all the way (and the vertical strip is
+    // used at the largest sizes).
+    val density = LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalDensity provides androidx.compose.ui.unit.Density(density.density, minOf(density.fontScale, 1.15f)),
+    ) { SummaryStripContent(nav, vertical, onCopy, onShowTiles) }
+}
+
+@Composable
+private fun SummaryStripContent(nav: Navigator, vertical: Boolean, onCopy: () -> Unit, onShowTiles: () -> Unit) {
     val fix = nav.fix
     val tick = rememberTick()
     val stale = !nav.sample && fix != null && tick - fix.time > 120_000
