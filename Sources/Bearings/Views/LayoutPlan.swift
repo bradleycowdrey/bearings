@@ -349,6 +349,14 @@ struct LayoutPlan: Equatable {
         let inset: CGFloat = tablet ? tileInsetTablet : tileInset
         return line * k + 2 * inset
     }
+    /// The narrowest Sun tile that holds a sunrise or sunset time ("12:08" with its period below) at text
+    /// size `k`: about 74 pt of digits at 1.0, plus the insets. In two panes a row whose Sun is narrower
+    /// gives way to the 2 × 2, as for Position.
+    static let sunLine: CGFloat = 74
+    static func sunNeed(k: CGFloat, tablet: Bool) -> CGFloat {
+        let inset: CGFloat = tablet ? tileInsetTablet : tileInset
+        return sunLine * k + 2 * inset
+    }
     /// Medium: spare at or above this (dial at its cap) turns the Map tile into a full-width card…
     static let mapPromote: CGFloat = 160
     /// …of at least this height, taken from the dial.
@@ -532,6 +540,13 @@ struct LayoutPlan: Equatable {
             if p.grid == .compact && positionWidth < positionNeed(k: k, tablet: p.tablet) - 0.5 && quadHeight <= below + 0.5 {
                 p.grid = .twoByTwo
             }
+            // The same for the Sun tile: in a narrow pane at a larger text size the three-column row (Medium)
+            // or the compact row leaves Sun too narrow for a time like "12:08", so the pane takes the 2 × 2.
+            let threeColumn: CGFloat = (p.columnWidth - 2 * rowGap) / 3
+            let sunWidth: CGFloat = p.grid == .full ? (p.columns == 3 ? threeColumn : (p.columnWidth - rowGap) / 2) : (p.grid == .compact ? compactWidths(p.columnWidth).other : .infinity)
+            if sunWidth < sunNeed(k: k, tablet: p.tablet) - 0.5 && quadHeight <= below + 0.5 {
+                p.grid = .twoByTwo
+            }
             let gridRows: CGFloat = p.grid == .compact ? 1 : 2
             var used = above(merged: false) + gridRows * row + (gridRows - 1) * p.gapRows
             let forMap = below - used - p.gapGridMap
@@ -545,7 +560,7 @@ struct LayoutPlan: Equatable {
                     p.map = .card
                     p.mapHeight = forMap
                     used = below
-                } else if layout == .medium {
+                } else if layout == .medium && p.grid == .full {
                     // 3 columns: the Map tile sits in row 2; 2 columns: its own row, spanning both.
                     p.map = .tile
                     if p.columns == 2 { used += p.gapRows + row }
