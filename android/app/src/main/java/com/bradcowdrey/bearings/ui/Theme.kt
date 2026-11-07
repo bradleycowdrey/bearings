@@ -68,6 +68,9 @@ object Palette {
     val menu = Color(0xFF1E1E22)
     /** Behind the map's round buttons and speed chip (Android has no blur): black at 60%. */
     val mapControl = Color(0x99000000)
+    /** The lock row (C3.4 #7): maroon, with a 1 dp edge; red through night mode's multiply. */
+    val lockFill = Color(0xFF3D2128)
+    val lockStroke = Color(0xFF5A2C38)
     /** The dividers inside a widget (the same as border). */
     val widgetRule = border
 }
@@ -140,6 +143,8 @@ object Look {
     const val TILE_CAPTION_TRACKING = 0.6f
     const val TILE_VALUE = 17f
     const val TILE_VALUE_LINE = 19f
+    /** A one-line Position (MGRS, Plus Code, UTM): 20 (C3.4 #12). */
+    const val TILE_VALUE_SINGLE = 20f
     const val TILE_SECONDARY = 13f
     const val TILE_SECONDARY_LINE = 16f
     const val WIDGET_CAPTION = 10f
