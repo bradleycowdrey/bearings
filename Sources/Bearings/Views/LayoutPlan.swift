@@ -389,8 +389,12 @@ struct LayoutPlan: Equatable {
     static let listTargetsRow: CGFloat = 84
     static let tile: CGFloat = 72
     static let tileTablet: CGFloat = 96
-    /// `quadCompact`, `twoRow` and `mapRows`.
+    /// `quadCompact`, `twoRow` and `mapRows` (phone; a tablet keeps its 96 × k tiles, which its 22 type needs).
     static let tileCompact: CGFloat = 64
+    /// A tile in a row under the full tile height (72 × k; 96 × k on a tablet), i.e. the 64 × k rows: 6 above
+    /// and below instead of the ramp's 10, so the caption (11), Position's two 15 lines and the 2 between fit
+    /// (≈ 49 + 12 = 61 ≤ 64; 10 would draw it 69 high, 5 over the row).
+    static let tileInsetCompact: CGFloat = 6
     /// Medium's rows grow to 88 (live, row 2 to 176); Large's to 104.
     static let tileGrown: CGFloat = 88
     static let tileTall: CGFloat = 176
@@ -466,6 +470,11 @@ struct LayoutPlan: Equatable {
     }
     static func statusHeight(k: CGFloat, lines: CGFloat, tablet: Bool = false) -> CGFloat {
         (tablet ? statusLineTablet : statusLine) * k * lines
+    }
+    /// The vertical inset inside a grid tile in a row `height` high: the tight 6 under the full tile height,
+    /// else nil (the ramp's 10, or 12 on a tablet).
+    static func tileInsetV(height: CGFloat, k: CGFloat, tablet: Bool) -> CGFloat? {
+        height < (tablet ? tileTablet : tile) * k - 0.5 ? tileInsetCompact : nil
     }
     static func targetsRowHeight(layout: Layout, k: CGFloat, tablet: Bool, compact: Bool) -> CGFloat {
         let base: CGFloat = layout == .extraLarge || tablet ? targetsRowLarge : targetsRow
@@ -604,12 +613,14 @@ struct LayoutPlan: Equatable {
 
     /// The grid's rows at their smallest.
     private static func minRows(_ grid: Grid, k: CGFloat, tablet: Bool, largeText: Bool) -> [CGFloat] {
-        let t = (tablet ? tileTablet : tile) * k, compact = tileCompact * k
+        // A tablet's tiles carry the regular-width ramp (caption 13, values 22): every row stays 96 × k there,
+        // as in two panes, since 64 or 72 cannot hold Position's two 22 lines.
+        let t = (tablet ? tileTablet : tile) * k, compact = tablet ? t : tileCompact * k
         switch grid {
         case .band, .list: return []
         case .quad, .six: return [t, t]
         case .quadCompact, .twoRow: return [compact, compact]
-        case .row: return [tile * k]
+        case .row: return [t]
         case .mapRows: return largeText ? [compact, compact, compact] : [compact, compact]
         case .strip: return [(tablet ? stripTablet : strip) * k]
         }

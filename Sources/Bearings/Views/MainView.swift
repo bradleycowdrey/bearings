@@ -930,6 +930,10 @@ struct MainView: View {
                 HStack(spacing: LayoutPlan.rowGap) {
                     ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
                         tileView(cell.tile, plan: plan, height: rowHeight(plan, index), stale: stale)
+                            // A row under the full tile height (the 64 × k rows) takes the tight inset, so
+                            // the tile's content fits the planned row.
+                            .environment(\.tileInsetV, LayoutPlan.tileInsetV(height: rowHeight(plan, index),
+                                                                               k: plan.k, tablet: plan.tablet))
                             .frame(width: cell.width, height: rowHeight(plan, index))
                     }
                 }
@@ -1699,6 +1703,8 @@ struct PanelTile<Value: View, Extra: View>: View {
     @Environment(\.nightText) private var night
     @Environment(\.panelRamp) private var ramp
     @Environment(\.panelRows) private var rows
+    /// The grid's vertical inset for this row (nil: the ramp's).
+    @Environment(\.tileInsetV) private var rowInsetV
 
     init(_ caption: String, moon: Sky.Phase? = nil, secondary: String? = nil, insetH: CGFloat? = nil,
          topAligned: Bool = false, @ViewBuilder value: () -> Value, @ViewBuilder extra: () -> Extra) {
@@ -1743,8 +1749,10 @@ struct PanelTile<Value: View, Extra: View>: View {
                 }
             }
             .padding(.horizontal, insetH ?? ramp.insetH)
-            .padding(.vertical, ramp.insetV)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.vertical, rowInsetV ?? ramp.insetV)
+            // Exactly the planned cell (minHeight 0): content that would be taller never makes the tile
+            // draw taller than its row.
+            .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
             .frostedTile()
         }
     }
@@ -2514,6 +2522,9 @@ private struct PanelRampKey: EnvironmentKey { static let defaultValue = Ramp.pho
 /// The scrolling list: tiles are rows (caption leading, value trailing).
 private struct PanelRowsKey: EnvironmentKey { static let defaultValue = false }
 
+/// The grid row's vertical inset inside a tile (nil: the ramp's), from `LayoutPlan.tileInsetV`.
+private struct TileInsetVKey: EnvironmentKey { static let defaultValue: CGFloat? = nil }
+
 extension EnvironmentValues {
     var flatDetails: Bool {
         get { self[FlatDetailsKey.self] }
@@ -2534,5 +2545,9 @@ extension EnvironmentValues {
     var panelRows: Bool {
         get { self[PanelRowsKey.self] }
         set { self[PanelRowsKey.self] = newValue }
+    }
+    var tileInsetV: CGFloat? {
+        get { self[TileInsetVKey.self] }
+        set { self[TileInsetVKey.self] = newValue }
     }
 }
