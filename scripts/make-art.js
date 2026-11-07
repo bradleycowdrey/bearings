@@ -1,5 +1,6 @@
 // Draws Bearings' icons and DMG background with Playwright (Chromium), in the style of Two Degrees:
-// warm near-black with a soft glow, a crimson band, cream and pink. Writes:
+// the app's sky (day blue fading to night navy), white ticks and needle, pink north, and the crimson
+// band shared by every Bradley Cowdrey app. Writes:
 //   Resources/AppIcon.png (Mac, 1024, rounded with margin)  Resources/iOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png (full bleed)
 //   docs/icon.png (512)  Resources/dmg/background.png and background@2x.png  android/.../mipmap-*/ic_launcher*.png
 // Usage: node scripts/make-art.js
@@ -14,34 +15,35 @@ function needle(cx, cy, r) {
   let ticks = '';
   for (let d = 0; d < 360; d += 15) {
     const major = d % 90 === 0;
-    ticks += `<line x1="${cx}" y1="${cy - r}" x2="${cx}" y2="${cy - r + (major ? r * 0.16 : r * 0.08)}" stroke="${d === 0 ? '#E04A7A' : major ? '#FFF1E5' : '#6A6158'}" stroke-width="${major ? r * 0.045 : r * 0.022}" stroke-linecap="round" transform="rotate(${d} ${cx} ${cy})"/>`;
+    ticks += `<line x1="${cx}" y1="${cy - r}" x2="${cx}" y2="${cy - r + (major ? r * 0.16 : r * 0.08)}" stroke="${d === 0 ? '#E04A7A' : major ? '#FFFFFF' : 'rgba(255,255,255,0.5)'}" stroke-width="${major ? r * 0.045 : r * 0.022}" stroke-linecap="round" transform="rotate(${d} ${cx} ${cy})"/>`;
   }
   const w = r * 0.24, len = r * 0.74;
-  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#3E3832" stroke-width="${r * 0.03}"/>${ticks}
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.22)" stroke-width="${r * 0.03}"/>${ticks}
     <path d="M${cx} ${cy - len} L${cx + w} ${cy} L${cx - w} ${cy} Z" fill="#E04A7A"/>
-    <path d="M${cx} ${cy + len} L${cx - w} ${cy} L${cx + w} ${cy} Z" fill="#FFF1E5"/>
-    <circle cx="${cx}" cy="${cy}" r="${r * 0.07}" fill="#1A1816"/>`;
+    <path d="M${cx} ${cy + len} L${cx - w} ${cy} L${cx + w} ${cy} Z" fill="#FFFFFF"/>
+    <circle cx="${cx}" cy="${cy}" r="${r * 0.07}" fill="#14213A"/>`;
 }
 
 const glow = `<defs>
-  <radialGradient id="g" cx="0.68" cy="0.3" r="0.85"><stop offset="0" stop-color="#463A2A"/><stop offset="0.55" stop-color="#2A2420"/><stop offset="1" stop-color="#181615"/></radialGradient>
+  <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3D74B0"/><stop offset="0.5" stop-color="#1C3A5E"/><stop offset="1" stop-color="#0A0E1C"/></linearGradient>
+  <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
   <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
   <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-opacity=".35"/></filter></defs>`;
 
 const mac = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${glow}
   <g filter="url(#sh)"><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/></g>
-  <g clip-path="url(#sq)"><rect x="100" y="100" width="824" height="28" fill="#990F3D"/></g>
+  <g clip-path="url(#sq)"><rect x="100" y="100" width="824" height="824" filter="url(#grain)" opacity="0.05"/><rect x="100" y="100" width="824" height="28" fill="#990F3D"/></g>
   ${needle(512, 526, 300)}</svg>`;
 const ios = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${glow}
-  <rect width="1024" height="1024" fill="url(#g)"/><rect width="1024" height="34" fill="#990F3D"/>
+  <rect width="1024" height="1024" fill="url(#g)"/><rect width="1024" height="1024" filter="url(#grain)" opacity="0.05"/><rect width="1024" height="34" fill="#990F3D"/>
   ${needle(512, 522, 370)}</svg>`;
 const fg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${needle(512, 512, 250)}</svg>`;
-const dmg = (s) => `<html><body style="margin:0;width:660px;height:400px;background:#1A1816;font-family:Inter,-apple-system,system-ui,sans-serif;color:#fff;position:relative;overflow:hidden;zoom:${s}">
+const dmg = (s) => `<html><body style="margin:0;width:660px;height:400px;background:#000;font-family:Inter,-apple-system,system-ui,sans-serif;color:#fff;position:relative;overflow:hidden;zoom:${s}">
   <div style="position:absolute;inset:0 0 auto;height:4px;background:#990F3D"></div>
   <div style="position:absolute;top:44px;width:100%;text-align:center;font-size:28px;font-weight:600;letter-spacing:-.5px">Bearings</div>
-  <div style="position:absolute;top:88px;width:100%;text-align:center;font-size:15px;color:#B0A898">A compass with your coordinates, elevation and a map.</div>
-  <div style="position:absolute;left:92px;top:121px;width:176px;height:188px;border-radius:22px;background:#23201D"></div>
-  <div style="position:absolute;left:392px;top:121px;width:176px;height:188px;border-radius:22px;background:#23201D"></div>
+  <div style="position:absolute;top:88px;width:100%;text-align:center;font-size:15px;color:rgba(255,255,255,0.7)">A compass with your coordinates, elevation and a map.</div>
+  <div style="position:absolute;left:92px;top:121px;width:176px;height:188px;border-radius:22px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);box-sizing:border-box"></div>
+  <div style="position:absolute;left:392px;top:121px;width:176px;height:188px;border-radius:22px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);box-sizing:border-box"></div>
   <div style="position:absolute;left:280px;top:176px;width:100px;text-align:center;font-size:13px;color:#E0D8D0">Drag to install</div>
   <div style="position:absolute;left:286px;top:204px;width:80px;height:1.5px;background:#8E857B"></div>
   <div style="position:absolute;left:364px;top:199px;border-left:10px solid #8E857B;border-top:6px solid transparent;border-bottom:6px solid transparent"></div>

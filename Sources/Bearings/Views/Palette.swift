@@ -235,13 +235,16 @@ struct AppMark: View {
     var body: some View {
         Canvas { ctx, s in
             let k = s.width / 64
-            ctx.fill(Path(roundedRect: CGRect(origin: .zero, size: s), cornerRadius: 15 * k), with: .color(Palette.tile))
-            ctx.stroke(Path(ellipseIn: CGRect(x: 11 * k, y: 11 * k, width: 42 * k, height: 42 * k)), with: .color(Palette.border), lineWidth: 2.5 * k)
+            // The app icon: the sky from day blue to night navy, a faint white ring, pink north, white south.
+            let sky = Gradient(colors: [Palette.rgb(0x3D74B0), Palette.rgb(0x1C3A5E), Palette.rgb(0x0A0E1C)])
+            ctx.fill(Path(roundedRect: CGRect(origin: .zero, size: s), cornerRadius: 15 * k),
+                     with: .linearGradient(sky, startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
+            ctx.stroke(Path(ellipseIn: CGRect(x: 11 * k, y: 11 * k, width: 42 * k, height: 42 * k)), with: .color(.white.opacity(0.22)), lineWidth: 2.5 * k)
             var north = Path(); north.move(to: CGPoint(x: 32 * k, y: 9 * k)); north.addLine(to: CGPoint(x: 39 * k, y: 32 * k)); north.addLine(to: CGPoint(x: 25 * k, y: 32 * k)); north.closeSubpath()
             var south = Path(); south.move(to: CGPoint(x: 32 * k, y: 55 * k)); south.addLine(to: CGPoint(x: 25 * k, y: 32 * k)); south.addLine(to: CGPoint(x: 39 * k, y: 32 * k)); south.closeSubpath()
             ctx.fill(north, with: .color(Palette.accent))
-            ctx.fill(south, with: .color(Palette.cream))
-            ctx.fill(Path(ellipseIn: CGRect(x: 28.8 * k, y: 28.8 * k, width: 6.4 * k, height: 6.4 * k)), with: .color(Palette.bg))
+            ctx.fill(south, with: .color(.white))
+            ctx.fill(Path(ellipseIn: CGRect(x: 28.8 * k, y: 28.8 * k, width: 6.4 * k, height: 6.4 * k)), with: .color(Palette.rgb(0x14213A)))
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
