@@ -49,11 +49,20 @@ jobs:
             xcrun simctl privacy "$D" grant location $ID || true
             xcrun simctl location "$D" set 39.09898,-106.94117 || true
             n=1
-            # Always the default layout (Medium), named explicitly so a stored choice can't change the listing.
-            for args in "--sample --layout medium" "--sample --format utm --layout medium" "--sample --format mgrs --layout medium"; do
+            # Medium (the default), Extra Large, and Small with the map; layouts named so a stored choice can't change them.
+            for args in "--sample --layout medium" "--sample --layout extraLarge" "--sample --layout small --format utm"; do
               xcrun simctl terminate "$D" $ID 2>/dev/null || true
-              xcrun simctl launch "$D" $ID $args; sleep 8
-              xcrun simctl io "$D" screenshot "$SHOTS/$2-0$n.png"; n=$((n + 1))
+              F="$SHOTS/$2-0$n.png"
+              # A frame taken before the app has drawn is nearly empty (a small file): relaunch and retake it.
+              for try in 1 2 3; do
+                xcrun simctl terminate "$D" $ID 2>/dev/null || true
+                xcrun simctl launch "$D" $ID $args; sleep $((8 + 6 * try))
+                xcrun simctl io "$D" screenshot "$F"
+                [ "$(stat -f%z "$F")" -gt 250000 ] && break
+                echo "Screenshot $F looks blank; retaking"
+              done
+              [ "$(stat -f%z "$F")" -gt 250000 ] || { echo "::error::$F is still blank"; exit 1; }
+              n=$((n + 1))
             done
             xcrun simctl shutdown "$D" || true
           }
