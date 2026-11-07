@@ -17,13 +17,25 @@ enum PhoneSelfTest {
 
         for (name, ok) in CoreChecks.run() { check(ok, name) }
 
-        // The layout planner (docs/REFINE.md §3.3 and §4.7): every device × layout × state × text size leaves no
-        // more than 24 empty at the bottom, cuts nothing and keeps the dial at its floor or more.
+        // The layout planner (docs/REFINE.md §3.3, §4.7 and Cycle 2): every device × layout × state × text size
+        // leaves no more than 24 empty at the bottom, cuts nothing, keeps the dial at its floor or more, has rows
+        // whose widths and gutters add up to C, and gives each layout a result 24 of dial or a grid mode away
+        // from its neighbours.
         let planFailures = LayoutPlan.tableFailures()
-        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "nothing empty, nothing cut, every dial at its floor" : planFailures.prefix(3).joined(separator: "; ")))")
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "nothing empty, nothing cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
         for line in LayoutPlan.summary(w: 402, h: 874, s: 778, hasSpot: true, locked: true) {
             lines.append("INFO iPhone 16 Pro, sample: \(line)")
         }
+        // No "…" anywhere (C2): the tiles' and the header's strings, and what the compact row and the header
+        // must hold measured in the system font on every device, at Text Size 1.0 and 1.3.
+        let sampleTimes = Sky.sunTimes(at: Navigator.sampleTime, lat: 39.09898, lon: -106.94117)
+        if let rise = sampleTimes.sunriseDate, let set = sampleTimes.sunsetDate {
+            let fit = MainView.fitFailures(sunrise: rise, sunset: set, now: Navigator.sampleTime, lat: 39.09898, lon: -106.94117)
+            check(fit.isEmpty, "No ellipsis in the tiles or the header time (\(fit.isEmpty ? "every value fits or wraps" : fit.prefix(3).joined(separator: "; ")))")
+        } else {
+            check(false, "No ellipsis in the tiles or the header time (no sunrise for the sample)")
+        }
+        check(MainView.noHeadingText == "\u{2014}°", "The no-compass readout is \"\(MainView.noHeadingText)\"")
         // Night secondary text: at least 4.5:1 on black (§4.3).
         let contrast = Palette.nightSecondaryContrast()
         check(contrast >= 4.5, String(format: "Night secondary text contrast %.2f:1", contrast))

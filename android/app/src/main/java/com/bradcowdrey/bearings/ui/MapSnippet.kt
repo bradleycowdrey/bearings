@@ -1,11 +1,9 @@
 package com.bradcowdrey.bearings.ui
 
-import android.view.Gravity
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -13,14 +11,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Navigation
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,16 +42,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -61,17 +68,26 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.Style
+import org.maplibre.android.style.layers.BackgroundLayer
+import org.maplibre.android.style.layers.FillExtrusionLayer
+import org.maplibre.android.style.layers.FillLayer
+import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.SymbolLayer
 import kotlin.math.cos
 import kotlin.math.pow
 
 /**
- * The map of where you are: MapLibre with OpenFreeMap's OpenStreetMap tiles (free, no key), centred on
- * you, north up or turned with your heading. The dot, accuracy circle and heading cone are drawn over its
- * centre. With [controls] (the map card and the map sheet, docs/REFINE.md §3.2) one cluster of 36 dp circles
- * in 48 dp targets sits 12 in from the top-trailing corner (+, −, follow heading, open in your map app: a
- * column where the map is tall enough, otherwise two rows of two), the speed chip 12 in from the top-leading
- * corner, and the bottom 24 stays clear for the attribution. Without them (the Map tile) it is a north-up
- * thumbnail with gestures off. [trueHeading] is from true north, as the map is.
+ * The map of where you are: MapLibre with OpenFreeMap's OpenStreetMap tiles (free, no key) in a dark style
+ * (docs/REFINE.md C2.3 #9), centred on you, north up or turned with your heading. The dot, accuracy circle and
+ * heading cone are drawn over its centre. With [controls] (the map card and the map sheet) one vertical stack
+ * of 36 dp circles in 48 dp targets sits 12 in from the top-trailing corner (+, −, follow heading, open in your
+ * map app; a card under 192 tall shows +, − and ⋯ with the other two in its menu), the speed chip 12 in from
+ * the top-leading corner, and "© OpenStreetMap" with an (i) for the sources bottom-leading. Without them (the
+ * Map tile) it is a north-up thumbnail with gestures off and "© OSM" bottom-trailing. [trueHeading] is from true
+ * north, as the map is. [topInset] and [bottomInset] keep the controls and the attribution clear of a bar over
+ * the map and of the system bars (the map sheet, which is full-bleed).
  */
 @Composable
 fun MapSnippet(
@@ -85,9 +101,12 @@ fun MapSnippet(
     modifier: Modifier = Modifier,
     live: Boolean = true,
     controls: Boolean = true,
+    shape: Shape = Look.shape,
+    edge: Boolean = true,
+    topInset: Dp = 0.dp,
+    bottomInset: Dp = 0.dp,
 ) {
     // A rounded card on black: the tile fill before the map loads, a 1 dp edge over it.
-    val shape = Look.shape
     BoxWithConstraints(modifier.clip(shape).background(Palette.tileFill)) {
         if (fix == null) {
             Text(if (controls) "The map appears once Bearings knows where you are." else "—", style = text(13f, color = secondary()),
@@ -99,39 +118,133 @@ fun MapSnippet(
             // the screen's red multiply then does the rest.
             if (night) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)))
             if (controls) {
-                // 12 in to the circles: their 48 dp targets start 6 in.
-                val column = maxHeight >= 6.dp + 48.dp * 4 + 24.dp
-                val buttons: @Composable () -> Unit = {
+                // One vertical stack everywhere: 36 dp circles 8 apart, 12 in from the top-trailing corner (each
+                // sits in a 44 dp cell, its 48 dp target reaching 2 past it). All four need 192 of height.
+                val all = maxHeight - topInset >= 192.dp
+                Column(Modifier.align(Alignment.TopEnd).padding(top = 8.dp + topInset, end = 8.dp)) {
                     MapButton(Icons.Filled.Add, "Zoom in") { zoom = (zoom + 1).coerceAtMost(19.0) }
                     MapButton(Icons.Filled.Remove, "Zoom out") { zoom = (zoom - 1).coerceAtLeast(3.0) }
-                    MapButton(if (follow) Icons.Filled.Navigation else Icons.Outlined.Navigation,
-                        if (follow) "Map follows your heading. Switch to north up" else "Map is north up. Switch to follow your heading", on = follow, onClick = onToggleFollow)
-                    MapButton(Icons.AutoMirrored.Filled.OpenInNew, "Open in your map app") { onOpen(fix) }
-                }
-                if (column) {
-                    Column(Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp)) { buttons() }
-                } else {
-                    Column(Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp)) {
-                        Row {
-                            MapButton(Icons.Filled.Add, "Zoom in") { zoom = (zoom + 1).coerceAtMost(19.0) }
-                            MapButton(Icons.Filled.Remove, "Zoom out") { zoom = (zoom - 1).coerceAtLeast(3.0) }
-                        }
-                        Row {
-                            MapButton(if (follow) Icons.Filled.Navigation else Icons.Outlined.Navigation,
-                                if (follow) "Map follows your heading. Switch to north up" else "Map is north up. Switch to follow your heading", on = follow, onClick = onToggleFollow)
-                            MapButton(Icons.AutoMirrored.Filled.OpenInNew, "Open in your map app") { onOpen(fix) }
-                        }
+                    if (all) {
+                        MapButton(if (follow) Icons.Filled.Navigation else Icons.Outlined.Navigation,
+                            if (follow) "Map follows your heading. Switch to north up" else "Map is north up. Switch to follow your heading", on = follow, onClick = onToggleFollow)
+                        MapButton(Icons.AutoMirrored.Filled.OpenInNew, "Open in your map app") { onOpen(fix) }
+                    } else {
+                        MapOverflow(follow, night, onToggleFollow) { onOpen(fix) }
                     }
                 }
                 if (speed != null) {
                     Text(speed, style = text(13f, FontWeight.SemiBold, Color.White),
-                        modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(CircleShape)
+                        modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 12.dp + topInset).clip(CircleShape)
                             .background(Palette.mapControl).padding(horizontal = 10.dp, vertical = 5.dp))
                 }
             }
+            Attribution(controls, night, bottomInset)
         }
         // The card's edge, drawn over the map.
-        Box(Modifier.matchParentSize().border(Look.stroke, Palette.tileStroke, shape))
+        if (edge) Box(Modifier.matchParentSize().border(Look.stroke, Palette.tileStroke, shape))
+    }
+}
+
+/** ⋯ on a short card: Follow Heading (or North Up) and Open in Maps. */
+@Composable
+private fun MapOverflow(follow: Boolean, night: Boolean, onToggleFollow: () -> Unit, onOpen: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        MapButton(Icons.Filled.MoreHoriz, "More map controls") { open = true }
+        DropdownMenu(open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text(if (follow) "North Up" else "Follow Heading", style = text(15f, color = Color.White.night(night))) },
+                onClick = { onToggleFollow(); open = false })
+            DropdownMenuItem(text = { Text("Open in Maps", style = text(15f, color = Color.White.night(night))) },
+                onClick = { onOpen(); open = false })
+        }
+    }
+}
+
+/**
+ * The map's attribution, always visible (C2.3 #9, #12): on a card or sheet "© OpenStreetMap" 8 in from the
+ * bottom-leading corner, at 11 sp white on a dark scrim (well over 4.5:1), with (i) in a 48 dp target for the
+ * sources; on the tile "© OSM" bottom-trailing (MAP sits bottom-leading).
+ */
+@Composable
+private fun BoxScope.Attribution(full: Boolean, night: Boolean, bottomInset: Dp) {
+    val scrim = Color.Black.copy(alpha = 0.6f)
+    if (!full) {
+        Text("© OSM", style = text(10f, FontWeight.Medium, white(Op.STRONG)),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 8.dp).clip(RoundedCornerShape(4.dp))
+                .background(scrim).padding(horizontal = 4.dp, vertical = 1.dp)
+                .semantics { contentDescription = "Map data from OpenStreetMap contributors" })
+        return
+    }
+    var open by remember { mutableStateOf(false) }
+    val uri = LocalUriHandler.current
+    Row(Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = bottomInset), verticalAlignment = Alignment.Bottom) {
+        Text("© OpenStreetMap", style = text(11f, FontWeight.Medium, white(Op.STRONG)),
+            modifier = Modifier.padding(bottom = 8.dp).clip(RoundedCornerShape(4.dp)).background(scrim).padding(horizontal = 5.dp, vertical = 2.dp)
+                .semantics { contentDescription = "Map data from OpenStreetMap contributors" })
+        Box {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Show the map's sources") { open = true }
+                    .semantics { contentDescription = "Map sources" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(24.dp).clip(CircleShape).background(scrim), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Info, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                }
+            }
+            DropdownMenu(open, onDismissRequest = { open = false }) {
+                for ((label, url) in SOURCES) {
+                    DropdownMenuItem(text = { Text(label, style = text(15f, color = Color.White.night(night))) },
+                        onClick = { uri.openUri(url); open = false })
+                }
+            }
+        }
+    }
+}
+
+private val SOURCES = listOf(
+    "© OpenStreetMap contributors" to "https://www.openstreetmap.org/copyright",
+    "OpenFreeMap" to "https://openfreemap.org",
+    "© OpenMapTiles" to "https://www.openmaptiles.org",
+    "MapLibre" to "https://maplibre.org",
+)
+
+/**
+ * The dark map (C2.3 #9): OpenFreeMap's style recoloured once it loads, so the map is not the brightest thing
+ * on a black screen. Land about #0F3B3A, roads #5A6470, water #22348A, labels light grey on a dark halo.
+ */
+object MapDark {
+    const val LAND = "#0F3B3A"
+    const val COVER = "#124342"
+    const val BUILDING = "#1B4A49"
+    const val WATER = "#22348A"
+    const val ROAD = "#5A6470"
+    const val CASING = "#2E353D"
+    const val BOUNDARY = "#4A6664"
+    const val LABEL = "#C9D1D9"
+    const val HALO = "#0B2A29"
+
+    fun apply(style: Style) {
+        for (layer in style.layers) {
+            val id = layer.id.lowercase()
+            val water = "water" in id || "ocean" in id || "river" in id || "lake" in id
+            when (layer) {
+                is BackgroundLayer -> layer.setProperties(PropertyFactory.backgroundColor(LAND))
+                is FillLayer -> layer.setProperties(PropertyFactory.fillColor(when {
+                    water -> WATER
+                    "building" in id -> BUILDING
+                    else -> COVER
+                }))
+                is FillExtrusionLayer -> layer.setProperties(PropertyFactory.fillExtrusionColor(BUILDING))
+                is LineLayer -> layer.setProperties(PropertyFactory.lineColor(when {
+                    water -> WATER
+                    "boundary" in id || "admin" in id -> BOUNDARY
+                    "casing" in id -> CASING
+                    else -> ROAD
+                }))
+                is SymbolLayer -> layer.setProperties(PropertyFactory.textColor(LABEL), PropertyFactory.textHaloColor(HALO))
+                else -> {}
+            }
+        }
     }
 }
 
@@ -152,11 +265,10 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
                     m.uiSettings.setAllGesturesEnabled(false)
                     m.uiSettings.isCompassEnabled = false
                     m.uiSettings.isLogoEnabled = false
-                    m.uiSettings.isAttributionEnabled = true
-                    // Bottom right, clear of the speed chip.
-                    m.uiSettings.setAttributionGravity(Gravity.BOTTOM or Gravity.END)
+                    // The attribution is drawn by MapSnippet (always visible, with a 48 dp (i)).
+                    m.uiSettings.isAttributionEnabled = false
                     m.cameraPosition = CameraPosition.Builder().target(LatLng(fix.latitude, fix.longitude)).zoom(zoom).bearing(bearing).build()
-                    m.setStyle(Brand.MAP_STYLE) { loaded = true }
+                    m.setStyle(Brand.MAP_STYLE) { style -> MapDark.apply(style); loaded = true }
                     map = m
                 }
             }
@@ -209,16 +321,21 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
     }
 }
 
-/** A 36 dp circle on the map, in a 48 dp touch target: dark, or white when [on] (Follow Heading). */
+/**
+ * A 36 dp circle on the map in a 44 dp cell (so a stack's circles are 8 apart), with a 48 dp touch target:
+ * dark, or white when [on] (Follow Heading).
+ */
 @Composable
 private fun MapButton(icon: ImageVector, label: String, on: Boolean = false, onClick: () -> Unit) {
-    Box(
-        Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(if (on) Color.White else Palette.mapControl),
-            contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(17.dp))
+    Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.requiredSize(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.size(36.dp).clip(CircleShape).background(if (on) Color.White else Palette.mapControl),
+                contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(17.dp))
+            }
         }
     }
 }

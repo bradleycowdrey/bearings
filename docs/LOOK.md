@@ -4,7 +4,9 @@ Bearings is restyled to look like Two Degrees, the same way Meridian was. This p
 numbers, so the iPhone and iPad, Mac, Android and widget work all build the same thing. DESIGN.md still
 covers what the app does. This page covers how it looks. Features, wording, accessibility labels,
 Dynamic Type and font-scale behaviour, the 44-point targets, night mode, the self-tests and the CI
-launch arguments (`--sample`, `--format`, `--show-terms`, `--selftest`) stay as they are.
+launch arguments (`--sample`, `--format`, `--layout`, `--map-sheet`, `--no-compass`, `--show-terms`,
+`--selftest`) stay as they are. Layout (sizes, gaps, the planner and the four layouts) is in LAYOUTS.md,
+which follows REFINE.md Cycle 2.
 
 The tokens are in `Sources/Bearings/Views/Palette.swift` (Apple, shared with the widget extensions) and
 `android/app/src/main/java/com/bradcowdrey/bearings/ui/Theme.kt` (Android). Use the tokens and don't
@@ -84,8 +86,10 @@ blocks are the planner's spacing tokens, 4 / 8 / 12 / 16 / 24 only (docs/LAYOUTS
      first ("Maroon Bells"), then it truncates.
    - Line 2: "Sun, Nov 1 · 9:41 AM", 13 regular, white at 75%, tabular figures, then the **Sample** pill
      (11 semibold, black on `Palette.notice`).
-   - Trailing, fixed on every layout: the sky symbol (20, decorative), then the **map button** (only when
-     the map is neither a tile nor a card; 44 × 44, 48 dp), then **⋯** (44 × 44, 48 dp; 8 apart). ⋯
+   - The time never truncates: the date shortens to "Nov 1" first, then line 2 wraps at the "·"; at
+     k > 1.1, or with three trailing buttons, the Sample pill moves to line 1.
+   - Trailing, fixed on every layout: the sky symbol (20, decorative), then the **map button** (Extra
+     Large only; 44 × 44, 48 dp), then **⋯** (44 × 44, 48 dp; 8 apart). ⋯
      never moves. Apple uses `ellipsis.circle`; Android a 36 dp `Palette.chipOff` circle with
      `MoreHoriz`. The accessibility label stays "Settings and more".
    - There is no "Bearings" title on the main screen: iOS keeps it as the accessibility screen title,
@@ -93,9 +97,10 @@ blocks are the planner's spacing tokens, 4 / 8 / 12 / 16 / 24 only (docs/LAYOUTS
    - Accessibility text sizes: line 1 may wrap to two lines, line 2 moves under it.
    - The bar is one accessibility element with the header trait ("Aspen, Colorado, Sat, Nov 1 · 9:41 AM").
 2. **Below the header**, the gaps are the planner's (docs/LAYOUTS.md §3): 4 above the header, 12 to the
-   dial. The status line, lock chip, spot row and labelled tile grid that follow are described in
-   docs/LAYOUTS.md §2; items 5–8 below keep only the colours and glyphs that still apply.
-3. **Dial**, on black, sized as now. Restyled:
+   dial, **12 from the dial's bottom edge to the readout's cap height** (the line box trimmed), 6 to the
+   status line. The lock row, spot row and tile grid are described in docs/LAYOUTS.md §2; their colours
+   and glyphs are below.
+3. **Dial**, on black, sized by the layout's rule. Restyled:
    - Disc: `Palette.tileFill` with a 1-point ring of `Palette.tileStroke`.
    - Ticks: 30° ticks white (2.4 wide), 10° ticks white at 60% (1.4), 2° ticks white at 30% (1).
      The 0° tick and the **N** (30 semibold) are `Palette.north` pink.
@@ -107,52 +112,52 @@ blocks are the planner's spacing tokens, 4 / 8 / 12 / 16 / 24 only (docs/LAYOUTS
    - Fixed parts: the lubber triangle **white**. Cross lines stay white at 7%. Both inner rings are
      white at 15%, 1.5 wide.
    - Level bubble: white, green `Palette.level` within 2° of flat.
-4. **Readout**: "228°" at the current sizes (46 / 56 / 64), weight **light** (Android: Normal),
-   tracking −2, white (white at 35% with no heading). The point "SW" is half that size, medium, white at
-   60%.
-5. **Subline**: 13 regular, white at 60%. Its dots are white at 35%. A warning is `Palette.notice`
-   semibold. The locked bearing ("· Locked 240° · turn 12° right") is **white semibold** (not pink).
-   With no compass, the message is 15 regular, white at 60%.
-6. **Marked spot pill**: a capsule with `frostedTile` fill and edge, at least 46 high. `mappin`, 14
-   semibold, white. "Marked spot" is white semibold, then " · 0.4 mi · 245° SW" in white at 70%, 14,
-   tabular. The ✕ is 12 bold, white at 60%, in a 44-wide target.
-7. **Tiles**, 2 × 2, 8 apart, each `frostedTile()`, padding 14 × 12 (× wide only), radius 16:
-   - Caption (`CardCaption`, 12 × k), then 2 × k below it the value, **20 × k medium**, white (white at
-     60% when stale). Then the second unit, 14 × k medium, white at 60%. Then the detail, 12 × k
-     regular, white at 60%. Wrapping, shrinking and the spoken labels stay as now.
-   - **LATITUDE**: `arrow.up.and.down` (Android `SwapVert`). **LONGITUDE**: `arrow.left.and.right`
-     (`SwapHoriz`). A single grid reference (UTM, MGRS, Plus Code) has one wide tile captioned with the
-     format's name: `square.grid.3x3` (`GridOn`).
-   - **ELEVATION**: `mountain.2.fill` (`Terrain`).
-   - **SUN**: `sun.max.fill` (`WbSunny`). The moon glyph stays before its detail.
-   - The tap, long-press, copy and context menu behaviours are unchanged.
-   - Before location is allowed, the ask-for-location tile replaces the four tiles. It's
-     `frostedTile()` at the same height, with text 13 regular in white at 85%, and the button "Use My
-     Location" / "Settings" in a compact `LookButtonStyle`.
-8. **Map**: fills the rest (minimum as now), clipped to radius 16, with a 1-point `Palette.tileStroke`
-   edge drawn over it. Its background before the map loads is `Palette.tileFill`.
-   - Round buttons stay 32 circles in 44 targets. On Apple devices the fill is `.ultraThinMaterial`
-     (dark). On Android it's `Palette.mapControl`. The glyph is white, 15 semibold. Follow Heading,
-     when on, is a **white** circle with a black glyph. There's no border.
-   - The speed chip uses the same fill: white 13 semibold, a capsule 10 × 5, in the same places as now.
+4. **Readout**: "228°", 56 (64 on iPad; × 1.25 at Extra Large), weight **light** (Android: Normal),
+   tracking −2, white. The point "SW" is half that size, medium, white at 60%. With no compass: "—°" (U+2014,
+   the degree on the same baseline) in white at 40%, and "NO HEADING" 4 below in the caption style.
+5. **Status line**: 13 regular, white at 60%, centred. A warning is `Palette.notice` semibold. With no
+   compass: "No compass · position, sun and map still work", same style, two lines allowed.
+6. **Lock row and spot row**: full-width `frostedTile()` rows, 44 high, leading-aligned. Lock: `lock.fill`
+   13, "Locked 240°" 15 semibold white, "turn 12° right" 15 white at 70%. Spot: `mappin` 17 white, "Marked
+   spot" 15 medium white, "9.2 mi · 46° NE" 15 tabular white at 70%. The ✕ sits 8 after the text: on Apple
+   13 semibold white at 60% in a 44 × 44 target; on Android an 18 dp `Icons.Rounded.Close` in
+   `onSurfaceVariant` at 100% in a 48 dp `IconButton` (night: red at 4.5:1 or more).
+7. **Tiles**, each `frostedTile()`, radius 16, padding 12 × 10, gutters 8. The caption is pinned to the top
+   and the value block to the bottom (a spacer between), so grown tiles are never half empty.
+   - Caption: 11 semibold caps, tracking 0.6, white at 60% (widgets keep 10). Value: 17 medium tabular,
+     white (15 in the compact row; white at 60% when stale). Secondary: 13 regular, white at 60%.
+   - Sun on both ports: ↑ / ↓ before the times, with a 13 pt sun glyph in the caption; in the compact row
+     the caption is `SUN · ◐ 53%` and the times are 15 semibold, scaling to 0.85, then "6:36" over an 11 pt
+     "AM". Nothing ever ends in "…".
+   - The tap, long-press, copy and context-menu behaviours are unchanged. Before location is allowed, the
+     ask-for-location tile takes the grid's place, `frostedTile()`, text 13 white at 85%, and "Use My
+     Location" / "Settings" as a compact `LookButtonStyle`.
+8. **Map** (tile, card and sheet), clipped to radius 16 with a 1-point `Palette.tileStroke` edge;
+   `Palette.tileFill` before it loads.
+   - The MAP caption sits bottom-leading on a 40% black scrim on both ports; the attribution bottom-trailing.
+   - Controls: one vertical stack top-trailing on every layout and port: 36 circles in 44 pt / 48 dp
+     targets, 8 apart, inset 12. Apple fill `.ultraThinMaterial` (dark), Android `Palette.mapControl`.
+     White glyph, 15 semibold; Follow Heading on is a **white** circle with a black glyph.
+   - Android's map style is dark (land about `#0F3B3A`, roads `#5A6470`, water `#22348A`), with a visible
+     "© OpenStreetMap" 10–11 sp bottom-leading, 8 dp in, 4.5:1 or more, and (i) as a 48 dp target.
+   - The speed chip uses the same fill: white 13 semibold, a capsule 10 × 5, inset 12 top-leading.
    - Your position: a white dot 16 with a 3-wide black-at-35% ring and a soft shadow. The heading cone is
-     white, 45% at the dot to 0. The accuracy circle is white at 10% fill with a 1-wide white-at-40%
-     edge.
+     white, 45% at the dot to 0. The accuracy circle is white at 10% fill with a 1-wide white-at-40% edge.
 9. **Toast** ("Coordinates copied"): a white capsule, black text 14 semibold, padding 16 × 9, 28 above
    the bottom.
 
-## iPad and Mac (the wide column)
+## iPad and Mac
 
-The same column, as now: 460 wide (560 when the window is at least 700 × 900), with `wide` 1.15 on
-sizes and paddings as today. It isn't split into two columns. The title row is 34 × wide bold.
+The same panel in one centred column (C = min(W − 2 × margin, 640): W − 40 on iPad, W − 32 or W − 48 on a Mac), or two panes in wide windows (docs/LAYOUTS.md
+§5), with the header full width across the top.
 
-- **Mac**: the window uses `.windowStyle(.hiddenTitleBar)`, so the in-content "Bearings" title isn't
-  doubled by the window's title. The content stays inside the safe area, below the traffic lights. The
-  minimum window (380 × 720) and the self-test's 420 × 840 drawing must still fit without scrolling.
-  The update banner ("Bearings 0.2.0 is available.") sits under the title row: `frostedTile()`, 44
-  high, 13 medium white, with "Download" as a compact `LookButtonStyle`.
-- **Footer** (Mac and wide iPad): "Made by Bradley Cowdrey · bradcowdrey.com ↗", 12 regular, white at
-  60%, right-aligned, 16 high.
+- **Mac**: `.windowStyle(.hiddenTitleBar)`; the content keeps 16 from every window edge (24 at widths of
+  600 or more). The minimum window (380 × 740) and the self-test's 420 × 840 drawing fit without scrolling.
+  The update banner ("Bearings 0.2.0 is available."): `frostedTile()`, 44 high, 13 medium white, with
+  "Download" as a compact `LookButtonStyle`, under the header.
+- **Footer**: "Made by Bradley Cowdrey" is an item in the ⋯ menu on every layout and platform; there is no
+  footer line on the screen.
+- **Map sheet on iPad**: `.presentationSizing(.page)`, so it doesn't cover half the dial as a form sheet.
 
 ## The menu, About, and Terms
 
@@ -167,8 +172,11 @@ sizes and paddings as today. It isn't split into two columns. The title row is 3
   Bearings already follows. The background stays `Palette.bg` `#1A1816`. The app mark is 56. The title
   is 28 semibold, tracking −0.4. The summary is 17 in `Palette.textSecondary`. The agreement line is 15
   in `Palette.textMuted`. "I Agree" is a full-width cream capsule, 50 high, 17 semibold, with
-  `Palette.bg` text (Two Degrees' terms button). "Read the Terms" is 17 medium white, 44 high. No
-  layout or wording changes. The Mac's terms prompt stays as it is.
+  `Palette.bg` text (Two Degrees' terms button). "Read the Terms" is 17 medium white, 44 high. The content
+  block is centred in the space above the buttons (at least the safe area + 48 from the top); on iPad the
+  column is at most 480 and the buttons sit 32 below the text. The rows wrap rather than run to the edge.
+  iOS styles the terms link underlined in the accent with a 44 pt hit height; Android's row icons are
+  24 dp outlined `WarningAmber`, `NearMe` and `Map`. The Mac's terms prompt stays as it is.
 
 ## Widgets (Apple devices)
 
@@ -253,5 +261,6 @@ multiply can't reach) take `.night()` on Android, as now. Widgets don't change.
 ## What doesn't change
 
 The web page (`web/`) keeps its current look for now. The app icon, the app mark, Terms wording, every
-string, every spoken label, the layout's fit on one screen without scrolling (the dial gives way first),
+string, every spoken label, the layout's fit on one screen without scrolling (except at accessibility text
+sizes, where it is one list),
 the 44-point targets, Dynamic Type and font scale, and the self-tests all stay.

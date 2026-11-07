@@ -128,6 +128,14 @@ enum Look {
     static let tileValueSize: CGFloat = 17
     /// A tile's second line: 13 regular, secondary white.
     static let tileSecondarySize: CGFloat = 13
+    /// A symbol in a tile's caption (the Sun tile's sun): 13 pt.
+    static let tileCaptionSymbolSize: CGFloat = 13
+    /// Values in the compact row (Position, Sun): 15 pt (C2.2 #1).
+    static let compactValueSize: CGFloat = 15
+    /// "AM" / "PM" when it moves beside or under the time: 11 pt.
+    static let periodSize: CGFloat = 11
+    /// Text scales to no less than this, then wraps; it is never ellipsized.
+    static let minScale: CGFloat = 0.85
     /// Inside a tile: 12 across, 10 down.
     static let tilePaddingH: CGFloat = 12
     static let tilePaddingV: CGFloat = 10
@@ -149,7 +157,29 @@ enum Look {
 
     /// "↑ 6:36 AM ↓ 5:08 PM", in the device's 12- or 24-hour style.
     static func sunText(rise: Date, set: Date) -> String {
-        "↑ \(rise.formatted(date: .omitted, time: .shortened)) ↓ \(set.formatted(date: .omitted, time: .shortened))"
+        "↑ \(timeText(rise)) ↓ \(timeText(set))"
+    }
+
+    /// A time of day split for the tiles: "6:36" and "AM" (nil in the 24-hour style). The one formatter on
+    /// every Apple platform (C2.3 #19): `.hour().minute()`, matching Android.
+    static func time(_ date: Date) -> (clock: String, period: String?) {
+        let text = date.formatted(.dateTime.hour().minute())
+        let spaces: Set<Character> = [" ", "\u{202F}", "\u{00A0}"]
+        // "6:36 AM": the day period after the last space, when it has no digits and the rest does.
+        if let i = text.lastIndex(where: { spaces.contains($0) }) {
+            let clock = String(text[..<i]).trimmingCharacters(in: .whitespaces)
+            let period = String(text[text.index(after: i)...])
+            if !period.isEmpty, !period.contains(where: { $0.isNumber }), clock.contains(where: { $0.isNumber }) {
+                return (clock, period)
+            }
+        }
+        return (text, nil)
+    }
+
+    /// "6:36 AM", with a narrow no-break space before the day period on every Apple platform.
+    static func timeText(_ date: Date) -> String {
+        let t = time(date)
+        return t.period.map { "\(t.clock)\u{202F}\($0)" } ?? t.clock
     }
 }
 

@@ -6,7 +6,8 @@ import WidgetKit
 /// Bearings for Mac: the same one screen as on iPhone. Macs have no compass, so the dial rests at
 /// north with a note; coordinates, elevation and the map work as on a phone.
 /// `--selftest <folder>` runs the checks CI uses (SelfTest) and quits; `--layout <id>` shows a layout
-/// without saving it; `--map-sheet` opens the map sheet.
+/// without saving it; `--map-sheet` opens the map sheet; `--sample --no-compass` shows the sample place
+/// without a heading.
 @main
 struct BearingsMacApp: App {
     @StateObject private var nav = Navigator.shared
@@ -17,7 +18,9 @@ struct BearingsMacApp: App {
         WindowGroup(Brand.appName) {
             MainView(update: updater.available.map { (version: $0.version, url: $0.url) })
                 .environmentObject(nav)
-                .frame(minWidth: 380, idealWidth: 420, minHeight: 720, idealHeight: 840)
+                // The smallest window holds every layout with the sample (locked and marked) and 16 at every
+                // edge (LayoutPlan.macMinHeight: header + dial + grid + insets).
+                .frame(minWidth: LayoutPlan.macMinWidth, idealWidth: 420, minHeight: LayoutPlan.macMinHeight, idealHeight: 840)
                 .task { await launch() }
         }
         // The screen's header bar takes the title's place; the content stays in the safe area below the
@@ -96,7 +99,8 @@ struct BearingsMacApp: App {
         }
         if CommandLine.arguments.contains("--sample") {
             SharedStore.enabled = false
-            nav.showSample(lock: 240)
+            let noCompass = CommandLine.arguments.contains("--no-compass")
+            nav.showSample(lock: noCompass ? nil : 240, noCompass: noCompass)
             if CommandLine.arguments.contains("--map-sheet") { nav.mapSheet = true }
             return
         }

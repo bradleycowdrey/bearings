@@ -4,7 +4,8 @@ name: Android
 # place, against Tests/fixtures/geo.json and Resources/Cities.tsv; the layout planner's golden table), then runs the app in the Android
 # emulator placed at Maroon Bells, Colorado (the self-test: location fix, live ground elevation, place
 # name, compass and declination, the widget's data, the layout planner's golden table) and photographs the
-# terms, the live screen, the sample place, night mode, larger text, every layout and the map sheet. Results go
+# terms, the live screen, the sample place, night mode, larger and accessibility text, every layout, the map
+# sheet and the no-compass state. Results go
 # to the ci-shots-android branch; the job fails if any check fails. The APKs are kept as an artifact.
 on:
   push:

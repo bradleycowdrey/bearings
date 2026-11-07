@@ -5,13 +5,20 @@ import UIKit
 import AppKit
 #endif
 
-/// Bearings' one screen, the "Instrument panel" (docs/REFINE.md §3): one fixed, non-scrolling screen of
-/// header bar → dial (the hero) → readout → status line (and lock chip) → spot row → tile grid → map card
-/// (only where it fits whole). Each fact appears once, in one tile component (caption over value over a
-/// second line, as the widgets). The planner (LayoutPlan) places everything bottom-up so nothing is empty
-/// and nothing is cut; at accessibility text sizes the whole screen becomes one scrolling list. Wide
-/// windows and phones on their side get two panes under one header. The same view on Mac, iPhone and iPad,
-/// in Two Degrees' look (docs/LOOK.md).
+#if os(iOS)
+fileprivate typealias PlatformFont = UIFont
+#else
+fileprivate typealias PlatformFont = NSFont
+#endif
+
+/// Bearings' one screen, the "Instrument panel" (docs/REFINE.md §3 and Cycle 2): one fixed, non-scrolling
+/// screen of header bar → dial (the hero) → readout → status line → lock row → spot row → tile grid → map
+/// card (only where it fits whole). Each fact appears once, in one tile component (caption pinned to the
+/// top, value block to the bottom, as the widgets). The planner (LayoutPlan) places everything bottom-up so
+/// nothing is empty and nothing is cut; no value is ever ellipsized (it scales to 0.85, then wraps); at
+/// accessibility text sizes the whole screen becomes one scrolling list. Wide windows and phones on their
+/// side get two panes under one header. The same view on Mac, iPhone and iPad, in Two Degrees' look
+/// (docs/LOOK.md).
 struct MainView: View {
     @EnvironmentObject private var nav: Navigator
     /// "Bearings 0.2.0 is available" on the Mac (nil elsewhere).
@@ -25,7 +32,6 @@ struct MainView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var lastAnnouncement = Date.distantPast
     @State private var announcedNoCompass = false
@@ -36,12 +42,12 @@ struct MainView: View {
 
     private static let gap = LayoutPlan.rowGap
 
-    /// The footer ("Made by …"): on the Mac and a wide iPad; on a phone it's in About.
-    private var showsFooter: Bool {
-        #if os(iOS)
-        sizeClass == .regular
-        #else
+    /// A Mac window: 16 in from every edge (24 at widths of 600 or more).
+    private static var isMac: Bool {
+        #if os(macOS)
         true
+        #else
+        false
         #endif
     }
 
@@ -73,13 +79,15 @@ struct MainView: View {
     var body: some View {
         GeometryReader { geo in
             let plan = makePlan(for: geo)
+            // What each layout gives on this screen, for the Layout menu ("Dial 386 · map in header").
+            let subtitles = Dictionary(uniqueKeysWithValues: Layout.allCases.map { ($0, makePlan(for: geo, layout: $0).menuSubtitle) })
             Group {
                 if plan.list {
-                    listScreen(plan)
+                    listScreen(plan, subtitles: subtitles)
                 } else if plan.twoPane {
-                    twoPanes(plan)
+                    twoPanes(plan, subtitles: subtitles)
                 } else {
-                    singleColumn(plan)
+                    singleColumn(plan, subtitles: subtitles)
                 }
             }
             .environment(\.uiScale, plan.k)
@@ -113,9 +121,9 @@ struct MainView: View {
 
     // MARK: The plan
 
-    /// The planner's answer for this window: H is the full height (safe area included, what a screenshot
-    /// shows), S the safe height inside which everything is laid out.
-    private func makePlan(for geo: GeometryProxy) -> LayoutPlan {
+    /// The planner's answer for this window (in `layout`, or the chosen one): H is the full height (safe
+    /// area included, what a screenshot shows), S the safe height inside which everything is laid out.
+    private func makePlan(for geo: GeometryProxy, layout: Layout? = nil) -> LayoutPlan {
         let w = geo.size.width, s = geo.size.height
         let h = s + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom
         #if os(iOS)
@@ -124,10 +132,10 @@ struct MainView: View {
         #else
         let landscapePhone = false
         #endif
-        return LayoutPlan.plan(w: w, h: h, s: s, layout: nav.layout, k: textK,
+        return LayoutPlan.plan(w: w, h: h, s: s, layout: layout ?? nav.layout, k: textK,
                                accessibilityText: typeSize.isAccessibilitySize, hasSpot: hasSpotRow,
                                locked: nav.lockText != nil, noCompass: nav.noCompass,
-                               hasUpdateBanner: update != nil, showsFooter: showsFooter,
+                               hasUpdateBanner: update != nil, mac: Self.isMac,
                                isLandscapePhone: landscapePhone)
     }
 
@@ -135,10 +143,10 @@ struct MainView: View {
 
     /// One column, C = min(W − 2 × margin, 640) wide, centred: every block at its planned height, so the
     /// column ends with no more than 24 to spare (§3.3).
-    private func singleColumn(_ plan: LayoutPlan) -> some View {
+    private func singleColumn(_ plan: LayoutPlan, subtitles: [Layout: String]) -> some View {
         VStack(spacing: 0) {
-            header(plan)
-                .padding(.top, LayoutPlan.top + plan.topExtra)
+            header(plan, subtitles: subtitles)
+                .padding(.top, plan.topInset + plan.topExtra)
             if let update {
                 updateBanner(update)
                     .padding(.top, LayoutPlan.bannerGap)
@@ -147,12 +155,7 @@ struct MainView: View {
                 .padding(.top, plan.gapHeaderDial)
             readoutGroup(plan)
                 .padding(.top, plan.gapDialReadout)
-            if hasSpotRow {
-                spotRow(plan)
-                    .padding(.top, plan.gapGroupGrid)
-            }
-            tileGrid(plan)
-                .padding(.top, hasSpotRow ? LayoutPlan.rowGap : plan.gapGroupGrid)
+            rows(plan, firstGap: plan.gapGroupGrid)
             if plan.map == .card {
                 mapCard
                     .frame(width: plan.columnWidth, height: plan.mapHeight)
@@ -160,19 +163,36 @@ struct MainView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.bottom, LayoutPlan.bottom)
+        .padding(.bottom, plan.bottomInset)
         .frame(width: plan.columnWidth)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    /// Wide windows and phones on their side (§3.5): one full-width header; the dial, readout and status
-    /// line centred in the leading pane; the spot row, the grid, the map card and the footer in the
-    /// trailing pane, level with the dial's top.
-    private func twoPanes(_ plan: LayoutPlan) -> some View {
+    /// The lock row, the spot row and the tile grid, 8 apart; `firstGap` above the first of them.
+    private func rows(_ plan: LayoutPlan, firstGap: CGFloat) -> some View {
+        let locked = nav.lockText != nil
+        return VStack(spacing: 0) {
+            if locked {
+                lockRow(plan)
+                    .padding(.top, firstGap)
+            }
+            if hasSpotRow {
+                spotRow(plan)
+                    .padding(.top, locked ? LayoutPlan.rowGap : firstGap)
+            }
+            tileGrid(plan)
+                .padding(.top, locked || hasSpotRow ? LayoutPlan.rowGap : firstGap)
+        }
+    }
+
+    /// Wide windows and phones on their side (§3.5, C2.3 #8): one full-width header; the dial, readout and
+    /// status line centred in the leading pane; the lock row, the spot row, the grid (fixed 80 rows) and the
+    /// map card in the trailing pane, level with the dial's top.
+    private func twoPanes(_ plan: LayoutPlan, subtitles: [Layout: String]) -> some View {
         VStack(spacing: 0) {
-            header(plan)
+            header(plan, subtitles: subtitles)
                 .padding(.horizontal, plan.margin)
-                .padding(.top, LayoutPlan.top)
+                .padding(.top, plan.topInset)
             if let update {
                 updateBanner(update)
                     .padding(.horizontal, plan.margin)
@@ -192,7 +212,7 @@ struct MainView: View {
                     .padding(.trailing, plan.margin)
             }
             .padding(.top, LayoutPlan.headerToDial)
-            .padding(.bottom, LayoutPlan.bottom)
+            .padding(.bottom, plan.bottomInset)
         }
     }
 
@@ -212,54 +232,54 @@ struct MainView: View {
 
     private func trailingContent(_ plan: LayoutPlan) -> some View {
         VStack(spacing: 0) {
-            if hasSpotRow {
-                spotRow(plan)
-                    .padding(.bottom, LayoutPlan.rowGap)
-            }
-            tileGrid(plan)
+            rows(plan, firstGap: 0)
             if plan.map == .card {
                 mapCard
                     .frame(width: plan.columnWidth, height: plan.mapHeight)
                     .padding(.top, LayoutPlan.gridToMap)
             }
-            if plan.showsFooter {
-                footer
-                    .padding(.top, LayoutPlan.footerGap)
-            }
         }
     }
 
     /// Accessibility text sizes (§3.6), or nothing fits even with the dial at its floor: one scrolling
-    /// list in which every block is complete. For ImageRenderer, the same stack, clipped.
+    /// list in which every block is complete, the indicator flashed on appear and a 24 pt fade at the
+    /// bottom as the cue that it continues. For ImageRenderer, the same stack, clipped.
     @ViewBuilder
-    private func listScreen(_ plan: LayoutPlan) -> some View {
+    private func listScreen(_ plan: LayoutPlan, subtitles: [Layout: String]) -> some View {
         if flatDetails {
-            listContent(plan)
+            listContent(plan, subtitles: subtitles)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .clipped()
         } else {
             ScrollView {
-                listContent(plan)
+                listContent(plan, subtitles: subtitles)
             }
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicatorsFlash(onAppear: true)
+            .overlay(alignment: .bottom) {
+                LinearGradient(colors: [Palette.screen.opacity(0), Palette.screen], startPoint: .top, endPoint: .bottom)
+                    .frame(height: LayoutPlan.maxSpare)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
     }
 
-    private func listContent(_ plan: LayoutPlan) -> some View {
+    private func listContent(_ plan: LayoutPlan, subtitles: [Layout: String]) -> some View {
         VStack(spacing: LayoutPlan.gridToMap) {
-            header(plan)
+            header(plan, subtitles: subtitles)
             if let update { updateBanner(update) }
             dial(side: plan.dial)
             readoutGroup(plan)
+            if nav.lockText != nil { lockRow(plan) }
             if hasSpotRow { spotRow(plan) }
             listTiles(plan)
             mapCard
                 .frame(width: plan.columnWidth, height: LayoutPlan.listMap)
-            footer
         }
-        .padding(.top, LayoutPlan.top)
-        .padding(.bottom, LayoutPlan.bottom)
+        .padding(.top, plan.topInset)
+        // Room under the last block for the fade.
+        .padding(.bottom, plan.bottomInset + LayoutPlan.maxSpare)
         .frame(width: plan.columnWidth)
         .frame(maxWidth: .infinity)
     }
@@ -268,19 +288,20 @@ struct MainView: View {
 
     /// 48 high (52 on iPad, × k), on the sky for the sun's altitude here: the place over the date and
     /// time (with the Sample pill), then the sky symbol, the map button (only when the map is neither a
-    /// tile nor a card) and ⋯, which never moves.
-    private func header(_ plan: LayoutPlan) -> some View {
+    /// tile nor a card) and ⋯, which never moves. The time is never ellipsized (C2.3 #14): the date
+    /// shortens first ("Nov 1"), then goes; with k > 1.1 or the map button, the Sample pill moves to line 1.
+    private func header(_ plan: LayoutPlan, subtitles: [Layout: String]) -> some View {
         let k = plan.k
+        let pillOnPlaceLine = nav.sample && (k > 1.1 || plan.mapInHeader)
         return HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 1) {
-                placeLine(k: k, wraps: plan.list)
                 HStack(spacing: 6) {
-                    Text(dateLine)
-                        .font(.system(size: 13 * k))
-                        .foregroundStyle(Color.white.opacity(0.75))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                    if nav.sample { sampleBadge(k: k) }
+                    placeLine(k: k, wraps: plan.list)
+                    if pillOnPlaceLine { sampleBadge(k: k) }
+                }
+                HStack(spacing: 6) {
+                    dateText(k: k, wraps: plan.list)
+                    if nav.sample && !pillOnPlaceLine { sampleBadge(k: k) }
                 }
             }
             // The screen's title for VoiceOver: "Bearings" first, then where and when.
@@ -290,7 +311,7 @@ struct MainView: View {
             Spacer(minLength: 4)
             skySymbol
             if plan.mapInHeader { mapButton }
-            menu
+            menu(subtitles: subtitles)
         }
         .foregroundStyle(.white)
         .padding(.leading, 14)
@@ -302,7 +323,7 @@ struct MainView: View {
     }
 
     /// "Maroon Bells, Colorado", 17 semibold: when too long the state goes first ("Maroon Bells"), then it
-    /// truncates. At accessibility sizes it may wrap to two lines.
+    /// truncates (the place is the one thing allowed to). At accessibility sizes it may wrap to two lines.
     @ViewBuilder
     private func placeLine(k: CGFloat, wraps: Bool) -> some View {
         let full = nav.placeTitle
@@ -314,15 +335,46 @@ struct MainView: View {
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             ViewThatFits(in: .horizontal) {
-                Text(full).lineLimit(1)
+                Text(full).lineLimit(1).fixedSize()
+                Text(short).lineLimit(1).fixedSize()
                 Text(short).lineLimit(1).truncationMode(.tail)
             }
             .font(.system(size: 17 * k, weight: .semibold))
         }
     }
 
+    /// "Sun, Nov 1 · 9:41 AM", then "Nov 1 · 9:41 AM", then "9:41 AM": never an ellipsis in the time.
+    @ViewBuilder
+    private func dateText(k: CGFloat, wraps: Bool) -> some View {
+        let lines = Self.dateLines(nav.now)
+        Group {
+            if wraps {
+                Text(Self.keepTogether(lines.full))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    Text(lines.full).lineLimit(1).fixedSize()
+                    Text(lines.short).lineLimit(1).fixedSize()
+                    Text(lines.time).lineLimit(1).fixedSize()
+                }
+            }
+        }
+        .font(.system(size: 13 * k))
+        .foregroundStyle(Color.white.opacity(0.75))
+        .monospacedDigit()
+    }
+
+    /// The header's second line, longest first: "Sun, Nov 1 · 9:41 AM", "Nov 1 · 9:41 AM", "9:41 AM" (the
+    /// device's 12- or 24-hour style, through the one time formatter, Look.timeText).
+    static func dateLines(_ date: Date) -> (full: String, short: String, time: String) {
+        let time = Look.timeText(date)
+        let day = date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        let shortDay = date.formatted(.dateTime.month(.abbreviated).day())
+        return ("\(day) · \(time)", "\(shortDay) · \(time)", time)
+    }
+
     private var headerSpoken: String {
-        let when = dateLine.replacingOccurrences(of: " · ", with: ", ")
+        let when = Self.dateLines(nav.now).full.replacingOccurrences(of: " · ", with: ", ")
         return "\(Brand.appName). \(nav.placeTitle). \(when)\(nav.sample ? ". Sample" : "")"
     }
 
@@ -358,20 +410,14 @@ struct MainView: View {
             .fixedSize()
     }
 
-    /// "Sun, Nov 1 · 9:41 AM", in the device's 12- or 24-hour style.
-    private var dateLine: String {
-        let day = nav.now.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-        return "\(day) · \(nav.now.formatted(date: .omitted, time: .shortened))"
-    }
-
     /// The ⋯ menu; for ImageRenderer (`flatDetails`, the Mac self-test), which can't draw a menu, its symbol alone.
     @ViewBuilder
-    private var menu: some View {
+    private func menu(subtitles: [Layout: String]) -> some View {
         if flatDetails {
             menuSymbol
                 .accessibilityLabel("Settings and more")
         } else {
-            settingsMenu
+            settingsMenu(subtitles: subtitles)
         }
     }
 
@@ -383,14 +429,15 @@ struct MainView: View {
             .contentShape(Rectangle())
     }
 
-    private var settingsMenu: some View {
+    private func settingsMenu(subtitles: [Layout: String]) -> some View {
         Menu {
-            // The first group: the layout, each with a symbol, a one-line subtitle and a check on the current one.
+            // The first group: the layout, each with a symbol, a subtitle that states what it gives on this
+            // screen ("Dial 386 · map in header") and a check on the current one.
             Picker(selection: $nav.layout) {
                 ForEach(Layout.allCases) { layout in
                     Label {
                         Text(layout.name)
-                        Text(layout.subtitle)
+                        Text(subtitles[layout] ?? layout.subtitle)
                     } icon: {
                         Image(systemName: layout.symbol)
                     }
@@ -452,6 +499,8 @@ struct MainView: View {
             }
             Divider()
             Link(destination: Brand.legal) { Label("Terms & Privacy", systemImage: "doc.text") }
+            // The footer of earlier versions lives here on every layout (C2.3 #8).
+            Link(destination: Brand.website) { Label("Made by \(Brand.author)", systemImage: "person.crop.circle") }
             Button("About Bearings", systemImage: "info.circle") { showAbout = true }
         } label: {
             menuSymbol
@@ -576,23 +625,46 @@ struct MainView: View {
     }
     #endif
 
-    /// The status line's slot when there is no compass (two lines allowed).
-    static let noCompassText = "No compass on this device · position, sun and map still work"
+    /// The status line's slot when there is no compass (two lines allowed, wrapping at the "·").
+    static let noCompassText = "No compass · position, sun and map still work"
+    /// The readout with no heading: an em dash (U+2014) and the degree sign.
+    static let noHeadingText = "\u{2014}°"
 
-    /// The readout, the status line and (when locked) the lock chip, centred under the dial.
+    /// The readout and the status line (with no compass, "NO HEADING" between them), centred under the dial.
     private func readoutGroup(_ plan: LayoutPlan) -> some View {
         VStack(spacing: 0) {
             readout(plan)
+            if plan.noCompass {
+                Text("No heading".uppercased())
+                    .font(.system(size: Look.tileCaptionSize * plan.k, weight: .semibold))
+                    .tracking(Look.tileCaptionTracking)
+                    .foregroundStyle(secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .frame(height: LayoutPlan.captionLine * plan.k)
+                    .padding(.top, LayoutPlan.readoutToCaption)
+                    .accessibilityHidden(true)
+            }
             statusLine(plan)
                 .padding(.top, LayoutPlan.readoutToStatus)
-            if nav.lockText != nil {
-                lockChip(plan)
-                    .padding(.top, LayoutPlan.statusToChip)
-            }
         }
     }
 
-    /// "228° SW", unchanged in style, its line 1.1 × the heading's size. "—°" at white 40% with no heading.
+    /// How far a line of the light system font at `size` reaches above its capitals: trimmed off the
+    /// readout's line box, so the 12 under the dial runs to the digits' cap height (C2.3 #7).
+    static func capInset(size: CGFloat) -> CGFloat {
+        let font = PlatformFont.systemFont(ofSize: size, weight: .light)
+        return max(0, font.ascender - font.capHeight)
+    }
+
+    /// The width of `text` in the system font with tabular digits, for the self-tests' fit checks.
+    fileprivate static func textWidth(_ text: String, size: CGFloat, weight: PlatformFont.Weight) -> CGFloat {
+        let font = PlatformFont.monospacedDigitSystemFont(ofSize: size, weight: weight)
+        return ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    }
+
+    /// "228° SW", unchanged in style, in a block trimmed to the digits' cap height. With no heading "—°"
+    /// (an em dash and a degree sign on one baseline) at white 40%.
     private func readout(_ plan: LayoutPlan) -> some View {
         let big = plan.headingSize
         let spokenHeading = nav.heading.map { "Heading \(Int($0.rounded()) % 360) degrees, \(Geo.pointName($0).lowercased())" }
@@ -607,21 +679,28 @@ struct MainView: View {
                     .foregroundStyle(secondary)
                     .frame(minWidth: big, alignment: .leading)
             } else {
-                Text("—°")
-                    .font(.system(size: big, weight: .light))
-                    .foregroundStyle(Color.white.opacity(0.4))
-                    .tracking(-2)
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text("\u{2014}")
+                    Text("°")
+                }
+                .font(.system(size: big, weight: .light))
+                .foregroundStyle(Color.white.opacity(0.4))
             }
         }
         .monospacedDigit()
         .lineLimit(1)
-        .frame(height: LayoutPlan.readoutHeight(headingSize: big))
+        .fixedSize()
+        // The line box above the capitals is trimmed; the block is cap height plus 4 under the baseline.
+        .padding(.top, -Self.capInset(size: big))
+        .frame(height: LayoutPlan.readoutHeight(headingSize: big), alignment: .top)
+        .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spokenHeading ?? (nav.noCompass ? "No heading" : "Heading not known yet"))
+        .accessibilityLabel(spokenHeading ?? (nav.noCompass ? "Heading unavailable" : "Heading not known yet"))
     }
 
     /// "True north · 8° E declination · ±8° accuracy", 13 regular, one line (two only at k > 1.1, after a
-    /// dot). Amber warnings take its place; with no compass, the no-compass note (two lines allowed).
+    /// dot). Amber warnings take its place; with no compass, the no-compass note (two lines allowed,
+    /// within C − 32).
     @ViewBuilder
     private func statusLine(_ plan: LayoutPlan) -> some View {
         let lines = Int(plan.statusLines)
@@ -630,8 +709,8 @@ struct MainView: View {
             if nav.noCompass {
                 Text(Self.keepTogether(Self.noCompassText))
                     .foregroundStyle(secondary)
-                    .lineLimit(2)
-                    .accessibilityLabel("No compass on this device. Position, sun and map still work.")
+                    .lineLimit(plan.list ? nil : 2)
+                    .accessibilityLabel("No compass. Position, sun and map still work.")
             } else if let warning = nav.compassWarning {
                 Text(warning)
                     .fontWeight(.semibold)
@@ -652,25 +731,44 @@ struct MainView: View {
         .minimumScaleFactor(0.85)
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: plan.list)
+        .padding(.horizontal, nav.noCompass ? 16 : 0)
         .frame(maxWidth: .infinity)
         .frame(minHeight: height, maxHeight: plan.list ? nil : height)
     }
 
-    /// "🔒 Locked 240° · turn 12° right ✕": a 28 high capsule on the accent at 20% (25% at night). The ✕
-    /// unlocks, in a 44 × 44 target that reaches past the capsule.
-    private func lockChip(_ plan: LayoutPlan) -> some View {
-        let k = plan.k, height = LayoutPlan.chipHeight(k: k)
+    // MARK: Lock and marked spot
+
+    /// The locked bearing, in the spot row's form (C2.3 #16): a full-width tile, 44 high, leading-aligned:
+    /// lock, "Locked 240°", then "turn 12° right" trailing and a ✕ 8 after it in a 44 × 44 target.
+    private func lockRow(_ plan: LayoutPlan) -> some View {
+        let k = plan.k, height = LayoutPlan.lockHeight(k: k)
         let text = nav.lockText ?? ""
-        return HStack(spacing: 6) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 13 * k, weight: .semibold))
-                .accessibilityHidden(true)
-            Text(Self.keepTogether(text))
-                .font(.system(size: 13 * k, weight: .semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .accessibilityLabel(text.replacingOccurrences(of: "°", with: " degrees").replacingOccurrences(of: " · ", with: ", "))
+        let parts = text.components(separatedBy: " · ")
+        let first = parts.first ?? text
+        let rest = parts.dropFirst().joined(separator: " · ")
+        let spokenText = text.replacingOccurrences(of: "°", with: " degrees").replacingOccurrences(of: " · ", with: ", ")
+        return HStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 17 * k, weight: .semibold))
+                Text(Self.keepTogether(first))
+                    .font(.system(size: 15 * k, weight: .medium))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
+                Spacer(minLength: 8)
+                if !rest.isEmpty {
+                    FitText(text: Self.keepTogether(rest), size: 15 * k, wraps: plan.list)
+                        .monospacedDigit()
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(spokenText)
+            .accessibilityActions {
+                Button("Unlock Bearing") { nav.toggleLock() }
+            }
             Button { nav.toggleLock() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 13 * k, weight: .bold))
@@ -679,19 +777,19 @@ struct MainView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            // Laid out in the chip's height; its 44 target spills around it.
-            .frame(width: 24, height: height)
+            // The glyph sits 8 after the text; its 44 target reaches back under the text's end.
+            .padding(.leading, -8)
             .accessibilityLabel("Unlock Bearing")
         }
         .foregroundStyle(.white)
-        .padding(.leading, 12)
-        .padding(.trailing, 4)
-        .frame(height: height)
-        .background(Capsule().fill(Palette.accent.opacity(nav.nightMode ? 0.25 : 0.20)))
+        .padding(.leading, Look.tilePaddingH)
+        .frame(width: plan.columnWidth)
+        .frame(minHeight: height, maxHeight: plan.list ? nil : height)
+        .background(RoundedRectangle(cornerRadius: Look.radius, style: .continuous)
+            .fill(Palette.accent.opacity(nav.nightMode ? 0.25 : 0.20)))
+        .frostedTile()
         .accessibilityElement(children: .contain)
     }
-
-    // MARK: Marked spot
 
     /// A full-width tile, 44 high: pin, "Marked spot", then "9.2 mi · 46° NE" trailing, and a ✕ 8 after
     /// it in a 44 × 44 target. The row opens a small menu (Lock to Spot, Clear Marked Spot).
@@ -754,11 +852,8 @@ struct MainView: View {
                 .lineLimit(1)
                 .fixedSize()
             Spacer(minLength: 8)
-            Text(Self.keepTogether(details))
-                .font(.system(size: 15 * k))
+            FitText(text: Self.keepTogether(details), size: 15 * k, wraps: plan.list)
                 .monospacedDigit()
-                .lineLimit(plan.list ? nil : 1)
-                .minimumScaleFactor(0.85)
                 .multilineTextAlignment(.trailing)
         }
         .foregroundStyle(.white)
@@ -766,11 +861,14 @@ struct MainView: View {
         .contentShape(Rectangle())
     }
 
+
     // MARK: The tile grid
 
     /// 3 columns, u = (C − 16) / 3, rows 8 apart. Full: Position (2u) | Elevation, then Sun | Moon | Map
-    /// (Sun | Moon in halves when the map is a card). Compact: Position | Elevation | Sun at 44 / 28 / 28. A trailing
-    /// pane narrower than 360: 2 columns, Position, Elevation | Sun, Moon, and Map, each spanning both.
+    /// (Sun | Moon in halves when the map is a card or the header button). Compact: Position | Elevation |
+    /// Sun with widths from C (LayoutPlan.compactWidths), the moon in Sun's caption. A trailing pane
+    /// narrower than 360: 2 columns, Position, Elevation | Sun, Moon, and Map, each spanning both. Every
+    /// row's widths and gutters add up to C (LayoutPlan.rowWidths).
     @ViewBuilder
     private func tileGrid(_ plan: LayoutPlan) -> some View {
         if nav.fix == nil && nav.access != .allowed {
@@ -785,12 +883,7 @@ struct MainView: View {
     }
 
     private func gridHeight(_ plan: LayoutPlan) -> CGFloat {
-        let rows: CGFloat
-        if plan.columns == 3 {
-            rows = plan.grid == .full ? 2 : 1
-        } else {
-            rows = plan.map == .tile ? 4 : 3
-        }
+        let rows = CGFloat(plan.rowWidths.count)
         return rows * plan.tileHeight + (rows - 1) * Self.gap
     }
 
@@ -800,32 +893,30 @@ struct MainView: View {
         if plan.columns == 3 {
             VStack(spacing: g) {
                 if plan.grid == .compact {
-                    // Three tiles across one column: Position wider, Elevation and Sun alike.
+                    // Position wider; Elevation and Sun w = max(104, 0.27 C) each; exactly C across.
                     let widths = plan.compactWidths
                     HStack(spacing: g) {
-                        positionTile(plan, stale: stale)
+                        positionTile(plan, stale: stale, compact: true)
                             .frame(width: widths.position, height: t)
                         elevationTile(plan, stale: stale)
                             .frame(width: widths.other, height: t)
-                        sunTile(plan)
+                        sunTile(plan, compact: true)
                             .frame(width: widths.other, height: t)
                     }
                 } else {
                     HStack(spacing: g) {
-                        positionTile(plan, stale: stale)
+                        positionTile(plan, stale: stale, compact: false)
                             .frame(width: 2 * u + g, height: t)
                         elevationTile(plan, stale: stale)
                             .frame(width: u, height: t)
                     }
-                }
-                if plan.grid == .full {
                     HStack(spacing: g) {
                         if plan.map == .tile {
-                            sunTile(plan).frame(width: u, height: t)
+                            sunTile(plan, compact: false).frame(width: u, height: t)
                             moonTile(plan).frame(width: u, height: t)
                             mapTile.frame(width: u, height: t)
                         } else {
-                            sunTile(plan).frame(width: (c - g) / 2, height: t)
+                            sunTile(plan, compact: false).frame(width: (c - g) / 2, height: t)
                             moonTile(plan).frame(width: (c - g) / 2, height: t)
                         }
                     }
@@ -833,11 +924,11 @@ struct MainView: View {
             }
         } else {
             VStack(spacing: g) {
-                positionTile(plan, stale: stale)
+                positionTile(plan, stale: stale, compact: false)
                     .frame(width: c, height: t)
                 HStack(spacing: g) {
                     elevationTile(plan, stale: stale).frame(width: u, height: t)
-                    sunTile(plan).frame(width: u, height: t)
+                    sunTile(plan, compact: false).frame(width: u, height: t)
                 }
                 moonTile(plan)
                     .frame(width: c, height: t)
@@ -858,13 +949,13 @@ struct MainView: View {
             TimelineView(.periodic(from: .now, by: 15)) { context in
                 let stale = !nav.sample && (nav.fix.map { context.date.timeIntervalSince($0.time) > 120 } ?? false)
                 VStack(spacing: Self.gap) {
-                    positionTile(plan, stale: stale)
+                    positionTile(plan, stale: stale, compact: false)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: plan.columnWidth)
                     elevationTile(plan, stale: stale)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: plan.columnWidth)
-                    sunTile(plan)
+                    sunTile(plan, compact: false)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: plan.columnWidth)
                     moonTile(plan)
@@ -878,21 +969,18 @@ struct MainView: View {
     /// "Finding position…" under a "—", before the first fix (never blank).
     private var waitingText: String { nav.access == .allowed || nav.locating ? "Finding position…" : "Not known yet" }
 
-    /// A tile's value: 17 medium, tabular, white (dimmed when the fix is stale). Scales to 0.85, then
-    /// wraps; never ellipsized.
-    private func valueText(_ text: String, plan: LayoutPlan, stale: Bool = false, lines: Int = 1) -> some View {
-        Text(text)
-            .font(.system(size: Look.tileValueSize * plan.k, weight: .medium))
+    /// A tile's value: 17 medium (15 in the compact row), tabular, white (dimmed when the fix is stale).
+    /// Scales to 0.85, then wraps; never ellipsized.
+    private func valueText(_ text: String, plan: LayoutPlan, stale: Bool = false, size: CGFloat = Look.tileValueSize,
+                           weight: Font.Weight = .medium) -> some View {
+        FitText(text: text, size: size * plan.k, weight: weight, wraps: plan.list)
             .monospacedDigit()
             .foregroundStyle(stale ? secondary : .white)
-            .lineLimit(plan.list ? nil : lines)
-            .minimumScaleFactor(0.85)
-            .fixedSize(horizontal: false, vertical: plan.list)
     }
 
-    /// POSITION · DD: latitude over longitude, or one grid reference. Tap for the next format; long-press
-    /// (right-click on a Mac) for Copy and Details….
-    private func positionTile(_ plan: LayoutPlan, stale: Bool) -> some View {
+    /// POSITION · DD: latitude over longitude, or one grid reference (15 pt in the compact row). Tap for
+    /// the next format; long-press (right-click on a Mac) for Copy and Details….
+    private func positionTile(_ plan: LayoutPlan, stale: Bool, compact: Bool) -> some View {
         let formatted = nav.fix.map { Geo.format(nav.format, lat: $0.latitude, lon: $0.longitude) }
         let first: String, second: String?, spokenValue: String
         switch formatted {
@@ -912,12 +1000,13 @@ struct MainView: View {
         // "decimal degrees", but "UTM" and "MGRS" stay in capitals so they're spelled out.
         let name = nav.format.name
         let formatWords = name == name.uppercased() ? name : name.lowercased()
+        let size = compact ? Look.compactValueSize : Look.tileValueSize
         return CoordinateText(copy: copyCoordinates, details: { showDetails = true }) {
             PanelTile("Position · \(Self.shortName(nav.format))", secondary: nav.fix == nil ? waitingText : nil) {
                 VStack(alignment: .leading, spacing: -2) {
-                    valueText(first, plan: plan, stale: stale, lines: second == nil ? 2 : 1)
+                    valueText(first, plan: plan, stale: stale, size: size)
                     if let second {
-                        valueText(second, plan: plan, stale: stale)
+                        valueText(second, plan: plan, stale: stale, size: size)
                     }
                 }
             }
@@ -973,38 +1062,36 @@ struct MainView: View {
         .panelAction(spokenText, hint: "Shows the details") { showDetails = true }
     }
 
-    /// SUN: sunrise over sunset ("6:36 AM", "5:08 PM", in the device's 12- or 24-hour style), or "Up all
-    /// day" / "Down all day". Tap: the Details sheet.
-    private func sunTile(_ plan: LayoutPlan) -> some View {
+    /// SUN, with its glyph in the caption: "↑ 6:36 AM" over "↓ 5:08 PM" (one formatter, Look.time, in the
+    /// device's 12- or 24-hour style), or "Up all day" / "Down all day". In the compact row the values are
+    /// 15 semibold and the moon rides in the caption ("SUN · ◐ 53%"). Tap: the Details sheet.
+    private func sunTile(_ plan: LayoutPlan, compact: Bool) -> some View {
         let k = plan.k
         let times = nav.sunTimes
         let rise = times?.sunriseDate, down = times?.sunsetDate
-        let spokenSun: String
+        let phase = nav.moonPhase
+        let percent = Int(Geo.jsRound(phase.fraction * 100))
+        var spokenSun: String
         if let rise, let down {
-            spokenSun = "rises \(rise.formatted(date: .omitted, time: .shortened)), sets \(down.formatted(date: .omitted, time: .shortened))"
+            spokenSun = "rises \(Look.timeText(rise)), sets \(Look.timeText(down))"
         } else if let times {
             spokenSun = times.polar == .day ? "up all day" : "down all day"
         } else {
             spokenSun = waitingText.lowercased()
         }
-        return PanelTile("Sun", secondary: times == nil ? waitingText : nil) {
+        if compact { spokenSun += ". Moon \(percent) percent lit, \(Look.phaseName(phase).lowercased())" }
+        let size = (compact ? Look.compactValueSize : Look.tileValueSize) * k
+        let weight: Font.Weight = compact ? .semibold : .medium
+        return PanelTile("Sun", symbol: "sun.max.fill", moon: compact ? phase : nil,
+                         secondary: times == nil ? waitingText : nil) {
             if let rise, let down {
                 VStack(alignment: .leading, spacing: -2) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "sunrise.fill")
-                            .font(.system(size: 13 * k))
-                            .foregroundStyle(secondary)
-                        valueText(rise.formatted(date: .omitted, time: .shortened), plan: plan)
-                    }
-                    HStack(spacing: 4) {
-                        Image(systemName: "sunset.fill")
-                            .font(.system(size: 13 * k))
-                            .foregroundStyle(secondary)
-                        valueText(down.formatted(date: .omitted, time: .shortened), plan: plan)
-                    }
+                    SunTime(arrow: "↑", time: Look.time(rise), size: size, weight: weight, k: k, wraps: plan.list)
+                    SunTime(arrow: "↓", time: Look.time(down), size: size, weight: weight, k: k, wraps: plan.list)
                 }
+                .monospacedDigit()
             } else if let times {
-                valueText(times.polar == .day ? "Up all day" : "Down all day", plan: plan, lines: 2)
+                valueText(times.polar == .day ? "Up all day" : "Down all day", plan: plan, size: compact ? Look.compactValueSize : Look.tileValueSize)
             } else {
                 valueText("—", plan: plan)
             }
@@ -1025,7 +1112,8 @@ struct MainView: View {
         .panelAction("Moon, \(percent) percent lit, \(Look.phaseName(phase).lowercased())", hint: "Shows the details") { showDetails = true }
     }
 
-    /// MAP: a live thumbnail, north up with the heading cone, no controls or gestures. Tap: the map sheet.
+    /// MAP: a live thumbnail, north up with the heading cone, no controls or gestures, its caption
+    /// bottom-leading on a scrim. Tap: the map sheet.
     private var mapTile: some View {
         MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: .constant(false), satellite: nav.satellite,
                    dimmed: nav.nightMode, thumbnail: true)
@@ -1035,7 +1123,7 @@ struct MainView: View {
             .panelAction("Map", hint: "Opens the map") { nav.mapSheet = true }
     }
 
-    /// The full-width map card (and the map sheet's map), with its one control cluster.
+    /// The full-width map card, with its one control cluster.
     private var mapCard: some View {
         MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
                    speed: nav.speed.map { Geo.speedText($0, feet: nav.feet) }, dimmed: nav.nightMode)
@@ -1073,9 +1161,9 @@ struct MainView: View {
 
     // MARK: Sheets
 
-    /// A sheet's top bar: its title and Done.
+    /// A sheet's top bar: its title and Done, on one baseline.
     private func sheetBar(_ title: String, done: @escaping () -> Void) -> some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text(title)
                 .font(.system(size: 17, weight: .semibold))
                 .accessibilityAddTraits(.isHeader)
@@ -1089,26 +1177,39 @@ struct MainView: View {
         .padding(.top, 8)
     }
 
-    /// The map sheet: full height, with the same control cluster and speed chip as the map card, and the
-    /// attribution at the bottom.
+    /// The map sheet (C2.3 #11): the map full-bleed under a translucent bar ("Map", Done trailing, one
+    /// baseline), with the same control cluster and speed chip as the map card below the bar, and the
+    /// attribution in the bottom safe area. Full height on iPhone; a page-sized sheet on iPad.
     private var mapSheet: some View {
-        VStack(spacing: 0) {
-            sheetBar("Map") { nav.mapSheet = false }
-            mapCard
-                .padding(16)
-        }
-        .foregroundStyle(.white)
-        .background(Palette.screen.ignoresSafeArea())
-        .environment(\.colorScheme, .dark)
-        .environment(\.nightText, nav.nightMode)
-        .colorMultiply(nav.nightMode ? Self.nightTint : .white)
-        #if os(iOS)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        #else
-        .frame(minWidth: 480, minHeight: 560)
-        #endif
+        MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
+                   speed: nav.speed.map { Geo.speedText($0, feet: nav.feet) }, dimmed: nav.nightMode,
+                   bleed: true, topInset: Self.sheetBarHeight)
+            // The map runs to the sheet's bottom edge; Apple Maps keeps its logo and Legal link in the safe area.
+            .ignoresSafeArea(edges: .bottom)
+            .overlay(alignment: .top) {
+                sheetBar("Map") { nav.mapSheet = false }
+                    .padding(.bottom, 4)
+                    .frame(height: Self.sheetBarHeight, alignment: .bottom)
+                    .frame(maxWidth: .infinity)
+                    .background(.ultraThinMaterial)
+                    .environment(\.colorScheme, .dark)
+            }
+            .foregroundStyle(.white)
+            .background(Palette.screen.ignoresSafeArea())
+            .environment(\.colorScheme, .dark)
+            .environment(\.nightText, nav.nightMode)
+            .colorMultiply(nav.nightMode ? Self.nightTint : .white)
+            #if os(iOS)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .pageSizedSheet()
+            #else
+            .frame(minWidth: 480, minHeight: 560)
+            #endif
     }
+
+    /// The map sheet's bar: 8 for the grabber, the 44 row, 4 under it.
+    private static let sheetBarHeight: CGFloat = 56
 
     /// The Details sheet: what the old DETAILS tiles showed, as a grouped list.
     private var detailsSheet: some View {
@@ -1164,7 +1265,7 @@ struct MainView: View {
         guard let date, let fix = nav.fix else { return "—" }
         let azimuth = Sky.sunPosition(at: date, lat: fix.latitude, lon: fix.longitude).azimuth
         let shown = nav.cardAngle(azimuth)
-        return "\(date.formatted(date: .omitted, time: .shortened)) · \(Int(Geo.jsRound(shown)) % 360)° \(Geo.point(shown))"
+        return "\(Look.timeText(date)) · \(Int(Geo.jsRound(shown)) % 360)° \(Geo.point(shown))"
     }
 
     /// "Just now", "40 s ago", "3 min ago", or "Sample".
@@ -1178,21 +1279,7 @@ struct MainView: View {
         return "\(s / 3600) hr ago"
     }
 
-    // MARK: Footer, copy, toast
-
-    /// "Made by Bradley Cowdrey · bradcowdrey.com ↗", 13 secondary: the last line of the trailing pane
-    /// (Mac and iPad) and of the scrolling list.
-    private var footer: some View {
-        HStack {
-            Spacer()
-            Link("Made by Bradley Cowdrey · bradcowdrey.com ↗", destination: Brand.website)
-                .foregroundStyle(secondary)
-        }
-        .font(.system(size: 13))
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-        .frame(height: LayoutPlan.footer)
-    }
+    // MARK: Copy, toast
 
     private func copyCoordinates() {
         guard let text = nav.copyText else { return }
@@ -1258,43 +1345,226 @@ struct CoordinateText<Content: View>: View {
     }
 }
 
-/// One tile, the same component everywhere (docs/REFINE.md §3.2, the widgets' pattern): an 11 pt caps
-/// caption, a 17 pt tabular value, and a 13 pt second line, leading-aligned on a frosted fill (radius 16),
-/// 12 in from the sides and 10 from the top and bottom. The caller sets its frame.
+/// One tile, the same component everywhere (docs/REFINE.md §3.2 and C2.3 #6, the widgets' pattern): an
+/// 11 pt caps caption (with an optional symbol, and for the compact row's Sun the moon's glyph and
+/// percentage) pinned 10 from the top, and the value block (a 17 pt tabular value and a 13 pt second line)
+/// pinned 10 from the bottom, so a grown tile is never half empty at the bottom. Leading-aligned on a
+/// frosted fill (radius 16), 12 in from the sides. The caller sets its frame.
 struct PanelTile<Value: View>: View {
     let caption: String
+    var symbol: String?
+    var moon: Sky.Phase?
     var secondary: String?
     let value: Value
     @Environment(\.uiScale) private var k
     @Environment(\.nightText) private var night
 
-    init(_ caption: String, secondary: String? = nil, @ViewBuilder value: () -> Value) {
+    init(_ caption: String, symbol: String? = nil, moon: Sky.Phase? = nil, secondary: String? = nil,
+         @ViewBuilder value: () -> Value) {
         self.caption = caption
+        self.symbol = symbol
+        self.moon = moon
         self.secondary = secondary
         self.value = value()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(caption.uppercased())
-                .font(.system(size: Look.tileCaptionSize * k, weight: .semibold))
-                .tracking(Look.tileCaptionTracking)
-                .foregroundStyle(Palette.secondary(night: night))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-            value
-            if let secondary {
-                Text(secondary)
-                    .font(.system(size: Look.tileSecondarySize * k))
-                    .foregroundStyle(Palette.secondary(night: night))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+            captionRow
+            Spacer(minLength: 2)
+            VStack(alignment: .leading, spacing: 0) {
+                value
+                if let secondary {
+                    FitText(text: secondary, size: Look.tileSecondarySize * k)
+                        .foregroundStyle(Palette.secondary(night: night))
+                }
             }
         }
         .padding(.horizontal, Look.tilePaddingH)
         .padding(.vertical, Look.tilePaddingV)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .frostedTile()
+    }
+
+    /// "☀ SUN · ◐ 53%": the symbol is dropped first when the caption is too wide; the words never truncate.
+    private var captionRow: some View {
+        ViewThatFits(in: .horizontal) {
+            captionContent(withSymbol: symbol != nil)
+            captionContent(withSymbol: false)
+            captionContent(withSymbol: false)
+                .scaleEffect(0.85, anchor: .leading)
+        }
+        .foregroundStyle(Palette.secondary(night: night))
+    }
+
+    private func captionContent(withSymbol: Bool) -> some View {
+        HStack(spacing: 3) {
+            if withSymbol, let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: Look.tileCaptionSymbolSize * k, weight: .semibold))
+            }
+            Text(caption.uppercased())
+                .tracking(Look.tileCaptionTracking)
+            if let moon {
+                Text("·")
+                MoonGlyph(phase: moon.phase, size: Look.tileCaptionSize * k)
+                Text("\(Int(Geo.jsRound(moon.fraction * 100)))%")
+                    .monospacedDigit()
+            }
+        }
+        .font(.system(size: Look.tileCaptionSize * k, weight: .semibold))
+        .lineLimit(1)
+        .fixedSize()
+    }
+}
+
+/// Text that is never ellipsized (C2.2 #1): at its size on one line, else at 0.85 of it, else wrapped
+/// at 0.85. In the scrolling list (`wraps`) it wraps at its full size.
+struct FitText: View {
+    let text: String
+    let size: CGFloat
+    var weight: Font.Weight = .regular
+    var wraps = false
+
+    var body: some View {
+        if wraps {
+            Text(text)
+                .font(.system(size: size, weight: weight))
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            ViewThatFits(in: .horizontal) {
+                Text(text)
+                    .font(.system(size: size, weight: weight))
+                    .lineLimit(1)
+                    .fixedSize()
+                Text(text)
+                    .font(.system(size: size * Look.minScale, weight: weight))
+                    .lineLimit(1)
+                    .fixedSize()
+                Text(text)
+                    .font(.system(size: size * Look.minScale, weight: weight))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// One of the Sun tile's rows, "↑ 6:36 AM", never ellipsized (C2.2 #1): on one line at its size, then at
+/// 0.85, then with the day period in 11 pt beside the time, then the time over an 11 pt "AM".
+struct SunTime: View {
+    let arrow: String
+    let time: (clock: String, period: String?)
+    let size: CGFloat
+    let weight: Font.Weight
+    let k: CGFloat
+    var wraps = false
+
+    private var whole: String {
+        "\(arrow)\u{00A0}\(time.clock)" + (time.period.map { "\u{202F}\($0)" } ?? "")
+    }
+
+    var body: some View {
+        if wraps {
+            Text(whole)
+                .font(.system(size: size, weight: weight))
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            ViewThatFits(in: .horizontal) {
+                Text(whole)
+                    .font(.system(size: size, weight: weight))
+                    .lineLimit(1)
+                    .fixedSize()
+                Text(whole)
+                    .font(.system(size: size * Look.minScale, weight: weight))
+                    .lineLimit(1)
+                    .fixedSize()
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text("\(arrow)\u{00A0}\(time.clock)")
+                        .font(.system(size: size, weight: weight))
+                    if let period = time.period {
+                        Text(period)
+                            .font(.system(size: Look.periodSize * k, weight: weight))
+                    }
+                }
+                .lineLimit(1)
+                .fixedSize()
+                VStack(alignment: .leading, spacing: -2) {
+                    Text("\(arrow)\u{00A0}\(time.clock)")
+                        .font(.system(size: size * Look.minScale, weight: weight))
+                    if let period = time.period {
+                        Text(period)
+                            .font(.system(size: Look.periodSize * k, weight: weight))
+                    }
+                }
+                .lineLimit(1)
+                .fixedSize()
+            }
+        }
+    }
+}
+
+// MARK: Fit checks for the self-tests (C2's "no … anywhere")
+
+extension MainView {
+    /// Measures what the compact row and the header must hold, in the system font, on every device of the
+    /// planner's table at Text Size 1.0 and 1.3, and checks that the strings the tiles and the header show
+    /// never carry "…". Each failure is one line; empty when all is well.
+    static func fitFailures(sunrise: Date, sunset: Date, now: Date, lat: Double, lon: Double) -> [String] {
+        var failures: [String] = []
+        let times = [Look.time(sunrise), Look.time(sunset)]
+        let dates = dateLines(now)
+        // The strings themselves.
+        var shown: [String] = [dates.full, dates.short, dates.time, Look.timeText(sunrise), Look.timeText(sunset),
+                               noHeadingText, noCompassText]
+        for format in Geo.Format.allCases {
+            switch Geo.format(format, lat: lat, lon: lon) {
+            case let .pair(a, b): shown += [a, b]
+            case let .single(value): shown.append(value)
+            }
+        }
+        for text in shown where text.contains("…") { failures.append("\"\(text)\" has an ellipsis") }
+        if noHeadingText != "\u{2014}°" { failures.append("The no-compass readout is \"\(noHeadingText)\", not \"—°\"") }
+
+        let dd = Geo.format(.dd, lat: lat, lon: lon)
+        for d in LayoutPlan.devices {
+            for k in [CGFloat(1), 1.3] {
+                for layout in Layout.allCases {
+                    let p = LayoutPlan.plan(w: d.w, h: d.h, s: d.s, layout: layout, k: k, hasSpot: true, locked: true, mac: d.mac)
+                    let name = "\(d.name) \(layout.rawValue) k\(k)"
+                    if !p.list {
+                        // The header's last step, the time alone, fits beside the sky symbol, the map
+                        // button (when shown) and ⋯.
+                        let mapButton: CGFloat = p.mapInHeader ? 52 : 0
+                        let trailing: CGFloat = 82 + mapButton
+                        // The Sample pill (6 + about 50) shares the time's line unless it moved to line 1.
+                        let pill: CGFloat = k > 1.1 || p.mapInHeader ? 0 : 56
+                        let room: CGFloat = p.columnWidth - 18 - trailing - pill
+                        if textWidth(dates.time, size: 13 * k, weight: .regular) > room + 0.5 {
+                            failures.append("\(name): the header time doesn't fit (\(Int(room)) pt)")
+                        }
+                    }
+                    guard p.grid == .compact else { continue }
+                    let widths = p.compactWidths
+                    // Sun: some step of its ladder fits on a line (at the latest, the time over its "AM").
+                    let sunRoom = widths.other - 2 * Look.tilePaddingH
+                    for t in times {
+                        let clock = textWidth("↑\u{00A0}\(t.clock)", size: Look.compactValueSize * Look.minScale * k, weight: .semibold)
+                        let period = t.period.map { textWidth($0, size: Look.periodSize * k, weight: .semibold) } ?? 0
+                        if max(clock, period) > sunRoom + 0.5 {
+                            failures.append("\(name): Sun \(t.clock) needs \(Int(max(clock, period))) of \(Int(sunRoom)) pt")
+                        }
+                    }
+                    // Position (decimal degrees, the default): the longitude fits on one line at 0.85 of
+                    // 15 pt at the default Text Size (larger sizes may wrap; the tile is taller then).
+                    if k == 1, case let .pair(_, lonText) = dd {
+                        let room = widths.position - 2 * Look.tilePaddingH
+                        let width = textWidth(lonText, size: Look.compactValueSize * Look.minScale, weight: .medium)
+                        if width > room + 0.5 { failures.append("\(name): \(lonText) needs \(Int(width)) of \(Int(room)) pt") }
+                    }
+                }
+            }
+        }
+        return failures
     }
 }
 
@@ -1309,6 +1579,21 @@ extension View {
             .accessibilityHint(hint)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction(.default, action)
+    }
+
+    /// iPad: the map sheet is page-sized rather than a form sheet over half the dial (iOS 18 and later;
+    /// earlier systems keep their default).
+    @ViewBuilder
+    func pageSizedSheet() -> some View {
+        #if compiler(>=6.0)
+        if #available(iOS 18.0, macOS 15.0, *) {
+            self.presentationSizing(.page)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }
 

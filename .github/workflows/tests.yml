@@ -1,8 +1,9 @@
 name: Tests
 
 # Every push and pull request: the Swift unit tests (coordinate formats against Tests/fixtures/geo.json,
-# units, terms schedule, and the layout planner's golden table: Tests/BearingsTests/LayoutPlanTests.swift)
-# on a Mac, and the web app's tests at phone, tablet and desktop sizes.
+# units, terms schedule, and the layout planner's golden table with Cycle 2's checks: rows that add up to C,
+# no "…" in a tile or the header time, the four layouts distinct, Mac edges, "—°";
+# Tests/BearingsTests/LayoutPlanTests.swift) on a Mac, and the web app's tests at phone, tablet and desktop sizes.
 on:
   push:
   pull_request:

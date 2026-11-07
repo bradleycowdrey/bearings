@@ -3,11 +3,14 @@ import SwiftUI
 
 /// An Apple Maps view of where you are: a dot with the accuracy circle and a cone toward your heading,
 /// north up or turning with you (docs/REFINE.md §3.2). As a **card** (and in the map sheet) the controls
-/// sit in one cluster top right (+, −, follow heading, open in Maps: 36 pt circles in 44 pt targets, 8
-/// apart, 12 from the corner), your speed shows top left while you're moving, and the bottom 24 stays clear
-/// for Apple Maps' logo and Legal link. As a **thumbnail** (the Map tile) it is north up with the heading
-/// cone, no controls and no gestures, with a "MAP" caption on a scrim. There is no fade over it. At night
-/// it is grey and at 15% brightness or less, so it is never the brightest thing on screen.
+/// are one vertical stack everywhere (C2.3 #10): 36 pt circles in 44 pt targets, 8 apart, 12 in from the
+/// top-trailing corner: +, −, follow heading, open in Maps, or on a card under 192 tall +, − and ⋯ (follow
+/// and open in Maps in its menu). Your speed shows top left while you're moving; the bottom stays clear for
+/// Apple Maps' logo and Legal link. In the map sheet (`bleed`) it runs edge to edge under the sheet's
+/// translucent bar (`topInset`). As a **thumbnail** (the Map tile) it is north up with the heading cone,
+/// no controls and no gestures, with a "MAP" caption bottom-leading on a 40% scrim (C2.3 #12) and Apple
+/// Maps' attribution lifted above it. There is no fade over it. At night it is grey and at 15% brightness
+/// or less, so it is never the brightest thing on screen.
 struct MapSnippet: View {
     var fix: Fix?
     var heading: Double?
@@ -19,6 +22,11 @@ struct MapSnippet: View {
     var dimmed = false
     /// The Map tile: north up, no controls, no gestures, the "MAP" caption.
     var thumbnail = false
+    /// The map sheet: no rounded frame, edge to edge.
+    var bleed = false
+    /// The map sheet: the height of the translucent bar over the map's top; the controls and the speed
+    /// sit under it.
+    var topInset: CGFloat = 0
     @Environment(\.openURL) private var openURL
     /// The column's type scale (Text Size), so the speed and caption grow with the rest.
     @Environment(\.uiScale) private var k
@@ -29,6 +37,11 @@ struct MapSnippet: View {
 
     /// The map's brightness at night (§4.3): 15% or less.
     static let nightBrightness = 0.15
+
+    /// A card shorter than this shows +, − and ⋯ (C2.3 #10): four 44 targets and 8 at each end.
+    static let fullControlsHeight: CGFloat = 192
+    /// The thumbnail's caption band at the bottom, which Apple Maps' attribution sits above.
+    static let captionBand: CGFloat = 20
 
     /// The thumbnail is always north up.
     private var follows: Bool { followHeading && !thumbnail }
@@ -48,6 +61,8 @@ struct MapSnippet: View {
                     .annotationTitles(.hidden)
                 }
                 .mapStyle(satellite ? MapStyle.imagery(elevation: .flat) : MapStyle.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+                // The thumbnail keeps Apple Maps' logo and Legal link above its "MAP" caption.
+                .safeAreaPadding(.bottom, thumbnail ? Self.captionBand : 0)
                 .grayscale(dimmed ? 1 : 0)
                 .colorMultiply(dimmed ? Color(white: Self.nightBrightness) : Color.white)
                 .onAppear { move(to: here, animated: false) }
@@ -61,16 +76,16 @@ struct MapSnippet: View {
                 .accessibilityLabel("Map of where you are")
 
                 if !thumbnail {
-                    // One cluster: a column down the right, or a row across the top when the card is too
-                    // short for the column. 8 plus the 4 inside each 44 target puts the circles 12 from the
-                    // corner; the bottom 24 stays clear for the attribution.
+                    // One vertical stack on every card and sheet. 8 plus the 4 inside each 44 target puts
+                    // the circles 12 from the corner; under 192 the stack is +, − and ⋯.
                     ViewThatFits(in: .vertical) {
                         VStack(spacing: 0) { controls(fix) }
-                        HStack(spacing: 0) { controls(fix) }
+                            .padding(.vertical, 8)
+                        VStack(spacing: 0) { shortControls(fix) }
+                            .padding(.vertical, 8)
                     }
-                    .padding(.top, 8)
+                    .padding(.top, topInset)
                     .padding(.trailing, 8)
-                    .padding(.bottom, 24)
 
                     if let speed {
                         // A non-breaking space keeps "3.2 mph" on one line.
@@ -82,6 +97,7 @@ struct MapSnippet: View {
                             .background(.ultraThinMaterial, in: Capsule())
                             .environment(\.colorScheme, .dark)
                             .padding(12)
+                            .padding(.top, topInset)
                             // Top left: clear of the controls and of the attribution at the bottom.
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .accessibilityLabel("Speed, \(speed)")
@@ -101,24 +117,38 @@ struct MapSnippet: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if thumbnail {
-                // Top left, so Apple Maps' logo and Legal link at the bottom stay visible.
+                // Bottom-leading on a 40% scrim, as on Android; Apple Maps' attribution sits above the band.
                 Text("MAP")
                     .font(.system(size: Look.tileCaptionSize * k, weight: .semibold))
                     .tracking(Look.tileCaptionTracking)
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Capsule().fill(Color.black.opacity(0.4)))
-                    .padding(8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.horizontal, Look.tilePaddingH)
+                    .frame(maxWidth: .infinity, minHeight: Self.captionBand, alignment: .leading)
+                    .background(Color.black.opacity(0.4))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .accessibilityHidden(true)
             }
         }
         .background(Palette.tileFill)
-        .clipShape(RoundedRectangle(cornerRadius: Look.radius, style: .continuous))
-        // Two Degrees' faint edge, drawn over the map.
-        .overlay(RoundedRectangle(cornerRadius: Look.radius, style: .continuous)
-            .strokeBorder(Palette.tileStroke, lineWidth: Look.stroke)
-            .allowsHitTesting(false))
+        .modifier(CardFrame(bleed: bleed))
+    }
+
+    /// +, − and ⋯ for a card under 192 tall: follow heading and open in Maps in the ⋯ menu.
+    @ViewBuilder
+    private func shortControls(_ fix: Fix) -> some View {
+        MapButton(label: "Zoom In", system: "plus") { distance = max(250, distance / 2) }
+        MapButton(label: "Zoom Out", system: "minus") { distance = min(64000, distance * 2) }
+        Menu {
+            Toggle("Follow Heading", isOn: $followHeading)
+            Button("Open in Maps", systemImage: "arrow.up.right") { openURL(Navigator.mapsURL(fix)) }
+        } label: {
+            MapControlCircle(system: "ellipsis", highlighted: followHeading)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("More Map Controls")
     }
 
     @ViewBuilder
@@ -147,25 +177,53 @@ private struct MapButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: system)
-                .font(.system(size: 15, weight: .semibold))
-                // On: a white circle with a black glyph, as Two Degrees' and Meridian's highlights.
-                .foregroundStyle(highlighted ? Color.black : Color.white)
-                .frame(width: 36, height: 36)
-                .background {
-                    if highlighted {
-                        Circle().fill(Color.white)
-                    } else {
-                        Circle().fill(.ultraThinMaterial)
-                    }
-                }
-                .environment(\.colorScheme, .dark)
-                // 36 drawn, 44 to tap: side by side, the circles are 8 apart.
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+            MapControlCircle(system: system, highlighted: highlighted)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+/// A map control's look: a 36 pt circle in a 44 pt target (stacked, the circles are 8 apart).
+private struct MapControlCircle: View {
+    let system: String
+    var highlighted = false
+
+    var body: some View {
+        Image(systemName: system)
+            .font(.system(size: 15, weight: .semibold))
+            // On: a white circle with a black glyph, as Two Degrees' and Meridian's highlights.
+            .foregroundStyle(highlighted ? Color.black : Color.white)
+            .frame(width: 36, height: 36)
+            .background {
+                if highlighted {
+                    Circle().fill(Color.white)
+                } else {
+                    Circle().fill(.ultraThinMaterial)
+                }
+            }
+            .environment(\.colorScheme, .dark)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+    }
+}
+
+/// A card's rounded frame and faint edge; none in the map sheet, where the map runs edge to edge.
+private struct CardFrame: ViewModifier {
+    let bleed: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if bleed {
+            content
+        } else {
+            content
+                .clipShape(RoundedRectangle(cornerRadius: Look.radius, style: .continuous))
+                // Two Degrees' faint edge, drawn over the map.
+                .overlay(RoundedRectangle(cornerRadius: Look.radius, style: .continuous)
+                    .strokeBorder(Palette.tileStroke, lineWidth: Look.stroke)
+                    .allowsHitTesting(false))
+        }
     }
 }
 

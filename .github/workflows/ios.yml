@@ -3,9 +3,11 @@ name: iPhone
 # Builds the iPhone and iPad app with its widget, checks the packaged widget, and runs the app in the
 # iOS Simulator: --selftest with the Simulator placed at Maroon Bells, Colorado (location fix, live
 # ground elevation, naming the place, the compass's "no compass" state, every widget size drawn, the
-# layout planner's golden table: nothing empty, nothing cut, every dial at its floor), then photographs
-# the terms, the live screen, the sample place, every layout (--layout small|large|extraLarge; the rest
-# use the Medium default) and the map sheet (--map-sheet) on iPhone and iPad (docs/LAYOUTS.md §8).
+# layout planner's golden table: nothing empty, nothing cut, every dial at its floor, rows that add up to
+# C, neighbouring layouts 24 apart or on a different grid), then photographs the terms, the live screen,
+# the sample place, every layout (--layout small|large|extraLarge; the rest use the Medium default), the
+# map sheet (--map-sheet) and the no-compass state (--no-compass) on iPhone and iPad, larger text and an
+# accessibility size on iPhone, and iPad in landscape (docs/LAYOUTS.md §8).
 # Results go to the ci-shots-ios branch; the job fails if any check fails.
 on:
   push:
@@ -74,6 +76,9 @@ jobs:
             # The map sheet (the Map tile's full-height sheet), opened at launch with --map-sheet.
             xcrun simctl launch "$DEVICE" $ID --sample --format dd --map-sheet; sleep 8
             xcrun simctl io "$DEVICE" screenshot "$OUT/$P-10-map-sheet.png"; xcrun simctl terminate "$DEVICE" $ID || true
+            # No compass with the sample place: "—°", NO HEADING, the rose at 40%, Medium's tiles at 72 and a 160 map card where it fits.
+            xcrun simctl launch "$DEVICE" $ID --sample --format dd --no-compass; sleep 6
+            xcrun simctl io "$DEVICE" screenshot "$OUT/$P-11-no-compass.png"; xcrun simctl terminate "$DEVICE" $ID || true
           }
           shoot_layout() {   # $1 = device, $2 = layout id, $3 = file name (no .png)
             # --format dd: the -3-mgrs shot saved MGRS as the format; the layout itself is never saved.
@@ -89,6 +94,11 @@ jobs:
           xcrun simctl io "$PHONE" screenshot "$OUT/iphone-5-large-text.png"; xcrun simctl terminate "$PHONE" $ID || true
           # The same Text Size at Extra Large: the planner gives things up (or scrolls as one list), nothing is cut.
           shoot_layout "$PHONE" extraLarge iphone-9-xl-large-text
+          # The first accessibility size (AX1): the whole screen is one scrolling list, its first screen
+          # ending on a whole block, the indicator flashed (docs/LAYOUTS.md §7).
+          xcrun simctl ui "$PHONE" content_size accessibility-medium || true
+          xcrun simctl launch "$PHONE" $ID --sample --format dd; sleep 6
+          xcrun simctl io "$PHONE" screenshot "$OUT/iphone-12-ax1.png"; xcrun simctl terminate "$PHONE" $ID || true
           xcrun simctl ui "$PHONE" content_size large || true
           # The self-test, with a real location fix and network.
           DOCS="$(xcrun simctl get_app_container "$PHONE" $ID data)/Documents"; mkdir -p "$DOCS"; rm -f "$DOCS/report.txt"
@@ -113,6 +123,9 @@ jobs:
             sleep 3
             xcrun simctl launch "$IPAD" $ID --sample --format dd; sleep 6
             xcrun simctl io "$IPAD" screenshot "$OUT/ipad-9-landscape.png"; xcrun simctl terminate "$IPAD" $ID || true
+            # Two panes in the other rules: Small (widest trailing pane, map card) and Extra Large (map in the header).
+            shoot_layout "$IPAD" small ipad-12-landscape-small
+            shoot_layout "$IPAD" extraLarge ipad-13-landscape-xl
             rotate Right || true
           else
             echo "::notice::The Simulator couldn't be rotated here; no ipad-9-landscape.png"

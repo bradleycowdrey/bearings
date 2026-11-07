@@ -48,12 +48,12 @@ and padding 12 × 10. Every control is at least 44 × 44 (48 dp on Android).
    dropped first when it is long) over the date and time ("Sun, Nov 1 · 9:41 AM", 13, the device's 12- or
    24-hour setting, updated each minute), on a sky that follows the sun's altitude where you are: deep navy
    at night, steel blue around sunrise and sunset, clear blue by day (grey before a fix). At the trailing
-   end: the sun, sunrise, sunset or moon symbol, the map button (only when the map is neither a tile nor a
-   card), and the ⋯ menu, always in the same place. While finding the place: "Finding where you are…".
+   end: the sun, sunrise, sunset or moon symbol, the map button (Extra Large only), and the ⋯ menu, always
+   in the same place. The time is never cut off: the date shortens to "Nov 1" first, then the line wraps. While finding the place: "Finding where you are…".
    With no location: "Bearings". With no place within 200 km: "Far from any town". There is no
    "Bearings" title on the screen; it stays the accessibility title.
-2. **Dial**: as large as the screen allows for the chosen **Layout** (Small, Medium, Large, Extra Large;
-   [LAYOUTS.md](LAYOUTS.md) §4). On a faint white disc are ticks every 2°, numbers every 30°, the points in
+2. **Dial**: sized by the chosen **Layout**'s rule (Small, Medium, Large, Extra Large; [LAYOUTS.md](LAYOUTS.md)
+   §4), 12 above the readout's digits. On a faint white disc are ticks every 2°, numbers every 30°, the points in
    white and N in pink. Also on the card:
    - **Sun**: an amber disc with eight short rays at the sun's azimuth, radius 118 (inside the numbers);
      at 35% opacity when it's below the horizon.
@@ -61,45 +61,51 @@ and padding 12 × 10. Every control is at least 44 × 44 (48 dp on Android).
    - **Marked spot**: a white teardrop pin on the outer ring at the spot's bearing.
    - **Locked bearing**: the white notch and arc.
    Fixed on top: the white lubber triangle. In the middle, the level (green when within 2° of flat).
-   With no compass the rose drops to 40%, the lubber, lock arc and map cone are hidden, and a "no compass"
-   glyph sits in the middle.
-3. **Readout**: "228°" (56 light, tabular) and "SW" (28 medium, white at 60%), on one baseline; "—°" with
-   no compass.
+   With no compass the whole rose drops to 40%, the lubber, lock arc and map cone are hidden, and a 28 pt
+   "no compass" glyph (`location.slash`) sits in the middle.
+3. **Readout**: "228°" (56 light, tabular; 70 at Extra Large) and "SW" (half size, medium, white at 60%),
+   on one baseline. With no compass: "—°" (an em dash) at white 40%, with "NO HEADING" (11 caps) under it;
+   VoiceOver and TalkBack say "Heading unavailable".
 4. **Status line** (13, white at 60%, centred, one line): "True north · 8° E declination · ±8° accuracy".
    A warning replaces it in amber semibold: "Magnet or metal nearby: move away" (field outside 20–70 µT),
-   or "Low accuracy: move your phone in a figure 8". With no compass: "No compass on this device ·
-   position, sun and map still work".
-5. **Lock chip** (only when a bearing is locked): "🔒 Locked 240° · turn 12° right" with a ✕ to unlock.
-6. **Spot row** (only when a spot is marked): a tile, "📍 Marked spot   9.2 mi · 46° NE ✕"; tapping it
-   offers Lock to Spot and Clear Marked Spot.
+   or "Low accuracy: move your phone in a figure 8". With no compass: "No compass · position, sun and
+   map still work" (two lines allowed, wrapping at the "·").
+5. **Lock row** (only when a bearing is locked): a full-width tile row, leading-aligned, "🔒 Locked 240° ·
+   turn 12° right ✕"; ✕ unlocks.
+6. **Spot row** (only when a spot is marked): the same row form, "📍 Marked spot   9.2 mi · 46° NE ✕";
+   tapping it offers Lock to Spot and Clear Marked Spot.
 7. **Tiles**, one labelled grid (caption, value, secondary line), frosted white at 8% with a faint edge:
    - **Position** (two units wide, captioned with the format, "POSITION · DD"): latitude over longitude in
      the current format, never cut off (it scales down a little, then wraps). Tap to switch format;
      long-press to copy or open the details. Dims when the fix is stale.
    - **Elevation**: "9,587 ft" over "2,922 m", metres first if chosen.
-   - **Sun**: "↑ 6:36 AM" over "↓ 5:08 PM"; polar day or night: "Up all day" / "Down all day".
+   - **Sun**: "↑ 6:36 AM" over "↓ 5:08 PM" (one time formatter on every platform); polar day or night:
+     "Up all day" / "Down all day". In the one-row grid (Small, Extra Large) the moon rides in its caption,
+     "SUN · ◐ 53%", and the times may wrap to "6:36" over "AM", never "6:36…".
    - **Moon**: the phase glyph and "53%" over "Last quarter".
-   - **Map**: a live thumbnail with the heading cone; tap for the map sheet.
+   - **Map**: a live thumbnail with the heading cone, "MAP" bottom-leading; tap for the map sheet.
+   A grown tile keeps its caption at the top and its value at the bottom, so it is never half empty.
    Elevation, Sun and Moon open the **Details** sheet: accuracy ("±16 ft · Just now"), the source ("GPS
    ±4 m" or "Terrain data"), pressure ("29.92 inHg" or "1,013 hPa") with a barometer, the format's name,
    the moon's phase name and the sun's and moon's rise and set directions. Before the first fix the tiles
    show "—" and "Finding position…".
 8. **Map**: shown whole or not at all, as the Map tile, a full-width card where at least 140 fits (Small,
-   iPad, Mac, landscape), or the header's map button (Extra Large); each opens the full-height **map
-   sheet**. Controls in one cluster at the top right in 36 frosted circles: +, −, the heading button (north
-   up ↔ follow heading), and open in Maps. A chip with the speed at the top left when moving faster than
+   Medium with room to spare, iPad, landscape), or the header's map button (Extra Large, on every device);
+   each opens the full-height **map sheet** (full-bleed, a "Map" bar with Done). Controls in one vertical
+   stack at the top right in 36 frosted circles, on every platform: +, −, the heading button (north up ↔
+   follow heading), and open in Maps (on a card under 192 tall: +, − and ⋯ for the other two). A chip with the speed at the top left when moving faster than
    0.5 m/s ("3.2 mph"). Attribution stays visible. Your position is a white dot with a white heading cone.
 
 On iPad and the Mac, the same column (at most 640 wide); wide windows and phones on their side use
-two panes, the dial on the left and the tiles and map on the right ([LAYOUTS.md](LAYOUTS.md) §5), with the
-footer "Made by Bradley Cowdrey · bradcowdrey.com ↗" as the last line. On a phone the footer is in About.
-The Mac window hides its title bar. The web page keeps its current look for now.
+two panes, the dial on the left and the tiles and map on the right ([LAYOUTS.md](LAYOUTS.md) §5). "Made by
+Bradley Cowdrey" is in the ⋯ menu on every layout and platform. The Mac window hides its title bar and keeps
+16 from every edge (24 when 600 or wider). The web page keeps its current look for now.
 
 **The menu**: Layout (Small "Compass and map", Medium "Balanced", Large "Bigger compass", Extra Large
-"Biggest compass") · Coordinates (the six formats) · Units: Feet First, Metres First · North: True North,
+"Biggest compass"; each item's subtitle states its result on this screen, e.g. "Dial 386 · map in header") · Coordinates (the six formats) · Units: Feet First, Metres First · North: True North,
 Magnetic North · Map: Follow Heading, Open in Maps, and on Apple Standard / Satellite · Night Mode · Mark
 This Spot (or Clear Marked Spot) · Lock This Bearing (or Clear) · Copy Coordinates · Share My Location… ·
-Share Bearings… · Terms & Privacy · About Bearings.
+Share Bearings… · Terms & Privacy · About Bearings · Made by Bradley Cowdrey.
 
 **Night mode** turns everything red: the whole screen through a red multiply (the header's blues become
 dark reds), secondary text at least `#E03020` (4.5:1 on black), and the map tinted red and dimmed so it is

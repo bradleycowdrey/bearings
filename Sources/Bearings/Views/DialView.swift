@@ -23,7 +23,7 @@ struct DialView: View {
     var moonPhase: Double = 0
     /// The marked spot's direction on the card.
     var spot: Double? = nil
-    /// No compass here (docs/REFINE.md §4.2): the card at 40%, no lubber line or lock arc, a "no compass"
+    /// No compass here (docs/REFINE.md §4.2): the whole rose at 40%, no lubber line or lock arc, a "no compass"
     /// glyph in the middle and "N ↑ fixed" inside the top of the ring.
     var noCompass = false
 
@@ -32,12 +32,15 @@ struct DialView: View {
             let side = min(geo.size.width, geo.size.height)
             let k = side / 400
             ZStack {
-                Circle().fill(Palette.tileFill)
-                Circle().strokeBorder(Palette.tileStroke, lineWidth: Look.stroke)
-                card(k: k)
-                    .rotationEffect(.degrees(rotation))
-                    .opacity(noCompass ? 0.4 : 1)
-                fixedParts(k: k)
+                // With no compass the whole rose (disc, card and fixed marks) is at 40% (C2.3 #13).
+                ZStack {
+                    Circle().fill(Palette.tileFill)
+                    Circle().strokeBorder(Palette.tileStroke, lineWidth: Look.stroke)
+                    card(k: k)
+                        .rotationEffect(.degrees(rotation))
+                    fixedParts(k: k)
+                }
+                .opacity(noCompass ? 0.4 : 1)
                 bubble(k: k)
                 if noCompass {
                     Image(systemName: "location.slash")

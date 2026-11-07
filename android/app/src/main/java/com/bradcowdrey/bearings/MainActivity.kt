@@ -25,7 +25,8 @@ import kotlinx.coroutines.launch
  * The app: one screen. Extras for CI: `selftest` runs the checks and writes files/report.txt; `sample`
  * shows the sample place; `format` picks a coordinate format; `night` turns on night mode and `layout`
  * (small, medium, large, extraLarge) picks the layout, both without saving; `mapSheet` opens the map sheet
- * at launch; `show` = "terms" shows the terms.
+ * at launch; `noCompass` (with `sample`) shows the sample place as a phone without a compass shows it;
+ * `show` = "terms" shows the terms.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var nav: Navigator
@@ -61,7 +62,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         when {
-            intent.getBooleanExtra("sample", false) -> nav.showSample()
+            intent.getBooleanExtra("sample", false) -> nav.showSample(noCompass = intent.getBooleanExtra("noCompass", false))
             intent.getBooleanExtra("selftest", false) -> lifecycleScope.launch { SelfTest.run(this@MainActivity, nav) }
         }
     }

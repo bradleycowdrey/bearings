@@ -537,7 +537,9 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
     /// 9:41 AM in Colorado on 1 November 2026, with the sun and the moon both up over Maroon Bells.
     static let sampleTime = Date(timeIntervalSince1970: 1793551260)
 
-    func showSample(heading sampleHeading: Double = 228, lock sampleLock: Double? = nil) {
+    /// `noCompass`: the same place on a device without a compass (CI's no-compass photographs): no heading,
+    /// the rose at rest, "—°" and the no-compass note.
+    func showSample(heading sampleHeading: Double = 228, lock sampleLock: Double? = nil, noCompass: Bool = false) {
         stop()
         sample = true
         now = Self.sampleTime
@@ -550,11 +552,20 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
         declination = 7.6
         headingAccuracy = 8
         fieldStrength = 51
-        compass = .live
         smoother.reset()
-        setHeading(sampleHeading)
-        tilt = CGVector(dx: 0.02, dy: -0.015)
-        lock = sampleLock
+        if noCompass {
+            compass = .unavailable
+            heading = nil
+            headingAccuracy = nil
+            cardRotation = 0
+            tilt = nil
+            lock = nil
+        } else {
+            compass = .live
+            setHeading(sampleHeading)
+            tilt = CGVector(dx: 0.02, dy: -0.015)
+            lock = sampleLock
+        }
         spot = Spot(latitude: 39.1911, longitude: -106.8175)
         speed = 1.43
         pressure = 712.4

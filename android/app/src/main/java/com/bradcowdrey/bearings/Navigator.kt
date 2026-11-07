@@ -537,13 +537,14 @@ class Navigator(private val context: Context, private val displayRotation: () ->
     fun clock(ms: Long): String =
         android.text.format.DateFormat.getTimeFormat(context).apply { timeZone = zone }.format(Date(ms))
 
-    /** "Sat, Nov 1 · 9:41 AM" */
-    val dateTimeText: String
-        get() {
-            val pattern = android.text.format.DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEMMMd")
-            val date = SimpleDateFormat(pattern, Locale.getDefault()).apply { timeZone = zone }.format(Date(now))
-            return "$date · ${clock(now)}"
-        }
+    /** "Sun, Nov 1 · 9:41 AM" */
+    val dateTimeText: String get() = "${dateText()} · ${clock(now)}"
+
+    /** "Sun, Nov 1", or with [short] "Nov 1" (the header shortens the date before the time is ever cut). */
+    fun dateText(short: Boolean = false): String {
+        val pattern = android.text.format.DateFormat.getBestDateTimePattern(Locale.getDefault(), if (short) "MMMd" else "EEEMMMd")
+        return SimpleDateFormat(pattern, Locale.getDefault()).apply { timeZone = zone }.format(Date(now))
+    }
 
     // ---------- A marked spot ----------
 
@@ -587,8 +588,12 @@ class Navigator(private val context: Context, private val displayRotation: () ->
 
     // ---------- A sample place (screenshots, CI) ----------
 
-    /** Maroon Bells, Colorado, at 9:41 AM on 1 November 2026 (as on Apple), with a spot marked near Aspen and a bearing locked. */
-    fun showSample(sampleHeading: Double = 228.0, sampleLock: Double? = 240.0) {
+    /**
+     * Maroon Bells, Colorado, at 9:41 AM on 1 November 2026 (as on Apple), walking at 3.2 mph, with a spot marked
+     * near Aspen and a bearing locked. [noCompass] shows the same place on a phone without a compass (§4.2): no
+     * heading and no lock.
+     */
+    fun showSample(sampleHeading: Double = 228.0, sampleLock: Double? = 240.0, noCompass: Boolean = false) {
         stop()
         sample = true
         zone = TimeZone.getTimeZone("America/Denver")
@@ -596,10 +601,19 @@ class Navigator(private val context: Context, private val displayRotation: () ->
         fix = Fix(39.09898, -106.94117, 5.0, null, null, 2925.0, SAMPLE_TIME)
         ground = Ground(2922.0, 39.099, -106.941); groundState = GroundState.OK
         place = "Maroon Bells, Colorado"; placeKnown = true
-        usingTrueNorth = true; declination = 7.6; headingAccuracy = 8.0; compass = CompassStatus.LIVE
-        smoother.reset(); setHeading(sampleHeading)
-        tilt = -0.02f to 0.015f
-        lock = sampleLock
+        usingTrueNorth = true; declination = 7.6
+        smoother.reset()
+        if (noCompass) {
+            heading = null; headingAccuracy = null; compass = CompassStatus.UNAVAILABLE
+            tilt = null
+            lock = null
+        } else {
+            headingAccuracy = 8.0; compass = CompassStatus.LIVE
+            setHeading(sampleHeading)
+            tilt = -0.02f to 0.015f
+            lock = sampleLock
+        }
+        speedReset?.cancel(); speed = 1.43
         mark = 39.1911 to -106.8175
         pressure = 721.0
         access = Access.ALLOWED

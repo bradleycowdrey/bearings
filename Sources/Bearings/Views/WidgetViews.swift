@@ -85,8 +85,9 @@ struct WidgetReadings {
     var times: Sky.Times { Sky.sunTimes(at: date, lat: snapshot.latitude, lon: snapshot.longitude) }
     var moon: Sky.Phase { Sky.moonPhase(at: date) }
 
-    var sunrise: String? { times.sunriseDate?.formatted(date: .omitted, time: .shortened) }
-    var sunset: String? { times.sunsetDate?.formatted(date: .omitted, time: .shortened) }
+    /// The app's one time formatter (Look.timeText), so the widgets and the Sun tile read alike (§3.7).
+    var sunrise: String? { times.sunriseDate.map { Look.timeText($0) } }
+    var sunset: String? { times.sunsetDate.map { Look.timeText($0) } }
     var polarText: String { times.polar == .day ? "Sun up all day" : "Sun down all day" }
     /// "53% · Last quarter": the same wording as the app's Moon tile (Look.moonText).
     var moonText: String { Look.moonText(moon) }
@@ -111,19 +112,11 @@ struct WidgetReadings {
         return (String(text[..<space]), String(text[text.index(after: space)...]))
     }
 
-    /// "6:36" and "AM" on a 12-hour clock, "06:36" and "" on a 24-hour one: the system's own short time
-    /// with AM or PM taken out (as MainView.shortTime does; MainView isn't in the widget target).
+    /// "6:36" and "AM" on a 12-hour clock, "06:36" and "" on a 24-hour one: the app's one formatter
+    /// (Look.time, `.hour().minute()`), so the widgets and the Sun tile read alike (§3.7).
     static func clock(_ date: Date) -> (time: String, period: String) {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        f.dateStyle = .none
-        let full = f.string(from: date)
-        var text = full, period = ""
-        for symbol in [f.amSymbol, f.pmSymbol].compactMap({ $0 }) where !symbol.isEmpty && full.contains(symbol) {
-            text = text.replacingOccurrences(of: symbol, with: "")
-            period = symbol
-        }
-        return (text.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{202F}\u{00A0}"))), period)
+        let t = Look.time(date)
+        return (t.clock, t.period ?? "")
     }
 }
 
