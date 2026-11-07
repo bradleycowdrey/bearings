@@ -18,6 +18,9 @@ struct BearingsMacApp: App {
                 .frame(minWidth: 380, idealWidth: 420, minHeight: 720, idealHeight: 840)
                 .task { await launch() }
         }
+        // The screen has its own large "Bearings" title (as Two Degrees), so the window doesn't show it
+        // again; the content stays in the safe area below the window's buttons.
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 420, height: 840)
         .windowResizability(.contentMinSize)
         .commands {

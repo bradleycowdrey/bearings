@@ -65,22 +65,23 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
                 val a = Math.toRadians(deg + rotation)
                 return Offset(c.x + (sin(a) * radius * k).toFloat(), c.y - (cos(a) * radius * k).toFloat())
             }
-            drawCircle(Palette.dial, radius = 196 * k, center = c)
-            drawCircle(Palette.border, radius = 196 * k, center = c, style = Stroke(1f))
+            // A faint white disc with a 1 dp edge, as Two Degrees' tiles (docs/LOOK.md).
+            drawCircle(Palette.tileFill, radius = 196 * k, center = c)
+            drawCircle(Palette.tileStroke, radius = 196 * k, center = c, style = Stroke(Look.stroke.toPx()))
             rotate(rotation.toFloat(), pivot = c) {
                 for (d in 0 until 360 step 2) {
                     val major = d % 30 == 0; val mid = d % 10 == 0
                     val len = if (major) 18f else if (mid) 12f else 6f
                     val w = if (major) 2.4f else if (mid) 1.4f else 1f
-                    val col = if (d == 0) Palette.accent else if (major) Palette.cream else if (mid) Palette.textMuted else Palette.tickMinor
+                    val col = if (d == 0) Palette.north else if (major) Color.White else if (mid) white(Op.CAPTION) else white(Op.MINOR)
                     rotate(d.toFloat(), pivot = c) {
                         drawLine(col, Offset(c.x, c.y - 188 * k), Offset(c.x, c.y - (188 - len) * k), strokeWidth = w * k, cap = StrokeCap.Round)
                     }
                 }
-                for (d in 30 until 360 step 30) if (d % 90 != 0) label("$d", d.toFloat(), 149f, 15f, FontWeight.Medium, Palette.textMuted)
-                for ((l, d) in listOf("NE" to 45f, "SE" to 135f, "SW" to 225f, "NW" to 315f)) label(l, d, 147f, 13f, FontWeight.SemiBold, Palette.textFaint)
-                label("N", 0f, 147f, 30f, FontWeight.SemiBold, Palette.accent)
-                for ((l, d) in listOf("E" to 90f, "S" to 180f, "W" to 270f)) label(l, d, 147f, 26f, FontWeight.SemiBold, Palette.cream)
+                for (d in 30 until 360 step 30) if (d % 90 != 0) label("$d", d.toFloat(), 149f, 15f, FontWeight.Medium, white(Op.CAPTION))
+                for ((l, d) in listOf("NE" to 45f, "SE" to 135f, "SW" to 225f, "NW" to 315f)) label(l, d, 147f, 13f, FontWeight.SemiBold, white(Op.POINTS))
+                label("N", 0f, 147f, 30f, FontWeight.SemiBold, Palette.north)
+                for ((l, d) in listOf("E" to 90f, "S" to 180f, "W" to 270f)) label(l, d, 147f, 26f, FontWeight.SemiBold, Color.White)
                 val mark = marks.mark
                 if (mark != null) rotate(mark.toFloat(), pivot = c) { pin(c, k) }
                 val lock = marks.lock
@@ -89,13 +90,13 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
                         val p = Path().apply {
                             moveTo(c.x, c.y - 190 * k); lineTo(c.x + 7 * k, c.y - 200 * k); lineTo(c.x - 7 * k, c.y - 200 * k); close()
                         }
-                        drawPath(p, Palette.accent)
+                        drawPath(p, Color.White)
                     }
                     if (heading != null) {
                         val sweep = Geo.delta(lock, heading)
                         if (abs(sweep) >= 0.5) {
                             val r = 190 * k
-                            drawArc(Palette.accent.copy(alpha = 0.85f), startAngle = (lock - 90).toFloat(), sweepAngle = sweep.toFloat(), useCenter = false,
+                            drawArc(white(Op.BODY), startAngle = (lock - 90).toFloat(), sweepAngle = sweep.toFloat(), useCenter = false,
                                 topLeft = Offset(c.x - r, c.y - r), size = Size(2 * r, 2 * r), style = Stroke(6 * k, cap = StrokeCap.Round))
                         }
                     }
@@ -108,12 +109,12 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
             if (sun != null) sunGlyph(at(sun.azimuth, 118f), k, if (sun.up) 1f else 0.35f)
             // Fixed: the lubber line (where the phone points), cross hairs and the level's rings.
             val lubber = Path().apply { moveTo(c.x, c.y - 200 * k); lineTo(c.x + 9 * k, c.y - 184 * k); lineTo(c.x - 9 * k, c.y - 184 * k); close() }
-            drawPath(lubber, Palette.cream)
+            drawPath(lubber, Color.White)
             val hair = Color.White.copy(alpha = 0.07f)
             drawLine(hair, Offset(c.x, c.y - 100 * k), Offset(c.x, c.y + 100 * k), 1f)
             drawLine(hair, Offset(c.x - 100 * k, c.y), Offset(c.x + 100 * k, c.y), 1f)
-            drawCircle(Palette.border, radius = 40 * k, center = c, style = Stroke(1.5f))
-            drawCircle(Palette.tickMinor, radius = 13 * k, center = c, style = Stroke(1.5f))
+            drawCircle(white(Op.TRACK), radius = 40 * k, center = c, style = Stroke(1.5f))
+            drawCircle(white(Op.TRACK), radius = 13 * k, center = c, style = Stroke(1.5f))
             if (tilt != null) {
                 // The bubble rises to the high side: opposite to gravity, 30° of tilt to the ring's edge.
                 val degX = Math.toDegrees(asin(tilt.first.toDouble().coerceIn(-1.0, 1.0)))
@@ -121,14 +122,14 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
                 val x = (-degX / 30).coerceIn(-1.0, 1.0); val y = (-degY / 30).coerceIn(-1.0, 1.0)
                 val len = hypot(x, y); val s = if (len > 1) 1 / len else 1.0
                 val level = hypot(degX, degY) < 2
-                drawCircle(if (level) Palette.level else Palette.cream, radius = 11 * k,
+                drawCircle(if (level) Palette.level else Color.White, radius = 11 * k,
                     center = Offset(c.x + (x * s * 40 * k).toFloat(), c.y + (y * s * 40 * k).toFloat()))
             }
         }
     }
 }
 
-/** The marked spot: a pink teardrop on the outer ring, its point toward the middle (drawn at the top). */
+/** The marked spot: a white teardrop on the outer ring, its point toward the middle (drawn at the top), with a black hole and edge. */
 private fun DrawScope.pin(c: Offset, k: Float) {
     val head = Offset(c.x, c.y - 194 * k)
     val r = 6.5f * k
@@ -138,9 +139,12 @@ private fun DrawScope.pin(c: Offset, k: Float) {
         lineTo(c.x + r * 0.92f, head.y + r * 0.4f)
         close()
     }
-    drawPath(drop, Palette.accent)
-    drawCircle(Palette.accent, r, head)
-    drawCircle(Palette.dial, r * 0.38f, head)
+    val edge = Stroke(1.2f * k)
+    drawPath(drop, Color.Black, style = edge)
+    drawCircle(Color.Black, r, head, style = edge)
+    drawPath(drop, Color.White)
+    drawCircle(Color.White, r, head)
+    drawCircle(Color.Black, r * 0.38f, head)
 }
 
 /** An amber disc with eight short rays. */

@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.bradcowdrey.bearings.Brand
 
 /**
@@ -34,13 +35,13 @@ import com.bradcowdrey.bearings.Brand
 fun TermsScreen(onAgree: () -> Unit) {
     val uri = LocalUriHandler.current
     Box(Modifier.fillMaxSize().background(Palette.bg).systemBarsPadding(), contentAlignment = Alignment.Center) {
-        Column(Modifier.widthIn(max = 520.dp).fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(Modifier.widthIn(max = 520.dp).fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Spacer(Modifier.weight(1f))
             AppMark(56.dp)
-            Text("Terms of Use and Privacy", style = text(28f, FontWeight.SemiBold))
-            Text(Brand.TERMS_SUMMARY, style = text(16f, color = Palette.textSecondary))
+            Text("Terms of Use and Privacy", style = text(28f, FontWeight.SemiBold).copy(letterSpacing = (-0.4).sp))
+            Text(Brand.TERMS_SUMMARY, style = text(17f, color = Palette.textSecondary))
             Text("By choosing I Agree and using ${Brand.APP_NAME}, you agree to the Terms of Use and Privacy at bradcowdrey.com/legal.",
-                style = text(14f, color = Palette.textMuted))
+                style = text(15f, color = Palette.textMuted))
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier.fillMaxWidth().heightIn(min = 50.dp).clip(CircleShape).background(Palette.cream).clickable(role = Role.Button, onClick = onAgree),

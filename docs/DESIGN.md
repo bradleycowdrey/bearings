@@ -32,48 +32,65 @@ works **offline** except the map and the terrain elevation.
 
 ## The one screen (phone, top to bottom)
 
-Spacing is on a 4-point grid; screen margins 16; gaps between blocks 12; tile padding 14 × 12; corner
-radius 18 for tiles and the map, 28 for the panel on the web. Every control is at least 44 × 44.
+The apps look like Two Degrees: a black screen with white type, a large title, a sky card, and frosted
+tiles with small uppercase captions. The exact colours, sizes and tokens are in [LOOK.md](LOOK.md).
+Inside the app the highlights are white, and pink means north only. The warm near-black, cream and
+crimson stay on the widgets, the Terms screen and the app mark.
 
-1. **Header** (44 high): the place name (20 semibold, one line, ends with … if long) over the date and
-   time ("Sat, Nov 1 · 9:41 AM", 13, muted, the device's 12- or 24-hour setting, updated each minute).
-   On the right, the ⋯ menu (a 36 circle). While finding the place: "Finding where you are…"; with no
-   location: "Bearings". With no place within 200 km: the coordinates' region is skipped and the line
-   reads "Far from any town".
-2. **Dial**: as wide as fits, at most 36% of the screen's height and 360. On the card: ticks every 2°,
-   numbers every 30°, N in pink, the points. Also on the card:
+Spacing is on a 4-point grid. Screen margins are 16, gaps between blocks 12, and tile padding 14 × 12.
+The corner radius is 16 (continuous) for tiles, the sky card and the map, and 28 for the panel on the
+web. Every control is at least 44 × 44.
+
+1. **Title** (48 high): "Bearings", 34 bold, with the ⋯ menu on the right (`ellipsis.circle` on Apple
+   devices; a faint white circle on Android). On screens under 700 high there's no title row, and the
+   menu sits in the sky card's corner.
+2. **Sky card**: the place name (20 semibold, one line, ends with … if long) over the date and time
+   ("Sat, Nov 1 · 9:41 AM", 14, the device's 12- or 24-hour setting, updated each minute). Both are
+   white on a sky that follows the sun's altitude where you are: deep navy at night, steel blue around
+   sunrise and sunset, clear blue by day (grey before a fix). A small sun, sunrise, sunset or moon
+   symbol sits in the corner. While finding the place: "Finding where you are…". With no location:
+   "Bearings". With no place within 200 km, the coordinates' region is skipped and the line reads
+   "Far from any town".
+3. **Dial**: as wide as fits, at most 36% of the screen's height and 360. On a faint white disc are
+   ticks every 2°, numbers every 30°, the points in white and N in pink. Also on the card:
    - **Sun**: an amber disc with eight short rays at the sun's azimuth, radius 118 (inside the numbers);
      at 35% opacity when it's below the horizon.
    - **Moon**: a cream crescent (drawn for its phase) at the moon's azimuth, same radius; 35% below the horizon.
-   - **Marked spot**: a pink teardrop pin on the outer ring at the spot's bearing.
-   - **Locked bearing**: the pink notch and arc (as in 0.1).
-   Fixed on top: the cream lubber triangle; in the middle, the level (green when within 2° of flat).
-3. **Readout**: "228°" (56 semibold, tabular) and "SW" (28 medium, muted), on one baseline.
-4. **Subline** (13, muted, centred, one line): "True north · 8° E · ±8°". Replaced by a warning when there
-   is one, in amber semibold: "Magnet or metal nearby: move away" (field outside 20–70 µT), or "Low
-   accuracy: move your phone in a figure 8". The locked bearing adds "· Locked 240° · turn 12° right" in pink.
-5. **Marked spot** (only when one is marked): a pill, "📍 Marked spot · 0.4 mi · 245° SW", with a ✕ to clear.
-6. **Tiles**, 2 × 2:
-   - **Latitude** / **Longitude**: the value (19 semibold); details "±16 ft · Just now" (latitude) and the
+   - **Marked spot**: a white teardrop pin on the outer ring at the spot's bearing.
+   - **Locked bearing**: the white notch and arc.
+   Fixed on top: the white lubber triangle. In the middle, the level (green when within 2° of flat).
+4. **Readout**: "228°" (56 light, tabular) and "SW" (28 medium, white at 60%), on one baseline.
+5. **Subline** (13, white at 60%, centred, one line): "True north · 8° E · ±8°". When there's a warning,
+   it replaces the subline in amber semibold: "Magnet or metal nearby: move away" (field outside
+   20–70 µT), or "Low accuracy: move your phone in a figure 8". The locked bearing adds "· Locked 240°
+   · turn 12° right" in white semibold.
+6. **Marked spot** (only when one is marked): a pill, "📍 Marked spot · 0.4 mi · 245° SW", with a ✕ to clear.
+7. **Tiles**, 2 × 2, frosted (white at 8%, with a faint edge). Each has a small uppercase caption with a
+   symbol (LATITUDE, LONGITUDE, ELEVATION, SUN):
+   - **Latitude** / **Longitude**: the value (20 medium); details "±16 ft · Just now" (latitude) and the
      format's name (longitude). Tap either to switch format; long-press to copy. UTM, MGRS and Plus Code
      take one wide tile titled with the format's name.
    - **Elevation**: "9,587 ft" with "2,922 m" beside it (smaller, muted), metres first if chosen; detail
      "GPS ±4 m", or "Terrain data", plus " · 29.92 inHg" (or "1,013 hPa") with a barometer.
    - **Sun**: "6:42 AM – 5:01 PM" (sunrise–sunset); detail "Waxing Gibbous · 82%" with the moon glyph.
      Polar day or night: "Sun up all day" / "Sun down all day".
-7. **Map**: fills the rest (at least 120). Controls top right in 32 circles: +, −, the heading button
+8. **Map**: fills the rest (at least 120), in a rounded card. Controls top right in 32 frosted circles: +, −, the heading button
    (north up ↔ follow heading), and open in Maps. A chip with the speed (top left on Apple devices, clear of the Apple Maps label; bottom left elsewhere) when moving faster
-   than 0.5 m/s ("3.2 mph"). Attribution stays visible.
+   than 0.5 m/s ("3.2 mph"). Attribution stays visible. Your position is a white dot with a white heading
+   cone.
 
 On a Mac and on the web (wider than a phone), the same column in a 460-wide panel, with the footer
-"Made by Bradley Cowdrey · bradcowdrey.com ↗" under the map. On a phone the footer is in About.
+"Made by Bradley Cowdrey · bradcowdrey.com ↗" under the map. On a phone the footer is in About. The
+Mac window hides its title bar, so the large title isn't doubled. The web page keeps its current look
+for now.
 
 **The menu**: Coordinates (the six formats) · Units: Feet First, Metres First · North: True North, Magnetic
 North · Map: Follow Heading, and on Apple Standard / Satellite · Night Mode · Mark This Spot (or Clear
 Marked Spot) · Lock This Bearing (or Clear) · Copy Coordinates · Share My Location… · Share Bearings… ·
 Terms & Privacy · About Bearings.
 
-**Night mode** turns everything red: the whole screen through a red multiply, the map dimmed.
+**Night mode** turns everything red: the whole screen through a red multiply (the sky card's blues
+become dark reds), the map dimmed.
 
 **Accessibility**: VoiceOver/TalkBack read the dial as "Heading 228 degrees, southwest", every tile as one
 element ("Elevation, 9,587 feet, 2,922 metres, from GPS"), and announce the heading at most every few
@@ -97,10 +114,13 @@ fresh location themselves where the system allows it (Apple's `NSWidgetWantsLoca
 known location with the permission), look up the elevation if needed, and work out the sun and moon for
 the time of each entry.
 
-- **Small**: the place (two lines at most), the elevation large ("9,587 ft") with metres under it, the
-  coordinates small.
-- **Medium**: the small widget on the left; on the right, sunrise and sunset, the moon's phase, and a
-  small compass rose with the sun's direction.
+They follow Two Degrees' widgets: warm near-black with the crimson rule along the top, white type and
+the warm greys, and thin dividers.
+
+- **Small**: the place (two lines at most) with a sun or moon symbol, the elevation large ("9,587 ft")
+  with metres under it, the coordinates small.
+- **Medium**: the small widget on the left. On the right are three columns, as Two Degrees' hours: the
+  sun's direction on a small compass rose, sunrise, and sunset. The moon's phase is under them.
 - **Large**: a map of where you are (Apple: a MapKit snapshot; Android: the info grid instead) with all
   of the above, and the marked spot's distance and direction if there is one.
 - **Lock Screen (iPhone)**: inline "⛰ 9,587 ft · Aspen", rectangular (place, elevation, coordinates),

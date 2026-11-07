@@ -16,8 +16,7 @@ struct BearingsWidgets: WidgetBundle {
 struct BearingsWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BearingsWidget", provider: Provider()) { entry in
-            WidgetView(entry: entry)
-                .containerBackground(for: .widget) { WidgetBackground() }
+            BearingsWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Bearings")
         .description("Where you are, your elevation in feet and metres, and the sun and moon.")
@@ -30,6 +29,35 @@ struct BearingsWidget: Widget {
     #else
     static let families: [WidgetFamily] = [.systemSmall, .systemMedium, .systemLarge]
     #endif
+}
+
+/// The widget with its container background: Two Degrees' warm near-black with the crimson rule on the
+/// Home Screen and desktop (the system's content margins keep the face clear of it), nothing behind the
+/// Lock Screen's, which the system tints (the circular one draws its own AccessoryWidgetBackground).
+struct BearingsWidgetEntryView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: BearingsEntry
+
+    var body: some View {
+        Group {
+            #if os(iOS)
+            switch family {
+            case .accessoryInline, .accessoryCircular, .accessoryRectangular:
+                WidgetView(entry: entry)
+                    .containerBackground(for: .widget) { Color.clear }
+            default:
+                home
+            }
+            #else
+            home
+            #endif
+        }
+    }
+
+    private var home: some View {
+        WidgetView(entry: entry)
+            .containerBackground(for: .widget) { WidgetBackground() }
+    }
 }
 
 // MARK: - Timeline

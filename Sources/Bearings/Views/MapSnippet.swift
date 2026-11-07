@@ -27,8 +27,8 @@ struct MapSnippet: View {
                 let here = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
                 Map(position: $position, interactionModes: []) {
                     MapCircle(center: here, radius: max(fix.accuracy, 1))
-                        .foregroundStyle(Palette.accent.opacity(0.16))
-                        .stroke(Palette.accent.opacity(0.5), lineWidth: 1)
+                        .foregroundStyle(Color.white.opacity(0.1))
+                        .stroke(Color.white.opacity(0.4), lineWidth: 1)
                     Annotation("My Location", coordinate: here, anchor: .center) {
                         // Following the heading, the map turns instead: the cone then always points up.
                         MeDot(heading: heading.map { followHeading ? 0 : $0 })
@@ -60,10 +60,10 @@ struct MapSnippet: View {
                     Text(speed.replacingOccurrences(of: " ", with: "\u{00A0}"))
                         .font(.system(size: 13 * k, weight: .semibold))
                         .monospacedDigit()
-                        .foregroundStyle(Palette.cream)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Capsule().fill(Palette.bg.opacity(0.86)))
-                        .overlay(Capsule().stroke(Palette.border, lineWidth: 0.5))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .environment(\.colorScheme, .dark)
                         .padding(8)
                         // Top left: free in both the column and the row of controls, and clear of the
                         // map's attribution at the bottom left.
@@ -73,14 +73,18 @@ struct MapSnippet: View {
             } else {
                 Text("The map appears once Bearings knows where you are.")
                     .font(.system(size: 13))
-                    .foregroundStyle(Palette.textMuted)
+                    .foregroundStyle(Color.white.opacity(Palette.Op.caption))
                     .multilineTextAlignment(.center)
                     .padding(16)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(Palette.tile)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(Palette.tileFill)
+        .clipShape(RoundedRectangle(cornerRadius: Look.radius, style: .continuous))
+        // Two Degrees' faint edge, drawn over the map.
+        .overlay(RoundedRectangle(cornerRadius: Look.radius, style: .continuous)
+            .strokeBorder(Palette.tileStroke, lineWidth: Look.stroke)
+            .allowsHitTesting(false))
     }
 
     @ViewBuilder
@@ -110,11 +114,18 @@ private struct MapButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: system)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(highlighted ? Palette.accent : Palette.cream)
+                .font(.system(size: 15, weight: .semibold))
+                // On: a white circle with a black glyph, as Two Degrees' and Meridian's highlights.
+                .foregroundStyle(highlighted ? Color.black : Color.white)
                 .frame(width: 32, height: 32)
-                .background(Circle().fill(Palette.bg.opacity(0.86)))
-                .overlay(Circle().stroke(Palette.border, lineWidth: 0.5))
+                .background {
+                    if highlighted {
+                        Circle().fill(Color.white)
+                    } else {
+                        Circle().fill(.ultraThinMaterial)
+                    }
+                }
+                .environment(\.colorScheme, .dark)
                 // 32 drawn, 44 to tap.
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -124,7 +135,8 @@ private struct MapButton: View {
     }
 }
 
-/// You on the map: a crimson-pink dot, and a cone toward your heading when the compass is on.
+/// You on the map: a white dot with a soft dark ring, and a white cone toward your heading when the compass
+/// is on.
 struct MeDot: View {
     var heading: Double?
 
@@ -132,13 +144,13 @@ struct MeDot: View {
         ZStack {
             if let heading {
                 Cone()
-                    .fill(LinearGradient(colors: [Palette.accent.opacity(0.55), Palette.accent.opacity(0)], startPoint: .bottom, endPoint: .top))
+                    .fill(LinearGradient(colors: [Color.white.opacity(0.45), Color.white.opacity(0)], startPoint: .bottom, endPoint: .top))
                     .frame(width: 60, height: 60)
                     .offset(y: -30)
                     .rotationEffect(.degrees(heading))
             }
-            Circle().fill(Palette.accent).frame(width: 16, height: 16)
-                .overlay(Circle().stroke(.white, lineWidth: 3))
+            Circle().fill(Color.white).frame(width: 16, height: 16)
+                .overlay(Circle().stroke(Color.black.opacity(0.35), lineWidth: 3))
                 .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
         }
         .frame(width: 120, height: 120)

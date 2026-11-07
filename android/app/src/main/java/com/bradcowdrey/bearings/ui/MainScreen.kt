@@ -7,7 +7,6 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +30,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Terrain
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -53,6 +61,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -61,6 +70,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -88,7 +98,8 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 
 /**
- * Bearings' one screen, top to bottom as in docs/DESIGN.md: the place and time, the dial with the sun,
+ * Bearings' one screen, top to bottom as in docs/DESIGN.md and docs/LOOK.md (Two Degrees' look: black,
+ * white type, a sky card, frosted tiles): the title, the place and time on the sky, the dial with the sun,
  * moon, marked spot and locked bearing, the heading, a subline (or a warning), the marked spot, four
  * tiles, and the map filling the rest. Everything fits one screen: on short phones the dial shrinks
  * and the gaps tighten.
@@ -115,33 +126,45 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
     val night = nav.night
 
     MaterialTheme(colorScheme = darkColorScheme(
-        surface = Palette.tile.night(night), surfaceContainer = Palette.tile.night(night), onSurface = Color.White.night(night),
+        surface = Palette.menu.night(night), surfaceContainer = Palette.menu.night(night), onSurface = Color.White.night(night),
     )) {
         BoxWithConstraints(
             Modifier.fillMaxSize()
                 // Night mode: the whole screen through a red multiply, so only red light is left.
                 .drawWithContent { drawContent(); if (night) drawRect(Palette.nightRed, blendMode = BlendMode.Multiply) }
-                .background(Palette.bg)
+                .background(Palette.screen)
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            val compact = maxHeight < 700.dp
+            // Short screens drop the title row and put the ⋯ menu in the sky card, so the dial keeps its room.
+            val compact = maxHeight < Look.compactHeight
             val fs = LocalDensity.current.fontScale.coerceIn(1f, 1.4f)
-            val gap = if (compact) 8.dp else 12.dp
+            val gap = if (compact) 8.dp else Look.gap
             val readoutSize = if (compact) 44f else 56f
             val tileTall = if (compact) 8.dp else 12.dp
             // What everything but the dial and the map takes, so the dial gets what's left (at most 36% of
             // the height and 360) and the map keeps at least its minimum. At a larger font size each tile
-            // keeps a second detail line.
-            val tileH = (56 * fs).dp + (if (fs > 1.1f) (16 * fs).dp else 0.dp) + tileTall * 2
-            val fixed = 48.dp + gap + 4.dp + (readoutSize * 1.1f * fs).dp + (18 * fs * (if (fs > 1.1f) 2 else 1)).dp + gap +
-                (if (nav.mark != null && nav.fix != null) 44.dp + gap else 0.dp) + tileH * 2 + 8.dp + gap + 12.dp
+            // keeps a second detail line. At the top: the title row (48, or the title's line at a larger font
+            // size, and 4 below it) and the sky card (padding and two lines; at least the menu's 48 dp target
+            // and its padding when compact).
+            val titleH = maxOf(Look.titleRow, (40 * fs).dp)
+            val skyH = if (compact) maxOf(72.dp, 24.dp + (44 * fs).dp) else Look.skyPadding * 2 + (44 * fs).dp
+            val top = (if (compact) 0.dp else titleH + 4.dp) + skyH
+            val tileH = (58 * fs).dp + (if (fs > 1.1f) (16 * fs).dp else 0.dp) + tileTall * 2
+            val fixed = top + gap + 4.dp + (readoutSize * 1.1f * fs).dp + (18 * fs * (if (fs > 1.1f) 2 else 1)).dp + gap +
+                (if (nav.mark != null && nav.fix != null) 46.dp + gap else 0.dp) + tileH * 2 + Look.tileGap + gap + 12.dp
             val mapMin = if (compact) 96.dp else 120.dp
             val dialSide = minOf(minOf(maxWidth - 32.dp, maxHeight * 0.36f), minOf(360.dp, maxHeight - fixed - mapMin)).coerceAtLeast(120.dp)
 
             Column(
-                Modifier.fillMaxSize().widthIn(max = 520.dp).align(Alignment.TopCenter).padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp),
+                Modifier.fillMaxSize().widthIn(max = 520.dp).align(Alignment.TopCenter)
+                    .padding(start = Look.margin, end = Look.margin, top = 0.dp, bottom = 12.dp),
             ) {
-                Header(nav, night, onCopy = { copy() }, onAbout = { about = true })
+                val menu: @Composable () -> Unit = { MenuButton(nav, night, onCopy = { copy() }, onAbout = { about = true }) }
+                if (!compact) {
+                    TitleRow(titleH, menu)
+                    Spacer(Modifier.height(4.dp))
+                }
+                SkyCard(nav, compact, menu)
                 Spacer(Modifier.height(gap))
                 DialBlock(nav, dialSide)
                 Spacer(Modifier.height(4.dp))
@@ -149,13 +172,13 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
                     // No compass: say so where the heading would be, so nothing overlaps the dial.
                     Box(Modifier.fillMaxWidth().height((readoutSize * 1.1f * fs).dp + (18 * fs).dp), contentAlignment = Alignment.Center) {
                         Text("No compass on this device. Your coordinates, elevation and map still work.",
-                            style = text(15f, color = Palette.textMuted), textAlign = TextAlign.Center, maxLines = 2,
+                            style = text(15f, color = white(Op.CAPTION)), textAlign = TextAlign.Center, maxLines = 2,
                             modifier = Modifier.widthIn(max = 300.dp))
                     }
                 } else {
                     Readout(nav, readoutSize)
                     // At a larger font size the subline wraps rather than being cut off.
-                    Text(subline(nav), style = text(13f, color = Palette.textMuted).copy(lineHeight = 18.sp), textAlign = TextAlign.Center, maxLines = if (fs > 1.1f) 2 else 1,
+                    Text(subline(nav), style = text(13f, color = white(Op.CAPTION)).copy(lineHeight = 18.sp), textAlign = TextAlign.Center, maxLines = if (fs > 1.1f) 2 else 1,
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().heightIn(min = 18.dp))
                 }
                 Spacer(Modifier.height(gap))
@@ -165,7 +188,7 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
                     Spacer(Modifier.height(gap))
                 }
                 if (nav.fix == null && nav.access != Access.ALLOWED) {
-                    AskForLocation(nav.access == Access.DENIED, onUseLocation, onOpenSettings, Modifier.heightIn(min = tileH * 2 + 8.dp))
+                    AskForLocation(nav.access == Access.DENIED, onUseLocation, onOpenSettings, Modifier.heightIn(min = tileH * 2 + Look.tileGap))
                 } else {
                     Tiles(nav, tileTall, onCopy = { copy() })
                 }
@@ -180,8 +203,9 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
             }
             toast?.let { t ->
                 LaunchedEffect(t) { delay(1600); toast = null }
-                Text(t, style = text(14f, FontWeight.SemiBold, Palette.bg),
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp).clip(CircleShape).background(Palette.cream)
+                // A white capsule with black text, as Two Degrees' buttons.
+                Text(t, style = text(14f, FontWeight.SemiBold, Color.Black),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp).clip(CircleShape).background(Color.White)
                         .padding(horizontal = 16.dp, vertical = 9.dp).semantics { liveRegion = LiveRegionMode.Polite })
             }
         }
@@ -234,29 +258,39 @@ private fun dialLabel(nav: Navigator, heading: Double?): String {
 private fun Readout(nav: Navigator, size: Float) {
     val h = nav.heading
     // Tabular figures, so the number doesn't jiggle as it changes.
-    val big = text(size, FontWeight.SemiBold).copy(letterSpacing = (-0.03 * size).sp, lineHeight = (size * 1.1f).sp, fontFeatureSettings = "tnum")
+    // Light in Two Degrees; Inter has no Light here, so Normal.
+    val big = text(size, FontWeight.Normal, if (h == null) white(Op.FAINT) else Color.White)
+        .copy(letterSpacing = (-2).sp, lineHeight = (size * 1.1f).sp, fontFeatureSettings = "tnum")
     Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.Center) {
         Text(if (h == null) "—" else "${Math.round(h) % 360}°", style = big, modifier = Modifier.alignByBaseline())
         Spacer(Modifier.width(10.dp))
-        Text(if (h == null) "" else Geo.point(h), style = text(size / 2, FontWeight.Medium, Palette.textMuted),
+        Text(if (h == null) "" else Geo.point(h), style = text(size / 2, FontWeight.Medium, white(Op.CAPTION)),
             modifier = Modifier.alignByBaseline().widthIn(min = (size * 1.1f).dp))
     }
 }
 
 private fun subline(nav: Navigator): AnnotatedString = buildAnnotatedString {
-    val warn = SpanStyle(color = Palette.warn, fontWeight = FontWeight.SemiBold)
+    val warn = SpanStyle(color = Palette.notice, fontWeight = FontWeight.SemiBold)
     when {
         nav.compass != CompassStatus.LIVE || nav.heading == null -> append(" ")
         nav.interference -> withStyle(warn) { append("Magnet or metal nearby: move away") }
         (nav.headingAccuracy ?: 0.0) > Navigator.POOR_HEADING_ACCURACY -> withStyle(warn) { append("Low accuracy: move your phone in a figure 8") }
         else -> {
-            append(keepTogether(nav.northLabel))
-            nav.headingAccuracy?.let { append(keepTogether(" · ±${Math.round(it)}°")) }
+            appendDotted(keepTogether(nav.northLabel))
+            nav.headingAccuracy?.let { appendDotted(keepTogether(" · ±${Math.round(it)}°")) }
         }
     }
+    // The locked bearing is white, not pink: pink means north and nothing else.
     nav.lockText?.let {
-        append(keepTogether(" · "))
-        withStyle(SpanStyle(color = Palette.accent, fontWeight = FontWeight.SemiBold)) { append(keepTogether(it)) }
+        appendDotted(keepTogether(" · "))
+        withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)) { append(keepTogether(it)) }
+    }
+}
+
+/** Appends [s] with its dots (·) fainter than the words around them. */
+private fun AnnotatedString.Builder.appendDotted(s: String) {
+    for (ch in s) {
+        if (ch == '·') withStyle(SpanStyle(color = white(Op.FAINT))) { append(ch) } else append(ch)
     }
 }
 
@@ -280,10 +314,66 @@ private fun keepTogether(s: String): String {
     return out.toString()
 }
 
-// ---------- The header and its menu ----------
+// ---------- The title, the sky card and the menu ----------
 
+/** "Bearings" large on the left (a heading for TalkBack), the ⋯ menu on the right, as Two Degrees' title. */
 @Composable
-private fun Header(nav: Navigator, night: Boolean, onCopy: () -> Unit, onAbout: () -> Unit) {
+private fun TitleRow(height: Dp, menu: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = height), verticalAlignment = Alignment.CenterVertically) {
+        Text(Brand.APP_NAME, style = text(Look.TITLE_SIZE, FontWeight.SemiBold).copy(letterSpacing = 0.4.sp, lineHeight = 40.sp), maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).semantics { heading() })
+        menu()
+    }
+}
+
+/**
+ * The place and the date and time on the sky where you are (blue by day, navy at night, following the sun's
+ * altitude), with the sky's symbol in the corner, or the ⋯ menu on short screens. Read as one heading.
+ */
+@Composable
+private fun SkyCard(nav: Navigator, compact: Boolean, menu: @Composable () -> Unit) {
+    val sun = nav.fix?.let { com.bradcowdrey.bearings.Sky.sunPosition(nav.now.toDouble(), it.latitude, it.longitude) }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = if (compact) 72.dp else 0.dp).skyCard(sun?.altitude)
+            .padding(if (compact) 12.dp else Look.skyPadding),
+        verticalAlignment = if (compact) Alignment.CenterVertically else Alignment.Top,
+    ) {
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { heading() }) {
+            Text(nav.title, style = text(20f, FontWeight.SemiBold).copy(letterSpacing = (-0.3).sp, lineHeight = 24.sp), maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(nav.dateTimeText, style = text(14f, FontWeight.Medium, white(Op.BODY)).copy(lineHeight = 18.sp, fontFeatureSettings = "tnum"),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (nav.sample) {
+                    Spacer(Modifier.width(8.dp))
+                    Text("Sample", style = text(11f, FontWeight.SemiBold, Color.Black),
+                        modifier = Modifier.clip(CircleShape).background(Palette.notice).padding(horizontal = 6.dp, vertical = 1.dp))
+                }
+            }
+        }
+        if (compact) {
+            Spacer(Modifier.width(4.dp))
+            menu()
+        } else {
+            Spacer(Modifier.width(8.dp))
+            // Decorative: TalkBack hears the place and time.
+            Icon(skyIcon(sun?.altitude, sun?.azimuth), null, tint = white(Op.BODY), modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/** The sun by day, sunrise or sunset in twilight, the moon at night, a pin before a fix (SkyTone.phase). */
+private fun skyIcon(altitude: Double?, azimuth: Double?): ImageVector = when (SkyTone.phase(altitude, azimuth)) {
+    SkyTone.Phase.DAY -> Icons.Filled.WbSunny
+    SkyTone.Phase.TWILIGHT_MORNING, SkyTone.Phase.TWILIGHT_EVENING -> Icons.Filled.WbTwilight
+    SkyTone.Phase.NIGHT -> Icons.Filled.NightsStay
+    SkyTone.Phase.UNKNOWN -> Icons.Filled.LocationOn
+}
+
+/** The ⋯ menu: a faint white 36 dp circle in a 48 dp touch target, and everything Bearings can do or change. */
+@Composable
+private fun MenuButton(nav: Navigator, night: Boolean, onCopy: () -> Unit, onAbout: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val uri = LocalUriHandler.current
@@ -291,93 +381,81 @@ private fun Header(nav: Navigator, night: Boolean, onCopy: () -> Unit, onAbout: 
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
         context.startActivity(Intent.createChooser(send, null))
     }
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-            Text(nav.title, style = text(20f, FontWeight.SemiBold).copy(lineHeight = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(nav.dateTimeText, style = text(13f, color = Palette.textMuted).copy(lineHeight = 16.sp), maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (nav.sample) {
-                    Spacer(Modifier.width(8.dp))
-                    Text("Sample", style = text(11f, FontWeight.SemiBold, Palette.bg),
-                        modifier = Modifier.clip(CircleShape).background(Palette.warn).padding(horizontal = 7.dp, vertical = 1.dp))
-                }
+    Box {
+        Box(
+            Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Open the menu") { open = true }
+                .semantics { contentDescription = "Settings and more" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.size(36.dp).clip(CircleShape).background(Palette.chipOff), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.MoreHoriz, null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
         }
-        Box {
-            // A 36 dp circle in a 48 dp touch target.
-            Box(
-                Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Open the menu") { open = true }
-                    .semantics { contentDescription = "Settings and more" },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(Modifier.size(36.dp).clip(CircleShape).background(Palette.tile).border(0.5.dp, Palette.border, CircleShape),
-                    contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.MoreHoriz, null, tint = Palette.textSecondary, modifier = Modifier.size(20.dp))
-                }
-            }
-            DropdownMenu(open, onDismissRequest = { open = false }) {
-                val hasFix = nav.fix != null
-                MenuSection("Coordinates", night)
-                for (f in Geo.Format.entries) Check(f.title, nav.format == f, night) { nav.setFormat(f); open = false }
-                MenuSection("Units", night)
-                Check("Feet First", nav.feet, night) { nav.setFeet(true); open = false }
-                Check("Metres First", !nav.feet, night) { nav.setFeet(false); open = false }
-                MenuSection("North", night)
-                Check("True North", nav.preferTrueNorth, night) { nav.setTrueNorth(true); open = false }
-                Check("Magnetic North", !nav.preferTrueNorth, night) { nav.setTrueNorth(false); open = false }
-                MenuSection("Map", night)
-                Check("Follow Heading", nav.followHeading, night) { nav.setFollowHeading(!nav.followHeading); open = false }
-                HorizontalDivider(color = Palette.border.night(night))
-                Check("Night Mode", night, night) { nav.setNight(!night); open = false }
-                HorizontalDivider(color = Palette.border.night(night))
-                if (nav.mark == null) Item("Mark This Spot", night, hasFix) { nav.markHere(); open = false }
-                else Item("Clear Marked Spot", night) { nav.clearMark(); open = false }
-                Item(if (nav.lock == null) "Lock This Bearing" else "Clear Locked Bearing", night, nav.heading != null) { nav.toggleLock(); open = false }
-                Item("Copy Coordinates", night, hasFix) { onCopy(); open = false }
-                Item("Share My Location…", night, hasFix) { nav.shareLocationText?.let(::share); open = false }
-                Item("Share Bearings…", night) { share("${Brand.SHARE_MESSAGE} ${Brand.PRODUCT_PAGE}"); open = false }
-                HorizontalDivider(color = Palette.border.night(night))
-                Item("Terms & Privacy", night) { uri.openUri(Brand.LEGAL); open = false }
-                Item("About Bearings", night) { onAbout(); open = false }
-            }
+        DropdownMenu(open, onDismissRequest = { open = false }) {
+            val hasFix = nav.fix != null
+            MenuSection("Coordinates", night)
+            for (f in Geo.Format.entries) Check(f.title, nav.format == f, night) { nav.setFormat(f); open = false }
+            MenuSection("Units", night)
+            Check("Feet First", nav.feet, night) { nav.setFeet(true); open = false }
+            Check("Metres First", !nav.feet, night) { nav.setFeet(false); open = false }
+            MenuSection("North", night)
+            Check("True North", nav.preferTrueNorth, night) { nav.setTrueNorth(true); open = false }
+            Check("Magnetic North", !nav.preferTrueNorth, night) { nav.setTrueNorth(false); open = false }
+            MenuSection("Map", night)
+            Check("Follow Heading", nav.followHeading, night) { nav.setFollowHeading(!nav.followHeading); open = false }
+            HorizontalDivider(color = white(Op.STROKE).night(night))
+            Check("Night Mode", night, night) { nav.setNight(!night); open = false }
+            HorizontalDivider(color = white(Op.STROKE).night(night))
+            if (nav.mark == null) Item("Mark This Spot", night, hasFix) { nav.markHere(); open = false }
+            else Item("Clear Marked Spot", night) { nav.clearMark(); open = false }
+            Item(if (nav.lock == null) "Lock This Bearing" else "Clear Locked Bearing", night, nav.heading != null) { nav.toggleLock(); open = false }
+            Item("Copy Coordinates", night, hasFix) { onCopy(); open = false }
+            Item("Share My Location…", night, hasFix) { nav.shareLocationText?.let(::share); open = false }
+            Item("Share Bearings…", night) { share("${Brand.SHARE_MESSAGE} ${Brand.PRODUCT_PAGE}"); open = false }
+            HorizontalDivider(color = white(Op.STROKE).night(night))
+            Item("Terms & Privacy", night) { uri.openUri(Brand.LEGAL); open = false }
+            Item("About Bearings", night) { onAbout(); open = false }
         }
     }
 }
 
 @Composable private fun MenuSection(title: String, night: Boolean) =
-    Text(title.uppercase(), style = text(11f, FontWeight.SemiBold, Palette.textFaint.night(night)),
+    Text(title.uppercase(), style = text(11f, FontWeight.SemiBold, white(Op.FAINT).night(night)),
         modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 2.dp))
 
 @Composable private fun Check(title: String, on: Boolean, night: Boolean, onClick: () -> Unit) =
     DropdownMenuItem(text = { Text(title, style = text(15f, color = Color.White.night(night))) }, onClick = onClick,
-        leadingIcon = { Text(if (on) "✓" else "", style = text(15f, color = Palette.cream.night(night)), modifier = Modifier.widthIn(min = 14.dp)) })
+        leadingIcon = { Text(if (on) "✓" else "", style = text(15f, color = Color.White.night(night)), modifier = Modifier.widthIn(min = 14.dp)) })
 
 @Composable private fun Item(title: String, night: Boolean, enabled: Boolean = true, onClick: () -> Unit) =
-    DropdownMenuItem(text = { Text(title, style = text(15f, color = (if (enabled) Color.White else Palette.textFaint).night(night))) },
+    DropdownMenuItem(text = { Text(title, style = text(15f, color = (if (enabled) Color.White else white(Op.FAINT)).night(night))) },
         onClick = onClick, enabled = enabled, leadingIcon = { Spacer(Modifier.widthIn(min = 14.dp)) })
 
 // ---------- The marked spot ----------
 
+/** A frosted capsule: the pin, "Marked spot" and its distance and direction, and ✕ to clear it. */
 @Composable
 private fun MarkPill(label: String, onClear: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(44.dp).clip(CircleShape).background(Palette.tile),
+        Modifier.fillMaxWidth().heightIn(min = 46.dp).frostedTile(CircleShape),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Spacer(Modifier.width(16.dp))
+        Icon(Icons.Filled.Place, null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
         Text(
             buildAnnotatedString {
-                withStyle(SpanStyle(color = Palette.accent, fontWeight = FontWeight.SemiBold)) { append("📍 Marked spot") }
-                append(" · $label")
+                withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)) { append("Marked spot") }
+                withStyle(SpanStyle(color = white(Op.SUB))) { append(" · $label") }
             },
-            style = text(14f, FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(start = 16.dp),
+            style = text(14f).copy(fontFeatureSettings = "tnum"), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
         Box(
             Modifier.size(48.dp, 44.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClear)
                 .semantics { contentDescription = "Clear the marked spot" },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Close, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp)) }
+        ) { Icon(Icons.Filled.Close, null, tint = white(Op.CAPTION), modifier = Modifier.size(16.dp)) }
     }
 }
 
@@ -385,16 +463,20 @@ private fun MarkPill(label: String, onClear: () -> Unit) {
 
 @Composable
 private fun AskForLocation(denied: Boolean, onUseLocation: () -> Unit, onOpenSettings: () -> Unit, modifier: Modifier) {
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Palette.tile).padding(horizontal = 14.dp, vertical = 12.dp),
+    Column(modifier.fillMaxWidth().frostedTile().padding(horizontal = Look.padding, vertical = Look.paddingV),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)) {
         Text(if (denied) "Location is off for Bearings. Allow it in Settings to see where you are, your coordinates, elevation and map."
             else "Allow your location to see where you are, your latitude, longitude, elevation and map. It stays on this phone.",
-            style = text(14f, color = Palette.textSecondary))
+            style = text(13f, color = white(Op.BODY)))
+        // A compact white capsule with black text, in a 48 dp touch target.
         Box(
-            Modifier.heightIn(min = 48.dp).clip(CircleShape).background(Palette.cream)
-                .clickable(role = Role.Button) { if (denied) onOpenSettings() else onUseLocation() }.padding(horizontal = 18.dp),
+            Modifier.heightIn(min = 48.dp).clip(CircleShape)
+                .clickable(role = Role.Button) { if (denied) onOpenSettings() else onUseLocation() },
             contentAlignment = Alignment.Center,
-        ) { Text(if (denied) "Open Settings" else "Use My Location", style = text(15f, FontWeight.SemiBold, Palette.bg)) }
+        ) {
+            Text(if (denied) "Open Settings" else "Use My Location", style = text(14f, FontWeight.SemiBold, Color.Black),
+                modifier = Modifier.clip(CircleShape).background(Color.White).padding(horizontal = 14.dp, vertical = 8.dp))
+        }
     }
 }
 
@@ -408,20 +490,21 @@ private fun Tiles(nav: Navigator, vertical: Dp, onCopy: () -> Unit) {
     val tap = Modifier.combinedClickable(onClickLabel = "Change the coordinate format", onLongClickLabel = "Copy the coordinates",
         onLongClick = onCopy, onClick = { nav.cycleFormat() })
     val accuracy = fix?.let { "${Geo.accuracy(it.accuracy, nav.feet)} · ${if (nav.sample) "Sample" else ago(tick - it.time)}" }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Look.tileGap)) {
         when (val f = fix?.let { Geo.format(nav.format, it.latitude, it.longitude) }) {
-            is Geo.Formatted.Single -> Tile(nav.format.title, AnnotatedString(f.text), accuracy ?: " ", vertical, stale,
+            is Geo.Formatted.Single -> Tile(nav.format.title, Icons.Filled.GridOn, AnnotatedString(f.text), accuracy ?: " ", vertical, stale,
                 "${nav.format.title}, ${f.text}. Tap to change the format, touch and hold to copy", Modifier.fillMaxWidth().then(tap))
-            is Geo.Formatted.Pair -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Tile("Latitude", AnnotatedString(f.lat), accuracy ?: " ", vertical, stale, "Latitude, ${f.lat}", Modifier.weight(1f).then(tap))
-                Tile("Longitude", AnnotatedString(f.lon), nav.format.title, vertical, stale, "Longitude, ${f.lon}", Modifier.weight(1f).then(tap))
+            is Geo.Formatted.Pair -> Row(horizontalArrangement = Arrangement.spacedBy(Look.tileGap)) {
+                Tile("Latitude", Icons.Filled.SwapVert, AnnotatedString(f.lat), accuracy ?: " ", vertical, stale, "Latitude, ${f.lat}", Modifier.weight(1f).then(tap))
+                Tile("Longitude", Icons.Filled.SwapHoriz, AnnotatedString(f.lon), nav.format.title, vertical, stale, "Longitude, ${f.lon}", Modifier.weight(1f).then(tap))
             }
-            null -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Tile("Latitude", AnnotatedString("—"), if (nav.locating) "Finding you…" else " ", vertical, false, "Latitude, not known yet", Modifier.weight(1f))
-                Tile("Longitude", AnnotatedString("—"), nav.format.title, vertical, false, "Longitude, not known yet", Modifier.weight(1f))
+            null -> Row(horizontalArrangement = Arrangement.spacedBy(Look.tileGap)) {
+                Tile("Latitude", Icons.Filled.SwapVert, AnnotatedString("—"), if (nav.locating) "Finding you…" else " ", vertical, false,
+                    "Latitude, not known yet", Modifier.weight(1f))
+                Tile("Longitude", Icons.Filled.SwapHoriz, AnnotatedString("—"), nav.format.title, vertical, false, "Longitude, not known yet", Modifier.weight(1f))
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Look.tileGap)) {
             ElevationTile(nav, vertical, stale, Modifier.weight(1f))
             SunTile(nav, vertical, Modifier.weight(1f))
         }
@@ -437,12 +520,13 @@ private fun ElevationTile(nav: Navigator, vertical: Dp, stale: Boolean, modifier
             val first = if (nav.feet) ft else m; val second = if (nav.feet) m else ft
             val value = buildAnnotatedString {
                 append(first)
-                withStyle(SpanStyle(fontSize = 0.79.em, fontWeight = FontWeight.Medium, color = Palette.textMuted)) { append("  $second") }
+                // The second unit 14 against the value's 20.
+                withStyle(SpanStyle(fontSize = 0.7.em, fontWeight = FontWeight.Medium, color = white(Op.CAPTION))) { append("  $second") }
             }
             val spoken = "Elevation, ${spokenUnits(first)}, ${spokenUnits(second)}, ${if (e.fromGps) "from GPS" else "from terrain data"}"
-            Tile("Elevation", value, e.source + pressure, vertical, stale, spoken, modifier)
+            Tile("Elevation", Icons.Filled.Terrain, value, e.source + pressure, vertical, stale, spoken, modifier)
         }
-        is ElevationReading.Pending -> Tile("Elevation", AnnotatedString("—"), e.note, vertical, false, "Elevation, ${e.note}", modifier)
+        is ElevationReading.Pending -> Tile("Elevation", Icons.Filled.Terrain, AnnotatedString("—"), e.note, vertical, false, "Elevation, ${e.note}", modifier)
     }
 }
 
@@ -453,7 +537,7 @@ private fun spokenUnits(s: String) = s.removeSuffix(" ft").let { if (it != s) "$
 private fun SunTile(nav: Navigator, vertical: Dp, modifier: Modifier) {
     val phase = nav.moonPhase
     val sun = nav.sunText
-    Tile("Sun", AnnotatedString(sun ?: "—"), "Moon", vertical, false,
+    Tile("Sun", Icons.Filled.WbSunny, AnnotatedString(sun ?: "—"), "Moon", vertical, false,
         "Sun, ${sun?.replace("–", "to") ?: "not known yet"}. Moon, ${com.bradcowdrey.bearings.Sky.moonLine(phase)}", modifier) {
         // The same detail lines as the other tiles, with the glyph centred on the first line.
         val lines = detailLines()
@@ -462,7 +546,7 @@ private fun SunTile(nav: Navigator, vertical: Dp, modifier: Modifier) {
                 Canvas(Modifier.size(12.dp)) { moonGlyph(Offset(size.width / 2, size.height / 2), size.minDimension / 2, phase.phase, 1f) }
             }
             Spacer(Modifier.width(5.dp))
-            Text(keepTogether(com.bradcowdrey.bearings.Sky.moonLine(phase)), style = text(12f, color = Palette.textMuted).copy(lineHeight = 16.sp),
+            Text(keepTogether(com.bradcowdrey.bearings.Sky.moonLine(phase)), style = text(12f, color = white(Op.CAPTION)).copy(lineHeight = 16.sp),
                 minLines = lines, maxLines = lines, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -477,19 +561,22 @@ private fun ago(ms: Long): String {
 }
 
 /**
- * One rounded tile: a small title, the value (shrunk to fit one line), and a detail line, read by
- * TalkBack as one element ([spoken]). [detailContent] replaces the plain detail text.
+ * One frosted tile, as Two Degrees' cards: a caption in capitals with its icon, the value (shrunk to fit
+ * one line), and a detail line, read by TalkBack as one element ([spoken]; the caption is hidden from it).
+ * [detailContent] replaces the plain detail text.
  */
 @Composable
 private fun Tile(
-    title: String, value: AnnotatedString, detail: String, vertical: Dp, stale: Boolean, spoken: String, modifier: Modifier = Modifier,
-    detailContent: (@Composable () -> Unit)? = null,
+    title: String, icon: ImageVector, value: AnnotatedString, detail: String, vertical: Dp, stale: Boolean, spoken: String,
+    modifier: Modifier = Modifier, detailContent: (@Composable () -> Unit)? = null,
 ) {
     // Clipped before the caller's click, so the ripple keeps the rounded corners.
-    Column(Modifier.clip(RoundedCornerShape(18.dp)).then(modifier).background(Palette.tile).semantics(mergeDescendants = true) { contentDescription = spoken }
-        .padding(horizontal = 14.dp, vertical = vertical)) {
-        Text(title, style = text(12f, FontWeight.SemiBold, Palette.textMuted).copy(lineHeight = 16.sp), maxLines = 1)
-        FitText(value, text(19f, FontWeight.SemiBold, if (stale) Palette.textMuted else Color.White).copy(lineHeight = 24.sp, fontFeatureSettings = "tnum"))
+    Column(Modifier.clip(Look.shape).then(modifier).frostedTile().semantics(mergeDescendants = true) { contentDescription = spoken }
+        .padding(horizontal = Look.padding, vertical = vertical)) {
+        CardCaption(title, icon)
+        Spacer(Modifier.height(2.dp))
+        FitText(value, text(Look.VALUE_SIZE, FontWeight.Medium, if (stale) white(Op.CAPTION) else Color.White)
+            .copy(lineHeight = 24.sp, fontFeatureSettings = "tnum"))
         if (detailContent != null) {
             detailContent()
         } else {
@@ -498,7 +585,7 @@ private fun Tile(
             // a row always match. (FitText measures with BoxWithConstraints, a SubcomposeLayout, so the row
             // can't size its tiles with IntrinsicSize.Min; that would throw at runtime.)
             val lines = detailLines()
-            Text(keepTogether(detail), style = text(12f, color = Palette.textMuted).copy(lineHeight = 16.sp),
+            Text(keepTogether(detail), style = text(12f, color = white(Op.CAPTION)).copy(lineHeight = 16.sp),
                 minLines = lines, maxLines = lines, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -537,21 +624,21 @@ private fun AboutDialog(night: Boolean, onDismiss: () -> Unit) {
     val uri = LocalUriHandler.current
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Palette.tile.night(night),
+        containerColor = Palette.menu.night(night),
         icon = { AppMark(48.dp) },
         title = { Text("Bearings", style = text(20f, FontWeight.SemiBold, Color.White.night(night))) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("${Brand.TAGLINE} Free, open source, no ads, no tracking.", style = text(14f, color = Palette.textSecondary.night(night)))
-                Text("Made by Bradley Cowdrey · bradcowdrey.com ↗", style = text(14f, FontWeight.Medium, Palette.cream.night(night)),
+                Text("${Brand.TAGLINE} Free, open source, no ads, no tracking.", style = text(14f, color = Color.White.night(night)))
+                Text("Made by Bradley Cowdrey · bradcowdrey.com ↗", style = text(14f, FontWeight.Medium, Color.White.night(night)),
                     modifier = Modifier.heightIn(min = 48.dp).clickable(role = Role.Button) { uri.openUri(Brand.WEBSITE) }.padding(vertical = 14.dp))
                 Text("Ground elevation: Open-Meteo (CC BY 4.0), Copernicus DEM GLO-90 © DLR/ESA. Map: OpenFreeMap, © OpenStreetMap contributors, MapLibre. " +
                     "Places: GeoNames (CC BY 4.0). Sun and moon after SunCalc.\n\nVersion ${BuildConfig.VERSION_NAME}",
-                    style = text(13f, color = Palette.textMuted.night(night)))
+                    style = text(13f, color = white(Op.SUB).night(night)))
             }
         },
         confirmButton = {
-            Text("Done", style = text(15f, FontWeight.SemiBold, Palette.cream.night(night)),
+            Text("Done", style = text(15f, FontWeight.SemiBold, Color.White.night(night)),
                 modifier = Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onDismiss).padding(12.dp))
         },
         dismissButton = {

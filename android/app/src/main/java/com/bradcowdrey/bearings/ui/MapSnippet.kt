@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
@@ -83,10 +82,11 @@ fun MapSnippet(
     modifier: Modifier = Modifier,
     live: Boolean = true,
 ) {
-    val shape = RoundedCornerShape(18.dp)
-    BoxWithConstraints(modifier.clip(shape).background(Palette.tile)) {
+    // A rounded card on black, as Two Degrees' rain map: the tile fill before the map loads, a 1 dp edge over it.
+    val shape = Look.shape
+    BoxWithConstraints(modifier.clip(shape).background(Palette.tileFill)) {
         if (fix == null) {
-            Text("The map appears once Bearings knows where you are.", style = text(13f, color = Palette.textMuted),
+            Text("The map appears once Bearings knows where you are.", style = text(13f, color = white(Op.CAPTION)),
                 textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.Center).padding(16.dp))
         } else {
             var zoom by remember { mutableDoubleStateOf(15.0) }
@@ -99,17 +99,19 @@ fun MapSnippet(
                 MapButton(Icons.Filled.Add, "Zoom in") { zoom = (zoom + 1).coerceAtMost(19.0) }
                 MapButton(Icons.Filled.Remove, "Zoom out") { zoom = (zoom - 1).coerceAtLeast(3.0) }
                 MapButton(if (follow) Icons.Filled.Navigation else Icons.Outlined.Navigation,
-                    if (follow) "Map follows your heading. Switch to north up" else "Map is north up. Switch to follow your heading", onToggleFollow)
+                    if (follow) "Map follows your heading. Switch to north up" else "Map is north up. Switch to follow your heading", on = follow, onClick = onToggleFollow)
                 MapButton(Icons.AutoMirrored.Filled.OpenInNew, "Open in your map app") { onOpen(fix) }
             }
             if (tall) Column(Modifier.align(Alignment.TopEnd).padding(4.dp)) { buttons() }
             else Row(Modifier.align(Alignment.TopEnd).padding(4.dp)) { buttons() }
             if (speed != null) {
-                Text(speed, style = text(13f, FontWeight.SemiBold, Palette.cream),
+                Text(speed, style = text(13f, FontWeight.SemiBold, Color.White),
                     modifier = Modifier.align(Alignment.BottomStart).padding(10.dp).clip(CircleShape)
-                        .background(Palette.bg.copy(alpha = 0.86f)).padding(horizontal = 10.dp, vertical = 5.dp))
+                        .background(Palette.mapControl).padding(horizontal = 10.dp, vertical = 5.dp))
             }
         }
+        // The card's edge, drawn over the map.
+        Box(Modifier.matchParentSize().border(Look.stroke, Palette.tileStroke, shape))
     }
 }
 
@@ -163,7 +165,7 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
         AndroidView({ view }, Modifier.fillMaxSize())
     }
     if (!loaded) {
-        Text(if (live) "Loading the map…" else "Map", style = text(13f, color = Palette.textMuted),
+        Text(if (live) "Loading the map…" else "Map", style = text(13f, color = white(Op.CAPTION)),
             modifier = Modifier.align(Alignment.Center))
     }
     // You: accuracy circle, heading cone and dot, over the map's centre. MapLibre's zoom is in 512-dp tiles.
@@ -171,31 +173,32 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
     Canvas(Modifier.fillMaxSize()) {
         val c = Offset(size.width / 2, size.height / 2)
         val r = (fix.accuracy / metresPerDp).toFloat().dp.toPx().coerceAtMost(size.maxDimension)
-        drawCircle(Palette.accent.copy(alpha = 0.16f), r, c)
-        drawCircle(Palette.accent.copy(alpha = 0.45f), r, c, style = Stroke(1.dp.toPx()))
+        drawCircle(white(0.1f), r, c)
+        drawCircle(white(0.4f), r, c, style = Stroke(1.dp.toPx()))
         if (trueHeading != null) {
             val len = 34.dp.toPx(); val half = 16.dp.toPx()
             val cone = Path().apply { moveTo(0f, 0f); lineTo(-half, -len); lineTo(half, -len); close(); translate(c) }
-            val brush = Brush.verticalGradient(listOf(Color.Transparent, Palette.accent.copy(alpha = 0.55f)), startY = c.y - len, endY = c.y)
+            val brush = Brush.verticalGradient(listOf(Color.Transparent, white(Op.POINTS)), startY = c.y - len, endY = c.y)
             // On a map that follows the heading, the cone points straight up.
             rotate((trueHeading - bearing).toFloat(), c) { drawPath(cone, brush) }
         }
-        drawCircle(Color.Black.copy(alpha = 0.3f), 10.dp.toPx(), c + Offset(0f, 1.dp.toPx()))
-        drawCircle(Color.White, 9.5.dp.toPx(), c)
-        drawCircle(Palette.accent, 6.5.dp.toPx(), c)
+        // You: a white dot 16 with a 3 dp ring of black at 35%, on a soft shadow.
+        drawCircle(Color.Black.copy(alpha = 0.18f), 12.5.dp.toPx(), c + Offset(0f, 1.dp.toPx()))
+        drawCircle(Color.Black.copy(alpha = 0.35f), 11.dp.toPx(), c)
+        drawCircle(Color.White, 8.dp.toPx(), c)
     }
 }
 
-/** A 32 dp circle on the map, in a 44 dp touch target. */
+/** A 32 dp circle on the map, in a 44 dp touch target: dark, or white when [on] (Follow Heading). */
 @Composable
-private fun MapButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun MapButton(icon: ImageVector, label: String, on: Boolean = false, onClick: () -> Unit) {
     Box(
         Modifier.size(44.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(32.dp).clip(CircleShape).background(Palette.bg.copy(alpha = 0.86f)).border(0.5.dp, Palette.border, CircleShape),
+        Box(Modifier.size(32.dp).clip(CircleShape).background(if (on) Color.White else Palette.mapControl),
             contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = Palette.cream, modifier = Modifier.size(17.dp))
+            Icon(icon, null, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(17.dp))
         }
     }
 }
