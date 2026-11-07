@@ -282,12 +282,13 @@ struct MainView: View {
         let k = plan.k
         return HStack(spacing: 8) {
             HStack(spacing: 0) {
-                Text(nav.placeTitle)
+                // One line: the town and the time (the date is in the full sky card), so the place keeps its room.
+                Text(nav.placeTitle.components(separatedBy: ", ").first ?? nav.placeTitle)
                     .font(.system(size: 15 * k, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(0)
-                Text("\u{00A0}· \(dateLine)")
+                Text("\u{00A0}· \(dateLine.components(separatedBy: " · ").last ?? dateLine)")
                     .font(.system(size: 15 * k))
                     .foregroundStyle(Color.white.opacity(Palette.Op.body))
                     .monospacedDigit()

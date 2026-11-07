@@ -98,8 +98,9 @@ Heights below are at the default text size; multiply text-driven heights by the 
 2. **Sky** — one of:
    - **Sky card** (72; 68 compact): unchanged from DESIGN.md §2.
    - **Sky bar** (44, Extra Large or after give-up step 3): one line on the same sky gradient,
-     "Crested Butte · Sat 7 Nov · 4:12 PM" (15 semibold place, 15 regular rest, one line, the place
-     truncates first), the sun/moon symbol, and the ⋯ menu at the right in a 44×44 target.
+     "Crested Butte · 4:12 PM": the town (without the state or country, 15 semibold) and the time (15
+     regular); the date is left to the full sky card so the town keeps its room. One line, the town
+     truncates last; then the sun/moon symbol, and the ⋯ menu at the right in a 44×44 target.
 3. **Dial**: `dial × dial`, centred, with e on each side at minimum. Unchanged drawing.
 4. **Readout**: "228°" and "SW" on one baseline, scaled by the layout's readout scale. Height =
    heading size × 1.2 (× 1.1 on Android, as today).

@@ -560,9 +560,10 @@ private fun SkyBar(nav: Navigator, menu: (@Composable () -> Unit)?, modifier: Mo
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(Modifier.weight(1f).semantics(mergeDescendants = true) { heading() }, verticalAlignment = Alignment.CenterVertically) {
-            Text(nav.title, style = text(15f, FontWeight.SemiBold).copy(lineHeight = 20.sp), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            // One line: the town and the time (the date is in the full sky card), so the place keeps its room.
+            Text(nav.title.substringBefore(", "), style = text(15f, FontWeight.SemiBold).copy(lineHeight = 20.sp), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false))
-            Text(" · ${nav.dateTimeText}", style = text(15f).copy(lineHeight = 20.sp, fontFeatureSettings = "tnum"), maxLines = 1, softWrap = false)
+            Text(" · ${nav.dateTimeText.substringAfterLast(" · ")}", style = text(15f).copy(lineHeight = 20.sp, fontFeatureSettings = "tnum"), maxLines = 1, softWrap = false)
             if (nav.sample) {
                 Spacer(Modifier.width(6.dp))
                 SampleBadge()
@@ -774,11 +775,12 @@ private fun SummaryStrip(nav: Navigator, vertical: Boolean, onCopy: () -> Unit, 
         }
     } else {
         Row(Modifier.fillMaxWidth().heightIn(min = LayoutPlan.STRIP.dp).height(IntrinsicSize.Min).frostedTile()) {
-            CoordinateCell(nav, stale, false, onCopy, Modifier.weight(2f).fillMaxHeight())
+            // Coordinates get a little less than half, so "9,587 ft" and "6:36–5:08" fit their cells.
+            CoordinateCell(nav, stale, false, onCopy, Modifier.weight(1.6f).fillMaxHeight())
             Hairline()
-            ElevationCell(nav, onShowTiles, Modifier.weight(1f).fillMaxHeight())
+            ElevationCell(nav, onShowTiles, Modifier.weight(1.2f).fillMaxHeight())
             Hairline()
-            SunCell(nav, onShowTiles, Modifier.weight(1f).fillMaxHeight())
+            SunCell(nav, onShowTiles, Modifier.weight(1.2f).fillMaxHeight())
         }
     }
 }
@@ -790,7 +792,7 @@ private fun Hairline() = Box(Modifier.fillMaxHeight().padding(vertical = 12.dp).
 private fun StripCell(spoken: String, modifier: Modifier, content: @Composable () -> Unit) {
     Column(
         modifier.semantics(mergeDescendants = true) { contentDescription = spoken }
-            .heightIn(min = LayoutPlan.STRIP.dp).padding(horizontal = 12.dp, vertical = 10.dp),
+            .heightIn(min = LayoutPlan.STRIP.dp).padding(horizontal = 10.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.Center,
     ) { content() }
 }
