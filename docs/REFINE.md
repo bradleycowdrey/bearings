@@ -499,3 +499,163 @@ The instrument-panel structure and the four layouts stay; no lens gave a structu
 ### C2.4 Projection
 
 Items 1–7 are the compact row, the layout rules, the tiles and the gap between dial and readout. Fixing them should lift Spacing to about 4.0, Accuracy to 4.3, Logic to 4.2 and Flow to 4.3, for a composite of about 4.2. Items 8–20 bring parity and polish and add about 0.15–0.2, so about **4.35–4.4** after cycle 3. Reaching 4.85 will take a cycle 4 that re-shoots every scenario and confirms there are no clipped strings, matching ports, and the four layouts visibly distinct on every device.
+
+## Cycle 3
+
+Cycle 3 scores the screens rebuilt after the cycle-2 fix list (C2.3): iPhone, iPad (portrait and landscape), Mac, Android, the widgets, the map sheets, the no-compass and live states, night mode and the large-text sizes. Four lenses scored on their own; the table gives their mean.
+
+### C3.1 Scorecard
+
+| Metric (weight) | L1 | L2 | L3 | L4 | **Mean** | Δ vs cycle 2 | Confidence | Why, and what the next half-point needs |
+|---|---|---|---|---|---|---|---|---|
+| Best Practices (16.25%) | 4.0 | 3.9 | 3.9 | 3.8 | **3.9** | +0.20 | Medium | One header, full-bleed sheets with Done, 44 pt / 48 dp targets, and scrolling at accessibility sizes. Still lost: the Android map labels ignore Material dark-surface rules, the dial does not shrink at large text, and the lock row differs between ports. |
+| Accuracy (16.25%) | 3.9 | 3.9 | 3.8 | 3.8 | **3.9** (3.85) | +0.08 | High | No ellipses and every value labelled. The no-compass readout still draws as `_ °` on iPhone, iPad and Android (the test checks the string, not the pixels), and the Mac XL-min Position lines render at two sizes. XL drops `, Colorado` from the title. |
+| Logic (16.25%) | 3.8 | 3.8 | 3.7 | 3.7 | **3.8** (3.75) | +0.20 | Medium | Each fact appears once, Moon survives as `SUN · ◐ 53%`, and Small and XL are distinct. Large still looks like Medium on phones (24 pt of dial, tiles 84 → 72), iPad landscape Small = Medium pixel for pixel, and iPad no-compass switches to a grid no layout uses. |
+| Flow (16.25%) | 4.1 | 4.0 | 3.9 | 3.9 | **4.0** (3.98) | +0.05 | Medium | Header → dial → `228° SW` → status → lock → spot → tiles runs cleanly and the dial-to-readout gap is gone. The header jumps 20–50 pt between layouts and states, large text ends the first screen mid-Position, and iPad landscape strands the readout in the bottom-left corner. |
+| Spacing (20%) | 3.6 | 3.6 | 3.4 | 3.4 | **3.5** | +0.30 | High | The compact row now sums to C and Medium is tidy. Spare height still goes into gaps (Android XL lock → spot about 27 dp vs 8), iPad landscape tiles are 190–530 pt tall holding 2–3 lines, iPad gutters jump 92 → 36, and XL ends on a 50–110 pt dead band. |
+| Form (15%) | 3.9 | 3.8 | 3.7 | 3.8 | **3.8** | +0.03 | Medium | The tile component, palette, night mode and widgets hold together on Apple. Android drifts: neutral run-on lock row, cyan italic map labels, three pills in the tile's bottom strip. The `—°` glyph is broken everywhere, and iPad uses phone type inside tablet-sized tiles. |
+| **Composite** | | | | | **3.78** | **+0.14** (3.64 → 3.78) | | Target 4.85; gap 1.07. |
+
+The composite uses the unrounded means: 0.1625 × (3.900 + 3.850 + 3.750 + 3.975) + 0.20 × 3.500 + 0.15 × 3.800 = 2.515 + 0.700 + 0.570 = 3.78.
+
+**Dissent (spread of 0.5 or more): none.** The widest spreads are 0.2: Flow (4.1 to 3.9) and Form (3.9 to 3.7). L1 gave Flow credit for the phone-portrait scan. L3 and L4 docked it for the large-text fold and the iPad landscape readout. Spacing splits 3.6 / 3.4 on the same evidence: L3 and L4 counted each loose gap (header inset, lock → spot, XL foot, iPad gutters) as a separate rhythm fault. The panel agrees on the defects and differs only in how much each costs.
+
+**What improved, and what did not.** Spacing (+0.30), Logic (+0.20) and Best Practices (+0.20) moved the most, because C2.3 #1–3, #6, #7 and #11 landed: the compact row fits, tiles bottom-align, the readout sits 12 below the dial, and the sheets are full-bleed. Five cycle-2 items did not land or landed only partly:
+- #4: Large is still not visibly distinct from Medium.
+- #8: iPad landscape tiles are still stretched.
+- #9: the Android map is dark now, but its labels are cyan italic.
+- #13: the `—°` glyph still draws as `_ °`.
+- #16: the lock row was built differently on Apple and Android.
+
+Those five account for most of the gap to the cycle-2 projection of 4.35.
+
+**The planners diverge.** The two ports do not follow the same rules:
+- **Medium:** Apple derives Medium's dial as Large − 24 (`LayoutPlan.swift:469`). Android gives Medium its own cap of W − 40 (`LayoutPlan.kt:235`).
+- **Large:** Apple promotes Large's map to a card when 160 or more is spare. Android always keeps it a tile.
+- **Spare height:** Apple still widens gaps with spare height (`gapGrow`, `LayoutPlan.swift:279/506–511`). Android widens two other gaps.
+
+C3.3 replaces both with one rule set.
+
+### C3.2 Top 3 weaknesses (ranked by impact on the composite)
+
+**1. Spare height is spent on gaps and the header moves, so the vertical rhythm differs by layout, state and port.** This costs about 0.20 of composite (Spacing 20%, Flow, Form). All four lenses raised it.
+- *Before:*
+  - Android XL lock → spot is about 27 dp (66 px); other layouts use 8.
+  - The header top is at y ≈ 151 on iPhone Medium, 170 on XL and 197 on live. On Android it is 123 on Medium and 175 on XL and live.
+  - iPhone XL ends 60–110 pt above the home indicator.
+  - iPad gutters are 92 on Medium and 36 on XL.
+  - iPad landscape tiles stretch to 190–530 pt.
+- *After:* the gaps are frozen and spare height has a fixed order.
+  - The header is pinned at safe-area top + 8 (status bar + 8 dp) in every layout and state.
+  - Gaps are fixed tokens × k and never grow: header → dial 12, dial → readout 12, readout → status 6, status → lock 8, lock → spot 8, readout group (or spot) → grid 8, row gaps 8, grid → map card 12, bottom 16 (24 on iPad and Mac).
+  - Spare height goes, in order:
+    1. To the dial, up to its cap.
+    2. To the map card, for Small and Medium only.
+    3. To tile growth, Medium only, 72 → 88 (96 on iPad).
+    4. Split between header → dial and the bottom, each at most 24.
+  - Delete `gapGrow`.
+  - New planner test on both ports, for every device × layout × state (sample, live, no-compass, locked or not): every inter-row gap equals its token × k, the header top equals safe top + 8, and bottom spare ≤ 24.
+
+**2. Large is still "Medium plus 24 pt", so the owner's four layouts read as three.** This costs about 0.15 (Logic, Flow). It also fails the owner's explicit requirement.
+- *Before:*
+  - On iPhone, Medium is dial 352 with a 3-column grid (Position 2u | Elevation, Sun | Moon | Map tile at 84). Large is dial 376 with the same grid at 72.
+  - On Android, Large and Medium differ by 24 dp.
+  - iPad landscape Small and Medium are identical.
+- *After:* the map surface shrinks as the compass grows, one step per layout, and each step changes the grid mode.
+  - **Large** drops the Map tile. The map moves to the header button, as in XL, and the grid becomes 2 × 2 at (C − 8)/2 per tile: Position | Elevation, then Sun | Moon.
+  - That saves the map tile's width and keeps two rows at fixed 72. The dial cap rises to C − 16.
+  - On iPhone 16 Pro (sample state): Medium has dial 352 and a 3-column grid with the Map tile. Large has dial 370 (C), a 2 × 2 grid and the map in the header. XL has dial 370 at C, one compact row, readout 1.25, and the 80 pt of a row is saved for the readout and spare.
+  - Golden test: adjacent layouts must differ in grid mode **and** map surface (card → tile → button), and dial(L) ≥ dial(M) + 16.
+  - Menu subtitles say what changes: Small "Compass + big map", Medium "Balanced · map tile", Large "Bigger compass · map in header", Extra Large "Biggest compass · one row".
+
+**3. The no-compass readout still renders as `_ °` on every port.** This costs about 0.10 (Accuracy, Form, Best Practices). It has been raised for three cycles.
+- *Before:* the string is `—°`, but cap-height trimming sets the dash on the baseline. It renders at about 40% width with a ring floating about 20 pt to the right (iphone-4-live, iphone-11, ipad-11, android-12, mac no-compass). About 90 pt of dead space follows before the next row. The test compares strings.
+- *After:*
+  - Draw the dash as a shape, not a glyph: a rounded rect 0.5 em × 0.08 em at the readout size (28 × 4.5 pt at 56 pt), white at 40%. Centre it on the digits' cap-height midline. Place the `°` exactly where it sits after `228`, at the same size and weight.
+  - Drop the separate 11 pt `NO HEADING` caption and fold it into the status line: `No compass · position, sun and map still work`.
+  - Gaps: dial → readout 12, readout → status 6.
+  - The stack is two lines. The roughly 56 pt freed goes to the dial, then to a 160 map card.
+  - Replace the string test with a render test on both ports: the dash's vertical centre must be within ±4 pt of the digit centre-line of `228°` at the same scale.
+  - Accessibility label: "Heading unavailable".
+
+### C3.3 One planner rule set (Apple and Android, identical constants)
+
+This replaces §3.3 step 4, §3.4 and C2.2 #2. `LayoutPlan.swift` and `LayoutPlan.kt` must hold the same constants, run the same steps in the same order, and pass one shared golden table (JSON in `docs/`, read by both test suites).
+
+| | **Small** "Compass + big map" | **Medium** "Balanced · map tile" | **Large** "Bigger compass · map in header" | **Extra Large** "Biggest compass · one row" |
+|---|---|---|---|---|
+| Grid | compact row (Position C−16−2w, Elevation w, Sun w; w = max(104, 0.27C)) | 3-column, 2 rows: Position 2u, Elevation, then Sun, Moon, Map tile | 2 × 2 at (C − 8)/2: Position, Elevation, then Sun, Moon | compact row |
+| Tiles | 72 | 72, grows to 88 (96 tablet) from spare only | fixed 72 | 72 |
+| Map | card ≥ 140, takes all spare | tile; promoted to a card (≥ 200) when ≥ 160 is spare | header button | header button |
+| Dial cap | 0.36 H (floor 0.30 H) | C − 32 (tablet: min(C − 32, 0.48 H)) | C − 16 (tablet: min(C − 16, 0.54 H)) | C − 16 (tablet: min(C − 16, 0.64 H), column widens to the dial) |
+| Readout | 1.0 | 1.0 | 1.0 | 1.25 |
+| Pressure order | map card → 140, then dial → floor | tiles → 72, then scroll list | dial → floor 0.42 H, then compact row | never shrinks the dial while the grid can scroll |
+
+**Shared steps:**
+1. Pin the header at safe top + 8.
+2. Place the fixed blocks with the frozen tokens from C3.2 #1.
+3. Dial = min(cap, S − fixed).
+4. Spend spare as in C3.2 #1: dial → map card → tile growth → (top and bottom each ≤ 24).
+
+Both ports read `dial`, `grid`, `map`, `tile` and every gap from the plan and nowhere else.
+
+**Shared tests:**
+- The golden table, per device class (iPhone SE, iPhone 16 Pro, Pro Max, iPad mini, iPad 13", Mac 900 × 700, Android 360 × 640, 412 × 914, tablet), × layout × state (sample, live, no-compass), × text scale (1.0, 1.3, AX1).
+- Adjacent layouts differ in grid mode and map surface.
+- Row widths plus gaps equal C.
+- Every gap is a token × k.
+- Header top is safe + 8.
+- Bottom spare ≤ 24.
+- No tile is taller than its cap.
+- In landscape, the four layouts produce four distinct plans.
+
+### C3.4 Prioritized fix list (cycle 3 → cycle 4)
+
+The instrument-panel structure and the four layouts stay; no lens gave a structural reason to drop either. Large changes its grid and map surface (C3.3), but it remains its own layout. Items are ranked by estimated composite gain. Platforms: **A** = Apple (iPhone, iPad, Mac), **D** = Android.
+
+| # | Platform / screen | Before | After | Metrics (est. composite gain) |
+|---|---|---|---|---|
+| 1 | A and D planners (`LayoutPlan.swift:279/469/506–511`, `LayoutPlan.kt:235/294–319`) | Spare height widens gaps (`gapGrow`). Medium is derived differently on each port. Android Large/XL lock → spot about 27 dp vs 8. XL leaves a 60–110 pt foot | One rule set (C3.3). Frozen tokens × k. Spare goes dial → map card → tile growth → top/bottom ≤ 24 each. `gapGrow` deleted. Shared golden JSON | Spacing, Logic, Flow (+0.15) |
+| 2 | A and D, Large on every device (iphone-7, android-8, ipad-7, mac-layout-large) | Same 3-column grid as Medium, dial +24, tiles 84 → 72 | 2 × 2 grid at (C − 8)/2 (Position, Elevation, Sun, Moon), Map moves to the header button, dial cap C − 16. Menu subtitles state the result. Golden test: grid mode and map surface differ between neighbours, dial(L) ≥ dial(M) + 16 | Logic, Flow (+0.10) |
+| 3 | A and D, no compass and live without heading (iphone-4, -11, ipad-11, android-12, mac) | `_ °`: dash on the baseline, ring adrift. Separate `NO HEADING` line. About 90 pt dead band | Vector dash 0.5 em × 0.08 em at the cap-height midline, white 40%, `°` placed as in `228°`. `NO HEADING` folded into the status line. Freed height → dial, then a 160 map card. Render test (±4 pt), not a string test | Accuracy, Form, BP (+0.08) |
+| 4 | A and D, header position and content (iphone-8 XL y≈170 vs 151, iphone-4 live 197; android-9/-2 at 175 vs 123) | Header top moves 20–50 pt between layouts and states. XL drops `, Colorado`. Sample pill in three positions | Pinned at safe top + 8 / status bar + 8 dp everywhere. Full place name always; shorten the date line first (`Sun, Nov 1` → `Nov 1`), then wrap the title. Sample pill always trails line 2 (13 pt semibold in a 20 pt capsule); only at AX sizes, line 1 trailing | Flow, Form, Accuracy (+0.06) |
+| 5 | iPad landscape, all layouts (ipad-9, -12, -13) | Small = Medium. Tiles 190–530 pt tall with 2–3 lines at the top, Sun:Moon about 2:1. XL right pane half empty. Readout in the bottom-left corner, about 12 from the edge | Left pane: dial + readout, vertically centred, readout 12 below the dial, ≥ 24 bottom. Right pane: lock 52, spot 52, tile rows fixed 80 (Sun and Moon at (C − 8)/2), the rest goes to the map card (≥ 240). Small: map card ≥ 60% of the pane, compact row. Large: 2 × 2, map in header, pane stack centred vertically. XL: left pane 60% wide, compact row, stack centred. Add landscape to the tile-cap test | Spacing, Logic, Flow (+0.07) |
+| 6 | A and D, large text and AX (iphone-5, -9, -12; android-6, -10, -13) | Dial stays about 380 pt / 360 dp. First screen ends mid-Position under the fade. iPhone large-text and AX1 render identically | At k ≥ 1.3: dial = min(C − 48, 0.36 H) (about 300 pt / 280 dp). Position and Elevation fully above the fold, which lands ≥ 24 below a whole block. At AX: lock + spot merge into one two-line "Targets" card, tiles become a 1-column list of 64 pt rows (caption leading, value trailing). Test: first tile row bottom ≤ H − safe, and the fade never crosses a value | Flow, BP, Accuracy (+0.07) |
+| 7 | D lock row (android-3, -7, -8, -9, -13) vs A (iphone-2, mac-main) | D: neutral tile, `Locked 240° · turn 12° right` as one run, wraps to `turn 12° / right` at AX. A: maroon tint, split | One component on both: 52 pt / dp tall, fill #3D2128 (night: red at 15% luminance), 1 pt border #5A2C38. `Locked 240°` leading at 17 regular, `turn 12° right` trailing at 17 semibold, 12 min gap, non-breaking spaces inside values. ✕ 18 dp in a 48 dp IconButton at 4 trailing inset. At k ≥ 1.5 the cue drops to line 2 at 15. The spot row uses the same two-column rule on the neutral tile fill | Form, Logic, Flow (+0.05) |
+| 8 | D map tile, card and sheet (android-3, -7, -8, -11, -12, live) | Cyan bold italic place labels (about #00E5FF), the most saturated element on screen. `Maroon Bells Amphitheatre` under the `3.2 mph` chip. Tile strip packs MAP pill + road shield + © OSM pill. (i) floats 40 dp from the attribution | Symbol layers: #C9D3D6 regular, not italic, 11–12 sp, 1.5 dp #0F3B3A halo, 70% opacity in the tile. POI labels hidden below 160 dp map height; road shields hidden below 200 dp wide. 48 dp collision padding around the speed chip and the control stack. Tile: one 24 dp bottom scrim band with `MAP` (11 sp caps, inset 10) and `© OSM` trailing at 10 sp. Card and sheet: `© OpenStreetMap ⓘ` in one pill bottom-leading at 8 dp, ⓘ with a 48 dp hit area. Night: red-tinted map at 35% luminance, not near-black | Form, BP (+0.05) |
+| 9 | A map tile (iphone-2, -7, -11, ipad-2, mac-main) | 130 × 90 pt live map with Apple's `Legal` in the middle over the cone and lake. MAP caption covers the bottom third | Below 160 pt wide: a static `MKMapSnapshotter` image with the user dot, a 24 pt bottom scrim with `MAP` (11 pt caps) + a 12 pt expand glyph leading, and `Maps` attribution trailing at 9 pt. Tap opens the sheet, which carries full Legal. One accessibility element: "Map, opens full map" | Form, Flow, BP (+0.04) |
+| 10 | iPad portrait, all layouts (ipad-2, -6, -7, -8) | Phone type ramp on a 1,024 pt canvas: about 9 pt captions and 17 pt values in 360–740 pt tiles. Side margin 92 (M) vs 36 (XL). Map thumbnail in Medium with room to spare | Regular-width ramp: header title 22 / sub 15, tile caption 13 caps, value 22 semibold tabular, secondary 15, readout 96, tile height 96, insets 14. Column min(W − 48, 720) centred, so the margin is the same in every layout. Medium promotes the map to a ≥ 200 card when ≥ 160 is spare | Form, Spacing, Logic (+0.04) |
+| 11 | iPad no-compass (ipad-11) | Switches to a 2-column Sun/Moon row and a map card that no normal layout uses | Same grid as that layout's normal state. Freed readout height → dial, then the map card per C3.3 | Logic (+0.02) |
+| 12 | Position tile (mac-layout-extraLarge-min; iphone-3-mgrs) | Mac XL-min: `39.09898° N` about 20 pt, `106.94117° W` about 16 pt (each line scaled on its own). MGRS: one line at the bottom of an 88 box with a 40 pt empty band | One shared size for the value block (compute the size from the longer line, or one `minimumScaleFactor` on the VStack inside `ViewThatFits`). One-line formats (MGRS, Plus Code) set the value at 20 pt, and the tile stays 72 (never grows) | Accuracy, Form (+0.03) |
+| 13 | A and D, tile internals (Medium grid) | SUN carries a glyph and MOON does not, so captions start at different x and baselines shift 2–3 pt. Sun's value is about 7 pt higher than Moon's `53%`. The map caption is at the bottom, every other caption at the top | All captions text-only, 11 pt caps +0.6 tracking, inset 10 top/leading. The last baseline of every value block sits at inset 10 bottom (including MGRS and Moon). The map tile keeps its bottom scrim caption (#8, #9) as the one deliberate exception, because it labels an image | Form, Spacing (+0.03) |
+| 14 | Phones, live / no-compass without a lock (iphone-4, -11, android-2, -12) | Three-line centred stack, then a 40–60 pt dead band before the spot row or tiles. Header pushed about 25 dp lower on D | The lock's 52 + 8 goes to the dial (up to its cap), then to a map card. Status → first row stays 8. Header pinned (#4) | Flow, Spacing (+0.03) |
+| 15 | D night (android-5) | Sample pill red on red. Map tile nearly black | Night Sample pill: red outline, red text, black fill. Map per #8 | Form, Accuracy (+0.02) |
+| 16 | D map sheet (android-11) | No grabber, covers the dimmed status bar | 32 × 4 dp grabber, status bar visible with `contentWindowInsets`, Done on the title baseline (as Apple) | BP, Form (+0.02) |
+| 17 | Mac, all layouts (mac-main, mac-layout-*) | Header has 32 at the top, tiles about 16 from the bottom edge. Header inset changes in XL | Equal 24 pt insets on all four edges. Header pinned (#4). Mac in the golden table | Spacing (+0.02) |
+| 18 | Terms (iphone-1, android-1) | Content in the top half, 170–300 pt empty band above the buttons. `Next, Bearings asks for your location.` floats alone | Content block centred in the space above the buttons (min safe top + 48). Note at 13 pt secondary, 16 above the primary button. Buttons 12 apart, 24 below the note, pinned to the bottom safe area + 16 | Spacing, Flow (+0.02) |
+| 19 | Widgets vs app (widget-*) | Sentence-case captions (`Sun`, `Sunrise`). Sunrise/sunset glyphs vs the app's ↑ / ↓. Medium widget place wraps to 2 lines, pushing content to 12 from the bottom | App caption style (11 pt semibold caps, +0.6 tracking, secondary): SUN / RISE / SET with ↑ / ↓. Place on 1 line with scale 0.8. 16 pt content inset on all four edges | Form (+0.02) |
+| 20 | A and D, scroll cue at large text | Fade only | Keep the 24 pt fade, flash the scroll indicator once on appear, and confirm the VoiceOver/TalkBack swipe scrolls into the cut tile | BP (+0.01) |
+
+**Tests added this cycle (both ports, one shared golden JSON):**
+- Gap tokens × k.
+- Header top is safe + 8.
+- Bottom spare ≤ 24.
+- Tile ≤ cap, in portrait and landscape.
+- Adjacent layouts differ in grid mode and map surface, in portrait and landscape.
+- Rendered no-heading dash centre within ±4 pt of the digit centre-line.
+- Both Position lines at the same point size.
+- At k ≥ 1.3, Position and Elevation fully above the fold.
+- Lock row: label and cue never split within a value.
+- Android map label colour and italics checked against the style JSON.
+
+### C3.5 Projection
+
+Items 1–3 are the frozen rhythm with one planner, a distinct Large, and the dash. Fixing them should lift Spacing to about 4.0, Logic to 4.2 and Accuracy to 4.2, for a composite of about 4.1. Items 4–9 add header stability, iPad landscape, large text, port parity on the lock row and maps, and the Apple map tile. They take Flow and Form to about 4.3 and the composite to about **4.3–4.35** after cycle 4.
+
+Reaching 4.85 needs every cell of the golden table (device × layout × state × text scale × orientation) re-shot and judged, with:
+- no rhythm exceptions;
+- identical components on both ports;
+- iPad with its own type ramp;
+- widgets in the app's caption language.
+
+Expect two more cycles. The remaining risk is structural: if the four layouts still look alike to the owner after the C3.3 Large rule, the panel recommends a menu preview (a thumbnail of each plan) rather than a fifth rule.
