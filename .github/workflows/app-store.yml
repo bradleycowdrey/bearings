@@ -43,6 +43,9 @@ jobs:
           }
           shoot() {   # $1 device, $2 prefix
             D="$1"; xcrun simctl boot "$D"; xcrun simctl bootstatus "$D" -b
+            # A fresh Simulator shows first-boot banners (Apple Intelligence and the like) for a while;
+            # let them pass so none lands in a store screenshot.
+            sleep 90
             xcrun simctl ui "$D" appearance dark
             xcrun simctl status_bar "$D" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 || true
             xcrun simctl install "$D" dist/ios/Bearings.app
