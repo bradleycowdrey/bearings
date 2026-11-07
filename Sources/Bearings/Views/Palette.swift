@@ -72,6 +72,24 @@ enum Palette {
         static let tile = 0.08
         static let rowFill = 0.07
     }
+
+    // MARK: Night (docs/REFINE.md §4.3)
+
+    /// Night mode's red, multiplied over everything, so whites turn red and nothing stays blue or green.
+    static let nightRGB: (red: Double, green: Double, blue: Double) = (1, 0.18, 0.12)
+    static let nightTint = Color(red: nightRGB.red, green: nightRGB.green, blue: nightRGB.blue)
+    /// Secondary text's white at night: 0.9, which the tint turns into about #E62A1C (4.7:1 on black;
+    /// at least #E03020 is required). By day it stays white at 60%.
+    static let nightSecondary = 0.9
+    /// Secondary text (tile captions and second lines, the status line): white at 60%, or 90% at night.
+    static func secondary(night: Bool) -> Color { Color.white.opacity(night ? nightSecondary : Op.caption) }
+    /// The WCAG contrast of night secondary text on black, for the self-tests (it must be 4.5 or more).
+    static func nightSecondaryContrast() -> Double {
+        func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+        let r = nightRGB.red * nightSecondary, g = nightRGB.green * nightSecondary, b = nightRGB.blue * nightSecondary
+        let l = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+        return (l + 0.05) / 0.05
+    }
 }
 
 /// Sizes shared by every screen (DESIGN.md's grid, in Two Degrees' shapes). Points on Apple, dp on Android.
@@ -100,6 +118,39 @@ enum Look {
     static let stroke: CGFloat = 1
     /// Screens shorter than this drop the title row; the ⋯ menu moves into the sky card.
     static let compactHeight: CGFloat = 700
+
+    // MARK: The tile component (docs/REFINE.md §3.2), shared by the app's tiles and the widgets
+
+    /// A tile's caption: 11 semibold, uppercase, tracking 0.6, secondary white.
+    static let tileCaptionSize: CGFloat = 11
+    static let tileCaptionTracking: CGFloat = 0.6
+    /// A tile's value: 17 medium, tabular figures.
+    static let tileValueSize: CGFloat = 17
+    /// A tile's second line: 13 regular, secondary white.
+    static let tileSecondarySize: CGFloat = 13
+    /// Inside a tile: 12 across, 10 down.
+    static let tilePaddingH: CGFloat = 12
+    static let tilePaddingV: CGFloat = 10
+    /// The widgets keep 10 pt captions because of their size.
+    static let widgetCaptionSize: CGFloat = 10
+    /// The header bar's corners.
+    static let headerRadius: CGFloat = 14
+
+    /// "Last Quarter" → "Last quarter", as the Moon tile and the widgets write it.
+    static func phaseName(_ phase: Sky.Phase) -> String {
+        guard let first = phase.name.first else { return phase.name }
+        return String(first) + phase.name.dropFirst().lowercased()
+    }
+
+    /// "53% · Last quarter": the same wording in the app and the widgets.
+    static func moonText(_ phase: Sky.Phase) -> String {
+        "\(Int(Geo.jsRound(phase.fraction * 100)))% · \(phaseName(phase))"
+    }
+
+    /// "↑ 6:36 AM ↓ 5:08 PM", in the device's 12- or 24-hour style.
+    static func sunText(rise: Date, set: Date) -> String {
+        "↑ \(rise.formatted(date: .omitted, time: .shortened)) ↓ \(set.formatted(date: .omitted, time: .shortened))"
+    }
 }
 
 /// The sky behind the place card, as in Two Degrees, following the sun's real altitude where you are: deep

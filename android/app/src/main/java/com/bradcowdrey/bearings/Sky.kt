@@ -127,4 +127,10 @@ object Sky {
 
     /** "Waxing Gibbous · 82%" */
     fun moonLine(p: MoonPhase): String = "${p.name} · ${Geo.jsRound(p.fraction * 100)}%"
+
+    /** "Last quarter": the phase's name in sentence case, as the Moon tile and the widgets show it. */
+    fun phaseName(p: MoonPhase): String = p.name.lowercase(java.util.Locale.ROOT).replaceFirstChar { it.uppercase() }
+
+    /** "53% · Last quarter": the Moon wording shared by the app and the widgets (docs/REFINE.md §3.7). */
+    fun moonWords(p: MoonPhase): String = "${Geo.jsRound(p.fraction * 100)}% · ${phaseName(p)}"
 }

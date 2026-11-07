@@ -17,9 +17,24 @@ enum PhoneSelfTest {
 
         for (name, ok) in CoreChecks.run() { check(ok, name) }
 
-        // The layout planner (docs/LAYOUTS.md): the dial never under 40% of the height in a portrait column.
+        // The layout planner (docs/REFINE.md §3.3 and §4.7): every device × layout × state × text size leaves no
+        // more than 24 empty at the bottom, cuts nothing and keeps the dial at its floor or more.
         let planFailures = LayoutPlan.tableFailures()
-        check(planFailures.isEmpty, "Layout planner table (\(planFailures.first ?? "all cases keep the dial at 40% or more"))")
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "nothing empty, nothing cut, every dial at its floor" : planFailures.prefix(3).joined(separator: "; ")))")
+        for line in LayoutPlan.summary(w: 402, h: 874, s: 778, hasSpot: true, locked: true) {
+            lines.append("INFO iPhone 16 Pro, sample: \(line)")
+        }
+        // Night secondary text: at least 4.5:1 on black (§4.3).
+        let contrast = Palette.nightSecondaryContrast()
+        check(contrast >= 4.5, String(format: "Night secondary text contrast %.2f:1", contrast))
+        // No coordinate is ever ellipsized (§4.7): the strings themselves never carry "…".
+        let ellipsized = Geo.Format.allCases.filter { format in
+            switch Geo.format(format, lat: 39.09898, lon: -106.94117) {
+            case let .pair(lat, lon): return lat.contains("…") || lon.contains("…")
+            case let .single(value): return value.contains("…")
+            }
+        }
+        check(ellipsized.isEmpty, "Coordinates without an ellipsis in every format\(ellipsized.isEmpty ? "" : " (\(ellipsized.map(\.rawValue).joined(separator: ", ")))")")
 
         check(Geo.bundledCities.count > 10000, "Place list bundled (\(Geo.bundledCities.count) places)")
         let offline = Geo.offlinePlaceName(lat: 39.09898, lon: -106.94117, feet: true)
@@ -67,7 +82,8 @@ enum PhoneSelfTest {
             }
         }
 
-        let head = failed == 0 ? "ALL PASSED (\(lines.count) checks)" : "FAILED \(failed) of \(lines.count) checks"
+        let checks = lines.filter { !$0.hasPrefix("INFO") }.count
+        let head = failed == 0 ? "ALL PASSED (\(checks) checks)" : "FAILED \(failed) of \(checks) checks"
         try? ([head] + lines).joined(separator: "\n").appending("\n").write(to: docs.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
     }
 

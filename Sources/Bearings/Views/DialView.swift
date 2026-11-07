@@ -23,6 +23,9 @@ struct DialView: View {
     var moonPhase: Double = 0
     /// The marked spot's direction on the card.
     var spot: Double? = nil
+    /// No compass here (docs/REFINE.md §4.2): the card at 40%, no lubber line or lock arc, a "no compass"
+    /// glyph in the middle and "N ↑ fixed" inside the top of the ring.
+    var noCompass = false
 
     var body: some View {
         GeometryReader { geo in
@@ -33,8 +36,20 @@ struct DialView: View {
                 Circle().strokeBorder(Palette.tileStroke, lineWidth: Look.stroke)
                 card(k: k)
                     .rotationEffect(.degrees(rotation))
+                    .opacity(noCompass ? 0.4 : 1)
                 fixedParts(k: k)
                 bubble(k: k)
+                if noCompass {
+                    Image(systemName: "location.slash")
+                        .font(.system(size: 28, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(Palette.Op.caption))
+                        .accessibilityHidden(true)
+                    Text("N ↑ fixed")
+                        .font(.system(size: max(11, 13 * k), weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(Palette.Op.caption))
+                        .offset(y: -122 * k)  // between the crosshair's top end and the N
+                        .accessibilityHidden(true)
+                }
             }
             .frame(width: side, height: side)
             .position(x: geo.size.width / 2, y: geo.size.height / 2)
@@ -104,7 +119,7 @@ struct DialView: View {
                 c2.fill(Path(ellipseIn: CGRect(x: -3 * k, y: -179 * k, width: 6 * k, height: 6 * k)), with: .color(.black))
             }
             // A locked bearing: a mark on the card and an arc to where the phone points.
-            if let lock {
+            if let lock, !noCompass {
                 var c2 = ctx
                 c2.translateBy(x: c.x, y: c.y)
                 c2.rotate(by: .degrees(lock))
@@ -126,9 +141,11 @@ struct DialView: View {
     private func fixedParts(k: CGFloat) -> some View {
         Canvas { ctx, size in
             let c = CGPoint(x: size.width / 2, y: size.height / 2)
-            var lubber = Path()
-            lubber.move(to: CGPoint(x: c.x, y: 0)); lubber.addLine(to: CGPoint(x: c.x + 9 * k, y: 16 * k)); lubber.addLine(to: CGPoint(x: c.x - 9 * k, y: 16 * k)); lubber.closeSubpath()
-            ctx.fill(lubber, with: .color(.white))
+            if !noCompass {
+                var lubber = Path()
+                lubber.move(to: CGPoint(x: c.x, y: 0)); lubber.addLine(to: CGPoint(x: c.x + 9 * k, y: 16 * k)); lubber.addLine(to: CGPoint(x: c.x - 9 * k, y: 16 * k)); lubber.closeSubpath()
+                ctx.fill(lubber, with: .color(.white))
+            }
             var cross = Path()
             cross.move(to: CGPoint(x: c.x, y: c.y - 112 * k)); cross.addLine(to: CGPoint(x: c.x, y: c.y + 112 * k))
             cross.move(to: CGPoint(x: c.x - 112 * k, y: c.y)); cross.addLine(to: CGPoint(x: c.x + 112 * k, y: c.y))

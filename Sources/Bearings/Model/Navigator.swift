@@ -81,6 +81,8 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
     /// How large the compass is (docs/LAYOUTS.md): Small, Medium (the default), Large or Extra Large.
     /// A `--layout` launch argument shows one without saving it (`showLayout`).
     @Published var layout: Layout { didSet { if !layoutForThisLaunch { defaults.set(layout.rawValue, forKey: "layout") } } }
+    /// The full-height map sheet is open (the Map tile, the header's map button, `--map-sheet`).
+    @Published var mapSheet = false
     @Published private(set) var spot: Spot? {
         didSet {
             guard !sample else { return }
@@ -392,6 +394,30 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
         return text
     }
+
+    /// The status line under the readout: "True north · 8° E declination · ±8° accuracy".
+    var statusText: String {
+        var parts = [usingTrueNorth ? "True north" : "Magnetic north"]
+        if usingTrueNorth, let d = declination, abs(d) >= 0.5 {
+            parts.append("\(Int(Geo.jsRound(abs(d))))° \(d >= 0 ? "E" : "W") declination")
+        }
+        if let acc = headingAccuracy { parts.append("±\(Int(acc.rounded()))° accuracy") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The status line spelled out for VoiceOver: "True north, 8 degrees east declination, plus or minus
+    /// 8 degrees accuracy".
+    var spokenStatus: String {
+        var parts = [usingTrueNorth ? "True north" : "Magnetic north"]
+        if usingTrueNorth, let d = declination, abs(d) >= 0.5 {
+            parts.append("\(Int(Geo.jsRound(abs(d)))) degrees \(d >= 0 ? "east" : "west") declination")
+        }
+        if let acc = headingAccuracy { parts.append("plus or minus \(Int(acc.rounded())) degrees accuracy") }
+        return parts.joined(separator: ", ")
+    }
+
+    /// No compass here (a Mac, or a device without one): the dial rests at north, faded.
+    var noCompass: Bool { compass == .unavailable && heading == nil }
 
     /// Accuracy worse than this asks for a figure 8.
     static let poorHeadingAccuracy = 25.0

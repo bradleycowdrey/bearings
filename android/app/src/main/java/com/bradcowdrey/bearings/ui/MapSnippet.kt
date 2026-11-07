@@ -67,8 +67,11 @@ import kotlin.math.pow
 /**
  * The map of where you are: MapLibre with OpenFreeMap's OpenStreetMap tiles (free, no key), centred on
  * you, north up or turned with your heading. The dot, accuracy circle and heading cone are drawn over its
- * centre. + and − zoom, the arrow switches north up and follow heading, and the last button opens the
- * place in your map app. [trueHeading] is from true north, as the map is.
+ * centre. With [controls] (the map card and the map sheet, docs/REFINE.md §3.2) one cluster of 36 dp circles
+ * in 48 dp targets sits 12 in from the top-trailing corner (+, −, follow heading, open in your map app: a
+ * column where the map is tall enough, otherwise two rows of two), the speed chip 12 in from the top-leading
+ * corner, and the bottom 24 stays clear for the attribution. Without them (the Map tile) it is a north-up
+ * thumbnail with gestures off. [trueHeading] is from true north, as the map is.
  */
 @Composable
 fun MapSnippet(
@@ -81,33 +84,50 @@ fun MapSnippet(
     onOpen: (Fix) -> Unit,
     modifier: Modifier = Modifier,
     live: Boolean = true,
+    controls: Boolean = true,
 ) {
-    // A rounded card on black, as Two Degrees' rain map: the tile fill before the map loads, a 1 dp edge over it.
+    // A rounded card on black: the tile fill before the map loads, a 1 dp edge over it.
     val shape = Look.shape
     BoxWithConstraints(modifier.clip(shape).background(Palette.tileFill)) {
         if (fix == null) {
-            Text("The map appears once Bearings knows where you are.", style = text(13f, color = white(Op.CAPTION)),
+            Text(if (controls) "The map appears once Bearings knows where you are." else "—", style = text(13f, color = secondary()),
                 textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.Center).padding(16.dp))
         } else {
-            var zoom by remember { mutableDoubleStateOf(15.0) }
-            MapContent(fix, trueHeading, follow, live, zoom)
-            // Night mode dims the map; the screen's red multiply then does the rest.
-            if (night) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
-            // Four buttons stack down the right when there's room; on a short map they sit in a row.
-            val tall = maxHeight >= 44.dp * 4 + 8.dp
-            val buttons: @Composable () -> Unit = {
-                MapButton(Icons.Filled.Add, "Zoom in") { zoom = (zoom + 1).coerceAtMost(19.0) }
-                MapButton(Icons.Filled.Remove, "Zoom out") { zoom = (zoom - 1).coerceAtLeast(3.0) }
-                MapButton(if (follow) Icons.Filled.Navigation else Icons.Outlined.Navigation,
-                    if (follow) "Map follows your heading. Switch to north up" else "Map is north up. Switch to follow your heading", on = follow, onClick = onToggleFollow)
-                MapButton(Icons.AutoMirrored.Filled.OpenInNew, "Open in your map app") { onOpen(fix) }
-            }
-            if (tall) Column(Modifier.align(Alignment.TopEnd).padding(4.dp)) { buttons() }
-            else Row(Modifier.align(Alignment.TopEnd).padding(4.dp)) { buttons() }
-            if (speed != null) {
-                Text(speed, style = text(13f, FontWeight.SemiBold, Color.White),
-                    modifier = Modifier.align(Alignment.BottomStart).padding(10.dp).clip(CircleShape)
-                        .background(Palette.mapControl).padding(horizontal = 10.dp, vertical = 5.dp))
+            var zoom by remember { mutableDoubleStateOf(if (controls) 15.0 else 14.0) }
+            MapContent(fix, trueHeading, follow && controls, live, zoom)
+            // Night mode: the map at 15% brightness or less, so it is never the brightest thing on screen;
+            // the screen's red multiply then does the rest.
+            if (night) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)))
+            if (controls) {
+                // 12 in to the circles: their 48 dp targets start 6 in.
+                val column = maxHeight >= 6.dp + 48.dp * 4 + 24.dp
+                val buttons: @Composable () -> Unit = {
+                    MapButton(Icons.Filled.Add, "Zoom in") { zoom = (zoom + 1).coerceAtMost(19.0) }
+                    MapButton(Icons.Filled.Remove, "Zoom out") { zoom = (zoom - 1).coerceAtLeast(3.0) }
+                    MapButton(if (follow) Icons.Filled.Navigation else Icons.Outlined.Navigation,
+                        if (follow) "Map follows your heading. Switch to north up" else "Map is north up. Switch to follow your heading", on = follow, onClick = onToggleFollow)
+                    MapButton(Icons.AutoMirrored.Filled.OpenInNew, "Open in your map app") { onOpen(fix) }
+                }
+                if (column) {
+                    Column(Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp)) { buttons() }
+                } else {
+                    Column(Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp)) {
+                        Row {
+                            MapButton(Icons.Filled.Add, "Zoom in") { zoom = (zoom + 1).coerceAtMost(19.0) }
+                            MapButton(Icons.Filled.Remove, "Zoom out") { zoom = (zoom - 1).coerceAtLeast(3.0) }
+                        }
+                        Row {
+                            MapButton(if (follow) Icons.Filled.Navigation else Icons.Outlined.Navigation,
+                                if (follow) "Map follows your heading. Switch to north up" else "Map is north up. Switch to follow your heading", on = follow, onClick = onToggleFollow)
+                            MapButton(Icons.AutoMirrored.Filled.OpenInNew, "Open in your map app") { onOpen(fix) }
+                        }
+                    }
+                }
+                if (speed != null) {
+                    Text(speed, style = text(13f, FontWeight.SemiBold, Color.White),
+                        modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(CircleShape)
+                            .background(Palette.mapControl).padding(horizontal = 10.dp, vertical = 5.dp))
+                }
             }
         }
         // The card's edge, drawn over the map.
@@ -165,7 +185,7 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
         AndroidView({ view }, Modifier.fillMaxSize())
     }
     if (!loaded) {
-        Text(if (live) "Loading the map…" else "Map", style = text(13f, color = white(Op.CAPTION)),
+        Text(if (live) "Loading the map…" else "Map", style = text(13f, color = secondary()),
             modifier = Modifier.align(Alignment.Center))
     }
     // You: accuracy circle, heading cone and dot, over the map's centre. MapLibre's zoom is in 512-dp tiles.
@@ -189,14 +209,14 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
     }
 }
 
-/** A 32 dp circle on the map, in a 44 dp touch target: dark, or white when [on] (Follow Heading). */
+/** A 36 dp circle on the map, in a 48 dp touch target: dark, or white when [on] (Follow Heading). */
 @Composable
 private fun MapButton(icon: ImageVector, label: String, on: Boolean = false, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
+        Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(32.dp).clip(CircleShape).background(if (on) Color.White else Palette.mapControl),
+        Box(Modifier.size(36.dp).clip(CircleShape).background(if (on) Color.White else Palette.mapControl),
             contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(17.dp))
         }

@@ -74,27 +74,27 @@ decorative and hidden from screen readers. It's 17 medium, white at 85%.
 
 ## Main screen, phone (top to bottom)
 
-Background `Palette.screen` (black) edge to edge. Column margins 16, gaps between blocks 12 (8 on
-screens under 700 high on Android, as now). Everything else in DESIGN.md's grid holds.
+Background `Palette.screen` (black) edge to edge. Column margins 16 (20 on iPad). The gaps between
+blocks are the planner's spacing tokens, 4 / 8 / 12 / 16 / 24 only (docs/LAYOUTS.md §3).
 
-1. **Title row** (48 high, `Look.titleRow` × wide): "Bearings", 34 bold, white, tracking 0.4, on the
-   left, one line. It's a header for accessibility. On the right is the ⋯ menu: Apple uses
-   `ellipsis.circle` at 22 regular, white, in a 44 × 44 target. Android uses a 36 dp circle filled
-   `Palette.chipOff` with `MoreHoriz` 20 dp white, in a 48 dp target. The accessibility label stays
-   "Settings and more". The gap below the title row is **4**.
-   On screens under 700 high (`Look.compactHeight`; iPhone SE and short Android phones) there's **no
-   title row**. The ⋯ menu moves into the sky card's top-right corner, in place of its symbol, so the
-   dial keeps its room.
-2. **Sky card** (`skyCard(altitude:)`), full width, padding 14 (12 when compact). White type:
-   - Line 1: the place (`nav.placeTitle`), 20 semibold, tracking −0.3, one line, ends with … if long.
-   - Line 2 (2 below): "Sat, Nov 1 · 9:41 AM", 14 medium, white at 85%, tabular figures. The **Sample**
-     badge follows it: 11 semibold, black on `Palette.notice`, a capsule 6 × 1.
-   - Top right: the sky symbol (or the ⋯ menu when compact).
-   - Height: 28 + 44 × k (24 + 44 × k compact, and never under 68 so the menu keeps its 44 target).
-     `dialSide` budgets the title row (48 × wide + 4, unless compact) plus this, in place of the old
-     44-high header.
-   - The card is one accessibility element with the header trait, read as now ("Aspen, Colorado, Sat,
-     Nov 1 · 9:41 AM").
+1. **Header bar** (replaces the title row, the sky card and the sky bar on every layout and platform;
+   docs/REFINE.md §3.2): 48 high (52 on iPad) × k, radius 14 (`Look.headerRadius`), full column width,
+   on the sky gradient (`skyCard(altitude:)`'s colours, unchanged). White type:
+   - Line 1: the place (`nav.placeTitle`), 17 semibold, one line. When too long the state is dropped
+     first ("Maroon Bells"), then it truncates.
+   - Line 2: "Sun, Nov 1 · 9:41 AM", 13 regular, white at 75%, tabular figures, then the **Sample** pill
+     (11 semibold, black on `Palette.notice`).
+   - Trailing, fixed on every layout: the sky symbol (20, decorative), then the **map button** (only when
+     the map is neither a tile nor a card; 44 × 44, 48 dp), then **⋯** (44 × 44, 48 dp; 8 apart). ⋯
+     never moves. Apple uses `ellipsis.circle`; Android a 36 dp `Palette.chipOff` circle with
+     `MoreHoriz`. The accessibility label stays "Settings and more".
+   - There is no "Bearings" title on the main screen: iOS keeps it as the accessibility screen title,
+     the Mac window's title says Bearings, and Android sets `paneTitle = "Bearings"`.
+   - Accessibility text sizes: line 1 may wrap to two lines, line 2 moves under it.
+   - The bar is one accessibility element with the header trait ("Aspen, Colorado, Sat, Nov 1 · 9:41 AM").
+2. **Below the header**, the gaps are the planner's (docs/LAYOUTS.md §3): 4 above the header, 12 to the
+   dial. The status line, lock chip, spot row and labelled tile grid that follow are described in
+   docs/LAYOUTS.md §2; items 5–8 below keep only the colours and glyphs that still apply.
 3. **Dial**, on black, sized as now. Restyled:
    - Disc: `Palette.tileFill` with a 1-point ring of `Palette.tileStroke`.
    - Ticks: 30° ticks white (2.4 wide), 10° ticks white at 60% (1.4), 2° ticks white at 30% (1).

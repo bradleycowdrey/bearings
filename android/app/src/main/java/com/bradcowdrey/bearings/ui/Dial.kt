@@ -3,9 +3,18 @@ package com.bradcowdrey.bearings.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -18,6 +27,8 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import com.bradcowdrey.bearings.DialBody
 import com.bradcowdrey.bearings.Geo
 import kotlin.math.PI
@@ -42,13 +53,15 @@ class DialMarks(
  * The compass card: ticks every 2°, numbers every 30°, the points, and on it the sun, the moon, the
  * marked spot's pin and the locked bearing. It turns opposite to the phone under a fixed lubber line at
  * the top; a bubble level sits in the middle. Drawn on a 400-unit square, like the web and Apple versions.
+ * With [noCompass] (docs/REFINE.md §4.2) the rose drops to 40%, the lubber line goes, and a "no compass"
+ * glyph sits in the middle with "N ↑ fixed" at the top of the ring, so the sun and moon read from north.
  */
 @Composable
-fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float, Float>?, modifier: Modifier = Modifier) {
+fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float, Float>?, modifier: Modifier = Modifier, noCompass: Boolean = false) {
     val measurer = rememberTextMeasurer()
     val labels = remember { mutableMapOf<String, androidx.compose.ui.text.TextLayoutResult>() }
     Box(modifier) {
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = if (noCompass) 0.4f else 1f }) {
             val k = size.minDimension / 400f
             val c = Offset(size.width / 2, size.height / 2)
             fun label(t: String, deg: Float, radius: Float, sizePt: Float, weight: FontWeight, color: Color) {
@@ -108,8 +121,10 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
             val sun = marks.sun
             if (sun != null) sunGlyph(at(sun.azimuth, 118f), k, if (sun.up) 1f else 0.35f)
             // Fixed: the lubber line (where the phone points), cross hairs and the level's rings.
-            val lubber = Path().apply { moveTo(c.x, c.y - 200 * k); lineTo(c.x + 9 * k, c.y - 184 * k); lineTo(c.x - 9 * k, c.y - 184 * k); close() }
-            drawPath(lubber, Color.White)
+            if (!noCompass) {
+                val lubber = Path().apply { moveTo(c.x, c.y - 200 * k); lineTo(c.x + 9 * k, c.y - 184 * k); lineTo(c.x - 9 * k, c.y - 184 * k); close() }
+                drawPath(lubber, Color.White)
+            }
             val hair = Color.White.copy(alpha = 0.07f)
             drawLine(hair, Offset(c.x, c.y - 100 * k), Offset(c.x, c.y + 100 * k), 1f)
             drawLine(hair, Offset(c.x - 100 * k, c.y), Offset(c.x + 100 * k, c.y), 1f)
@@ -125,6 +140,12 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
                 drawCircle(if (level) Palette.level else Color.White, radius = 11 * k,
                     center = Offset(c.x + (x * s * 40 * k).toFloat(), c.y + (y * s * 40 * k).toFloat()))
             }
+        }
+        if (noCompass) {
+            Icon(Icons.Filled.LocationOff, null, tint = Color.White, modifier = Modifier.align(Alignment.Center).size(28.dp))
+            Text("N ↑ fixed", style = text(11f, FontWeight.SemiBold, white(Op.SUB)), textAlign = TextAlign.Center,
+                // Inside the ring, under the N (a quarter of the way down).
+                modifier = Modifier.align(BiasAlignment(0f, -0.5f)).fillMaxWidth())
         }
     }
 }

@@ -587,7 +587,7 @@ class Navigator(private val context: Context, private val displayRotation: () ->
 
     // ---------- A sample place (screenshots, CI) ----------
 
-    /** Maroon Bells, Colorado, at 9 AM on 1 November 2026, with a spot marked near Aspen and a bearing locked. */
+    /** Maroon Bells, Colorado, at 9:41 AM on 1 November 2026 (as on Apple), with a spot marked near Aspen and a bearing locked. */
     fun showSample(sampleHeading: Double = 228.0, sampleLock: Double? = 240.0) {
         stop()
         sample = true
@@ -607,7 +607,8 @@ class Navigator(private val context: Context, private val displayRotation: () ->
 
     companion object {
         const val POOR_HEADING_ACCURACY = 25.0
-        const val SAMPLE_TIME = 1793548800000L
+        /** 9:41 AM in Colorado on Sunday 1 November 2026. */
+        const val SAMPLE_TIME = 1793551260000L
 
         /** The marked spot saved in the app's preferences ("lat,lon"), for the app and the widget. */
         fun savedMark(prefs: SharedPreferences): Pair<Double, Double>? {

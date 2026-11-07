@@ -3,9 +3,10 @@ name: iPhone
 # Builds the iPhone and iPad app with its widget, checks the packaged widget, and runs the app in the
 # iOS Simulator: --selftest with the Simulator placed at Maroon Bells, Colorado (location fix, live
 # ground elevation, naming the place, the compass's "no compass" state, every widget size drawn, the
-# layout planner's 40% floor), then photographs the terms, the live screen, the sample place and every
-# compass layout (--layout small|large|extraLarge; the rest use the Medium default, docs/LAYOUTS.md §11)
-# on iPhone and iPad. Results go to the ci-shots-ios branch; the job fails if any check fails.
+# layout planner's golden table: nothing empty, nothing cut, every dial at its floor), then photographs
+# the terms, the live screen, the sample place, every layout (--layout small|large|extraLarge; the rest
+# use the Medium default) and the map sheet (--map-sheet) on iPhone and iPad (docs/LAYOUTS.md §8).
+# Results go to the ci-shots-ios branch; the job fails if any check fails.
 on:
   push:
     branches: [main]
@@ -66,10 +67,13 @@ jobs:
             xcrun simctl io "$DEVICE" screenshot "$OUT/$P-2-sample.png"; xcrun simctl terminate "$DEVICE" $ID || true
             xcrun simctl launch "$DEVICE" $ID --sample --format mgrs; sleep 6
             xcrun simctl io "$DEVICE" screenshot "$OUT/$P-3-mgrs.png"; xcrun simctl terminate "$DEVICE" $ID || true
-            # Every compass layout (docs/LAYOUTS.md); shown for the launch only, never saved.
+            # Every layout (docs/LAYOUTS.md); shown for the launch only, never saved.
             shoot_layout "$DEVICE" small "$P-6-small"
             shoot_layout "$DEVICE" large "$P-7-large"
             shoot_layout "$DEVICE" extraLarge "$P-8-xl"
+            # The map sheet (the Map tile's full-height sheet), opened at launch with --map-sheet.
+            xcrun simctl launch "$DEVICE" $ID --sample --format dd --map-sheet; sleep 8
+            xcrun simctl io "$DEVICE" screenshot "$OUT/$P-10-map-sheet.png"; xcrun simctl terminate "$DEVICE" $ID || true
           }
           shoot_layout() {   # $1 = device, $2 = layout id, $3 = file name (no .png)
             # --format dd: the -3-mgrs shot saved MGRS as the format; the layout itself is never saved.
@@ -78,11 +82,12 @@ jobs:
           }
           PHONE=$(pick iPhone)
           run_on "$PHONE" iphone
-          # The iPhone's Text Size turned up: the screen must still fit, with larger type.
+          # The iPhone's Text Size turned up: the screen must still fit, with larger type; tiles grow
+          # and coordinates wrap rather than end in "…".
           xcrun simctl ui "$PHONE" content_size extra-extra-large || true
-          xcrun simctl launch "$PHONE" $ID --sample; sleep 6
+          xcrun simctl launch "$PHONE" $ID --sample --format dd; sleep 6
           xcrun simctl io "$PHONE" screenshot "$OUT/iphone-5-large-text.png"; xcrun simctl terminate "$PHONE" $ID || true
-          # The same Text Size at Extra Large: the planner gives things up, the dial stays at 40% or more.
+          # The same Text Size at Extra Large: the planner gives things up (or scrolls as one list), nothing is cut.
           shoot_layout "$PHONE" extraLarge iphone-9-xl-large-text
           xcrun simctl ui "$PHONE" content_size large || true
           # The self-test, with a real location fix and network.

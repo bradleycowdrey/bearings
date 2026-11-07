@@ -24,8 +24,8 @@ import kotlinx.coroutines.launch
 /**
  * The app: one screen. Extras for CI: `selftest` runs the checks and writes files/report.txt; `sample`
  * shows the sample place; `format` picks a coordinate format; `night` turns on night mode and `layout`
- * (small, medium, large, extraLarge) picks the compass size, both without saving; `show` = "terms" shows
- * the terms.
+ * (small, medium, large, extraLarge) picks the layout, both without saving; `mapSheet` opens the map sheet
+ * at launch; `show` = "terms" shows the terms.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var nav: Navigator
@@ -56,7 +56,8 @@ class MainActivity : ComponentActivity() {
                     useLocation()
                 }
             } else {
-                MainScreen(nav, onUseLocation = ::useLocation, onOpenSettings = ::openSettings)
+                MainScreen(nav, onUseLocation = ::useLocation, onOpenSettings = ::openSettings,
+                    showMapSheet = intent.getBooleanExtra("mapSheet", false))
             }
         }
         when {

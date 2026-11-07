@@ -88,7 +88,8 @@ struct WidgetReadings {
     var sunrise: String? { times.sunriseDate?.formatted(date: .omitted, time: .shortened) }
     var sunset: String? { times.sunsetDate?.formatted(date: .omitted, time: .shortened) }
     var polarText: String { times.polar == .day ? "Sun up all day" : "Sun down all day" }
-    var moonText: String { "\(moon.name) · \(Int(Geo.jsRound(moon.fraction * 100)))%" }
+    /// "53% · Last quarter": the same wording as the app's Moon tile (Look.moonText).
+    var moonText: String { Look.moonText(moon) }
 
     /// "9.2 mi · 46° NE" to the marked spot, if there is one.
     var spotText: String? {
@@ -390,7 +391,7 @@ private struct SunRow: View {
                                     @ViewBuilder mark: () -> Mark) -> some View {
         VStack(spacing: 3) {
             Text(label)
-                .font(.system(size: 10, weight: first ? .semibold : .medium))
+                .font(.system(size: Look.widgetCaptionSize, weight: first ? .semibold : .medium))
                 .foregroundStyle(first ? ink.label : ink.muted)
             mark()
                 .frame(height: 34)
@@ -409,7 +410,7 @@ private struct SunRow: View {
     }
 }
 
-/// "Waxing Gibbous · 82%" with the moon's glyph.
+/// "82% · Waxing gibbous" with the moon's glyph.
 private struct MoonLine: View {
     let r: WidgetReadings
     let ink: WidgetInk

@@ -4,8 +4,8 @@ import WidgetKit
 
 /// `Bearings --selftest <folder>`: what CI checks on a real Mac. The core's known answers, a live ground
 /// elevation from Open-Meteo, naming a place (the geocoder and the bundled list), the update check, the
-/// screen drawn with the sample place (and in night mode, and in each layout), the layout planner's table
-/// (the dial never under 40% of the height), and every widget size drawn the way the
+/// screen drawn with the sample place (and in night mode, and in each layout), the layout planner's golden
+/// table (nothing empty, nothing cut, every dial at its floor), night contrast, and every widget size drawn the way the
 /// widget draws it. Writes report.txt (first line "ALL PASSED" or "FAILED …") and PNGs to the folder,
 /// then quits.
 @MainActor
@@ -45,12 +45,27 @@ enum SelfTest {
 
         check(Updater.isNewer("0.2.0", than: "0.1.9") && !Updater.isNewer("0.1.0", than: "0.1.0") && !Updater.isNewer("1.0", than: "dev"), "Update version comparison")
 
-        // The layout planner (docs/LAYOUTS.md §2.1 and §11): every device, layout, text size, marked spot and
-        // banner keeps the dial at 40% of the height or more in a portrait column.
+        // The layout planner (docs/REFINE.md §3.3 and §4.7): every device × layout × state × text size leaves no
+        // more than 24 empty at the bottom, cuts nothing and keeps the dial at its floor or more.
         let planFailures = LayoutPlan.tableFailures()
-        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "all cases keep the dial at 40% or more" : planFailures.prefix(3).joined(separator: "; ")))")
-        let mac = LayoutPlan.plan(w: 420, h: 840, s: 840)
-        check(abs(mac.dial - 369.6) < 1 && mac.layout == .medium, "Medium dial at 420 × 840 (\(Int(mac.dial.rounded())) pt, \(Int((mac.share * 100).rounded()))% of the height)")
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "nothing empty, nothing cut, every dial at its floor" : planFailures.prefix(3).joined(separator: "; ")))")
+        let mac = LayoutPlan.plan(w: 420, h: 840, s: 840, hasSpot: true, locked: true)
+        check(abs(mac.dial - 388) < 1 && mac.layout == .medium && mac.grid == .full && mac.map == .tile && mac.bottomSpare <= LayoutPlan.maxSpare,
+              "Medium at 420 × 840 with the sample: dial \(Int(mac.dial.rounded())) pt, full grid with the Map tile, \(Int(mac.bottomSpare.rounded())) pt spare")
+        for line in LayoutPlan.summary(w: 420, h: 840, s: 840, hasSpot: true, locked: true) {
+            lines.append("INFO 420 × 840, sample: \(line)")
+        }
+        // Night secondary text: at least 4.5:1 on black (§4.3).
+        let contrast = Palette.nightSecondaryContrast()
+        check(contrast >= 4.5, String(format: "Night secondary text contrast %.2f:1", contrast))
+        // No coordinate is ever ellipsized (§4.7): the strings themselves never carry "…".
+        let ellipsized = Geo.Format.allCases.filter { format in
+            switch Geo.format(format, lat: 39.09898, lon: -106.94117) {
+            case let .pair(lat, lon): return lat.contains("…") || lon.contains("…")
+            case let .single(value): return value.contains("…")
+            }
+        }
+        check(ellipsized.isEmpty, "Coordinates without an ellipsis in every format\(ellipsized.isEmpty ? "" : " (\(ellipsized.map(\.rawValue).joined(separator: ", ")))")")
 
         nav.showSample(lock: 240)
         try? await Task.sleep(for: .milliseconds(300))
@@ -68,9 +83,9 @@ enum SelfTest {
         // Each other layout at the default window, and Extra Large at the smallest.
         for (layout, width, height, name) in layoutShots {
             nav.showLayout(layout.rawValue)
-            let plan = LayoutPlan.plan(w: width, h: height, s: height, layout: layout, hasSpot: true)
+            let plan = LayoutPlan.plan(w: width, h: height, s: height, layout: layout, hasSpot: true, locked: true)
             check(render(screen(nav, width: width, height: height), to: folder.appendingPathComponent(name)),
-                  "Drew \(layout.name) at \(Int(width)) × \(Int(height)) (\(name), dial \(Int(plan.dial.rounded())) pt, \(Int((plan.share * 100).rounded()))%)")
+                  "Drew \(layout.name) at \(Int(width)) × \(Int(height)) (\(name), dial \(Int(plan.dial.rounded())) pt, \(Int((plan.share * 100).rounded()))%, \(plan.list ? "list" : "\(Int(plan.bottomSpare.rounded())) pt spare"))")
         }
         nav.showLayout(chosen.rawValue)
 
@@ -88,13 +103,14 @@ enum SelfTest {
             check(render(widget(empty, family, size), to: folder.appendingPathComponent("widget-\(name)-empty.png")), "\(name) widget draws before a fix")
         }
 
-        let head = failed == 0 ? "ALL PASSED (\(lines.count) checks)" : "FAILED \(failed) of \(lines.count) checks"
+        let checks = lines.filter { !$0.hasPrefix("INFO") }.count
+        let head = failed == 0 ? "ALL PASSED (\(checks) checks)" : "FAILED \(failed) of \(checks) checks"
         try? ([head] + lines).joined(separator: "\n").appending("\n").write(to: folder.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
         print(head)
         NSApp.terminate(nil)
     }
 
-    /// The layouts drawn besides Medium (docs/LAYOUTS.md §11).
+    /// The layouts drawn besides Medium (docs/REFINE.md §3.4).
     static let layoutShots: [(Layout, CGFloat, CGFloat, String)] = [
         (.small, 420, 840, "mac-layout-small.png"),
         (.large, 420, 840, "mac-layout-large.png"),
@@ -102,7 +118,7 @@ enum SelfTest {
         (.extraLarge, 380, 720, "mac-layout-extraLarge-min.png"),
     ]
 
-    /// The main screen at a window size, with Details as a plain stack (ImageRenderer can't draw a ScrollView).
+    /// The main screen at a window size, drawn without ScrollViews or menus (ImageRenderer can't draw them).
     static func screen(_ nav: Navigator, width: CGFloat, height: CGFloat) -> some View {
         MainView()
             .environmentObject(nav)

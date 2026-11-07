@@ -121,7 +121,7 @@ object WidgetData {
         val clock = { ms: Long -> clockFormat.format(Date(ms)) }
         val phase = Sky.moonPhase(now.toDouble())
         if (s == null) {
-            return WidgetEntry(null, "Bearings", null, null, emptyList(), "", null, null, null, null, false, Sky.moonLine(phase), phase.phase, null)
+            return WidgetEntry(null, "Bearings", null, null, emptyList(), "", null, null, null, null, false, Sky.moonWords(phase), phase.phase, null)
         }
         val (ft, m) = s.elevation?.let { Geo.elevation(it) } ?: (null to null)
         val coordinates = when (val f = Geo.format(Geo.Format.of(prefs.getString("format", null)), s.latitude, s.longitude)) {
@@ -147,7 +147,7 @@ object WidgetData {
             sunAllDay = if (times.polar != null) Sky.sunLine(times, clock) else null,
             sunAzimuth = sun.azimuth,
             sunUp = sun.altitude > 0,
-            moonLine = Sky.moonLine(phase),
+            moonLine = Sky.moonWords(phase),
             moonPhase = phase.phase,
             markLine = markLine,
         )

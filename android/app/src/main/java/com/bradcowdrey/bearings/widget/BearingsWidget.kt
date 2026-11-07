@@ -46,6 +46,7 @@ import androidx.glance.unit.ColorProvider
 import com.bradcowdrey.bearings.Geo
 import com.bradcowdrey.bearings.MainActivity
 import com.bradcowdrey.bearings.Sky
+import com.bradcowdrey.bearings.ui.Look
 import com.bradcowdrey.bearings.ui.Op
 import com.bradcowdrey.bearings.ui.Palette
 import com.bradcowdrey.bearings.ui.white
@@ -194,7 +195,7 @@ private fun splitClock(clock: String?): Pair<String, String> {
 @Composable
 private fun RowScope.SunColumn(label: String, labelColor: Color, value: String, sub: String, picture: @Composable () -> Unit) {
     Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = style(10.sp, FontWeight.Medium, labelColor, TextAlign.Center), maxLines = 1)
+        Text(label, style = style(Look.WIDGET_CAPTION.sp, FontWeight.Medium, labelColor, TextAlign.Center), maxLines = 1)
         Box(GlanceModifier.height(34.dp), contentAlignment = Alignment.Center) { picture() }
         Text(value, style = style(13.sp, FontWeight.Medium, align = TextAlign.Center), maxLines = 1)
         Text(sub, style = style(10.sp, color = Palette.textMuted, align = TextAlign.Center), maxLines = 1)
@@ -264,13 +265,13 @@ private fun Large(entry: WidgetEntry) {
 private fun GridRow(title1: String, value1: String, title2: String?, value2: String?) {
     Row(GlanceModifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(GlanceModifier.defaultWeight()) {
-            Text(title1.uppercase(), style = style(10.sp, FontWeight.Medium, white(Op.CAPTION)), maxLines = 1)
+            Text(title1.uppercase(), style = style(Look.WIDGET_CAPTION.sp, FontWeight.Medium, white(Op.CAPTION)), maxLines = 1)
             Text(value1, style = style(13.sp, FontWeight.Medium), maxLines = 1)
         }
         if (title2 != null && value2 != null) {
             Spacer(GlanceModifier.width(8.dp))
             Column(GlanceModifier.defaultWeight()) {
-                Text(title2.uppercase(), style = style(10.sp, FontWeight.Medium, white(Op.CAPTION)), maxLines = 1)
+                Text(title2.uppercase(), style = style(Look.WIDGET_CAPTION.sp, FontWeight.Medium, white(Op.CAPTION)), maxLines = 1)
                 Text(value2, style = style(13.sp, FontWeight.Medium), maxLines = 1)
             }
         }

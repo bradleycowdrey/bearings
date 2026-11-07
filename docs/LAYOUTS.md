@@ -1,404 +1,252 @@
-# Bearings: layouts (compass size)
+# Bearings: layouts (the "Instrument panel")
 
-Status: final spec for implementation on Apple (SwiftUI, iOS 17 / macOS 14) and Android (Compose).
-It replaces §3's "36% of the height and 360" rule and the height maths in §7–8 of
-[DESIGN.md](DESIGN.md). Colours, type and tokens stay in [LOOK.md](LOOK.md). When this file and DESIGN.md
-disagree about layout, this file wins. Update DESIGN.md §3 and §6–8 to point here once it ships.
+Status: the layout spec for Apple (SwiftUI, iOS 17 / macOS 14) and Android (Compose). It follows
+[REFINE.md](REFINE.md) §3–§4 (Rate & Refine, cycle 1), which wins wherever the two differ. Colours, type and
+tokens stay in [LOOK.md](LOOK.md); features and wording in [DESIGN.md](DESIGN.md). The dial drawing, the
+colours, the night palette and the widgets do not change.
 
-The owner's brief: **the compass takes up at least 40% of the screen; there are four layouts, Small,
-Medium, Large and Extra Large, chosen in the app; the other tiles are managed so the compass stays large
-and in focus.**
-
----
-
-## 1. The pattern in one paragraph
-
-The screen has two parts. The **head** never scrolls: the sky, the dial, the readout ("228° SW"), the
-subline and, when a spot is marked, the spot line. Everything else lives in **Details**, a scrolling area
-that fills the height left under the head: a one-row **summary strip**, then the **map card**, then the
-full **2×2 tiles**, then (Mac and iPad) the footer. The dial is sized **first**, as a share of the
-screen height; the rest gives up space in a fixed order before the dial ever shrinks, and the dial never
-goes below 40% of the screen height on a portrait phone. The layout setting changes the dial's share and
-how much of Details shows before you scroll. Wide windows put Details in a column beside the dial
-instead of under it.
-
-Nothing that changes what the dial shows (marked spot, locked bearing, warnings) ever leaves the head.
+The owner's brief: **the compass stays large and is the hero; the other tiles are needed, each fact
+shown once, nothing cut off and no empty space; four layouts, Small, Medium, Large and Extra Large.**
 
 ---
 
-## 2. Terms and the dial size rule
+## 1. The structure
 
-- **H**: the full height of the window. On iPhone and Android phones this is the whole screen height,
-  including the status bar and home indicator (what the owner sees in a screenshot). On Apple, read it
-  as `geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom` from the root
-  `GeometryReader`; on Android, `LocalConfiguration.current.screenHeightDp` plus the system-bar insets, or
-  simply `BoxWithConstraints` on a root that draws edge to edge.
-- **S**: the safe height (H minus the safe-area insets). Everything is laid out inside S.
-- **W**: the window width. **C**, the column width: `min(W, 760)` (phones: C = W).
-- **e**: the dial's side margin for the layout (table below).
-- **f**: the layout's share of H (table below).
+**One fixed, non-scrolling screen** (at normal text sizes), top to bottom:
 
-```
-target = min(f × H, C − 2e)
-floor  = min(0.40 × H, C − 2e)          // the owner's rule, portrait single column only
-dial   = target, reduced only by step 7 of the give-up order (§4), never below floor
-dial   = max(dial, 140)                 // absolute floor for pathological windows
-```
+**header bar → dial → readout → status line (and lock chip) → spot row → tile grid → map card (only where
+it fits whole).**
 
-The old caps (`0.36`, `360`, `420` in `MainView.dialSide`; `360.dp`, `0.36` in `MainScreen.dialFor`) are
-removed.
-
-| Layout id    | Name        | f    | e  | Readout scale | Header         | Guaranteed on the first screen |
-|--------------|-------------|------|----|---------------|----------------|--------------------------------|
-| `small`      | Small       | 0.40 | 16 | ×1.00         | title row if it fits, sky card | strip **and** map (≥ 96) |
-| `medium`     | Medium (default) | 0.44 | 16 | ×1.00    | title row if it fits, sky card | strip; the map's top edge may peek |
-| `large`      | Large       | 0.48 | 16 | ×1.08         | sky card (no title row) | strip |
-| `extraLarge` | Extra Large | 0.52 | 8  | ×1.15         | sky bar (44)   | strip |
-
-Readout scale multiplies the heading number (56 pt light, 46 when S < 700) and the point letters
-(28 pt). It never goes above ×1.15: the freed space goes to calm space around the dial, not a bigger
-number.
-
-### 2.1 Dial size by device (default text size, no marked spot)
-
-Numbers are pt (dp on Pixel), then % of H. They come from running the planner in §4 with the constants in
-§3; on Apple use the measured safe areas, which can move these by a few points.
-
-| Device (W×H)                    | Small       | **Medium**      | Large        | Extra Large  |
-|---------------------------------|-------------|-----------------|--------------|--------------|
-| iPhone SE (375×667)             | 267 (40.0%) | **293 (44.0%)** | 320 (48.0%)  | 347 (52.0%)  |
-| iPhone 16 (393×852)             | 341 (40.0%) | **361 (42.4%)** | 361 (42.4%)  | 377 (44.2%)  |
-| iPhone 17 Pro Max (440×956)     | 382 (40.0%) | **408 (42.7%)** | 408 (42.7%)  | 424 (44.4%)  |
-| Pixel 7 (412×915 dp)            | 366 (40.0%) | **380 (41.5%)** | 380 (41.5%)  | 396 (43.3%)  |
-| iPad 11" portrait (834×1210)    | 484 (40%)   | **532 (44%)**   | 581 (48%)    | 629 (52%)    |
-| iPad 13" portrait (1032×1376)   | 550 (40%)   | **605 (44%)**   | 660 (48%)    | 716 (52%)    |
-| Mac window, default (420×840)   | 336 (40.0%) | **370 (44.0%)** | 388 (46.2%)  | 404 (48.1%)  |
-| Mac window, minimum (380×720)   | 288 (40.0%) | **317 (44.0%)** | 346 (48.0%)  | 364 (50.6%)  |
-
-Today, for comparison: iPhone 16 190 pt (22%), 152 pt with a marked spot.
-
-**Tell the owner plainly:** on a portrait phone the screen's width caps the dial at about 42–46% of the
-height. On modern iPhones and Pixels, Medium and Large give the same dial; Large differs by dropping the
-title row and a slightly larger readout, and Extra Large by the 8 pt margins, the one-line sky bar and a
-larger readout. On iPhone SE, iPad and the Mac the four layouts differ clearly in dial size.
+- Every fact appears **once**. The old summary strip, the DETAILS tiles, the "Bearings" title row, the sky
+  card and the sky bar are gone.
+- The map is **whole or a tile**, never a sliver: a Map tile in the grid, a full-width map card, or a map
+  button in the header. All three open the same **map sheet**. There is no bottom fade.
+- The planner works **bottom-up**: the fixed blocks are placed first, the dial takes what is left up to
+  its cap, and spare height becomes a map card, taller tiles and wider gaps. **No more than 24 is ever left
+  empty at the bottom.**
+- The only scrolling screen is the accessibility-text list (§7).
 
 ---
 
-## 3. What each layout shows, top to bottom
+## 2. The elements (Apple pt, Android dp; same numbers)
 
-Spacing stays on the 4-pt grid. Gaps between blocks are 12 (8 when S < 700). Top padding 4, bottom 8.
-Heights below are at the default text size; multiply text-driven heights by the text multiplier `k`
-(today's rule: up to 1.3 on Apple, 1.4 on Android).
-
-### 3.1 The head (never scrolls)
-
-1. **Title row** (48 + 4): "Bearings" and the ⋯ menu, as today. Shown only at Small and Medium, and only
-   when it fits (it is the first thing given up, §4). When it is absent, the ⋯ menu sits in the sky
-   card's corner (the existing compact mode).
-2. **Sky** — one of:
-   - **Sky card** (72; 68 compact): unchanged from DESIGN.md §2.
-   - **Sky bar** (44, Extra Large or after give-up step 3): one line on the same sky gradient,
-     "Crested Butte · 4:12 PM": the town (without the state or country, 15 semibold) and the time (15
-     regular); the date is left to the full sky card so the town keeps its room. One line, the town
-     truncates last; then the sun/moon symbol, and the ⋯ menu at the right in a 44×44 target.
-3. **Dial**: `dial × dial`, centred, with e on each side at minimum. Unchanged drawing.
-4. **Readout**: "228°" and "SW" on one baseline, scaled by the layout's readout scale. Height =
-   heading size × 1.2 (× 1.1 on Android, as today).
-5. **Subline** (13, 18 high + 4): unchanged, including warnings in amber and "· Locked 240° · turn 12°
-   right". Warnings never move.
-6. **Spot line** (28 high, only when a spot is marked; replaces the 46–58 pt pill at every layout):
-   "📍 Marked spot · 0.4 mi · 245° SW", 15 medium, white; a ✕ at the trailing end with a 44×44 pt
-   (48×48 dp) hit area that reaches into the gaps above and below. The line itself is a button that
-   opens a small menu: **Lock to Spot**, **Clear Marked Spot**. "Clear Marked Spot" stays in ⋯.
-
-### 3.2 Details (scrolls under the head)
-
-Order, top to bottom:
-
-1. **Summary strip** (64 high, frosted like a tile, radius 16, three cells divided by hairlines):
-   - **Coordinates** (two units wide): the value in the current format on two lines (lat over lon; UTM,
-     MGRS and Plus Code on one or two lines as they fit), 17 medium tabular. Tap cycles the six formats;
-     long-press copies (with the same "Copied" feedback as today). Dims when the fix is stale.
-   - **Elevation** (one unit): "9,596 ft" (17 medium) over "2,925 m" (13, white at 60%); metres first
-     when chosen.
-   - **Sun** (one unit): "6:42–5:01" (15 medium, the device's 12/24-hour setting, no AM/PM) over the
-     moon glyph and "82%" (13).
-   - At Small and Medium the strip is **visible on the first screen** on every device in §2.1. At Large
-     and Extra Large it is visible unless give-up step 6 scrolls it.
-2. **Map card**: unchanged (heading cone, +, −, follow heading, open in Maps, speed chip). Height:
-   - Small: fills the height left on the first screen, at least 96; if less than 96 is left it moves
-     below the fold at 240.
-   - Medium: 240, starting right after the strip; its top peeks when there is room.
-   - Large, Extra Large: 240, below the fold.
-   - The map's own gestures are already off (`interactionModes: []` on Apple,
-     `setAllGesturesEnabled(false)` on Android), so it never fights the scroll.
-3. **Tiles**, 2×2, exactly as today (Latitude, Longitude, Elevation, Sun with their details:
-   accuracy, fix age, format name, pressure, moon phase name). Header "DETAILS" (the tiles' caption
-   style) above them, marked as a heading for VoiceOver/TalkBack.
-4. **Footer** (Mac and iPad only): "Made by Bradley Cowdrey · bradcowdrey.com ↗".
-
-Scroll cues: a 16 pt fade to black at the bottom edge of Details while more is below; the scroll
-indicator flashes once on appear (`.scrollIndicatorsFlash(onAppear: true)`); `.scrollBounceBehavior(
-.basedOnSize)` so nothing bounces when it all fits. Changing the layout scrolls Details back to the top.
-
-### 3.3 Per-layout summary on iPhone 16 (759 pt safe height)
-
-| | Small | Medium | Large | Extra Large |
-|---|---|---|---|---|
-| Header | sky card (title row dropped: it does not fit) | title row + sky card | sky card | sky bar |
-| Dial | 341 | 361 | 361 | 377 |
-| Readout | 56 | 56 | 60 | 64 |
-| First screen | head, strip, map (≈ 133 tall) | head, strip, top of the map | head, strip, air | head, strip, air |
-| Below the fold | tiles | map, tiles | map, tiles | map, tiles |
-
----
-
-## 4. The planner (one pure function, two ports)
-
-`LayoutPlan.swift` (in `Sources/Bearings/Views/`) and `ui/LayoutPlan.kt`, the same constants and the
-same order, with no UI code so both can be unit-tested.
-
-```
-input:  W, H, S, layout, k (text multiplier), accessibilityText (Bool), hasSpot, hasUpdateBanner,
-        showsFooter, isLandscapePhone
-output: twoPane, dial, readoutScale, header (titleRow+card | card | bar), mapOnFirstScreen,
-        stripOnFirstScreen, detailsViewport, scrollsWhole
-```
-
-1. If `accessibilityText` (`dynamicTypeSize.isAccessibilitySize`; Android `fontScale >= 1.5`), use
-   `max(layout, large)`'s rules for header, readout and map (dial share stays the chosen layout's).
-2. If two panes apply (§7), plan that instead.
-3. Start from the table in §2 and lay out the head plus the guaranteed first-screen content. The Details
-   viewport must be at least **96** (1.5 strip rows) tall.
-4. While it overflows S, give up in this order, one step at a time:
-   1. Title row → gone (⋯ into the sky card).
-   2. Inline map (Small) → below the fold.
-   3. Sky card → sky bar.
-   4. Readout scale → ×1.00 (46 pt heading when S < 700).
-   5. Footer → About (it is in Details anyway; this only matters for the minimum viewport).
-   6. Strip → allowed to sit below the fold (viewport still ≥ 96).
-   7. Dial → shrinks, never below `floor`.
-5. If it still overflows with the dial at `floor` (accessibility text on iPhone SE, split screen), set
-   `scrollsWhole`: the head and Details become one scroll view, the dial stays at `floor`. Nothing is
-   ever clipped or overlapped.
-
-Large text (k = 1.3, marked spot) still keeps every layout above 40% on every device in §2.1; the planner
-only drops the title row, the inline map, the sky card (to the bar) or the readout scale. Example: iPhone
-SE Extra Large drops the readout scale and the dial goes 347 → 336 (50.4%).
-
----
-
-## 5. Interactions
-
-| Action | Result |
+| Element | Size and content |
 |---|---|
-| Tap the dial | Lock / unlock the bearing (unchanged). Never changes layout or scroll. |
-| Pinch the dial (optional; ship last) | Steps one layout per gesture: scale > 1.12 up, < 0.89 down; selection haptic; toast "Layout: Large". Apple `MagnifyGesture` simultaneous with the dial's Button; Android a two-pointer-only `pointerInput` next to `clickable`. If it misfires against tap on hardware, leave it out. |
-| Tap the strip's Coordinates cell, or the Latitude/Longitude tile | Next of the six formats. |
-| Long-press either | Copy, "Copied" for 1.2 s. Mac: right-click context menu "Copy Coordinates". Android 13+: no toast (the system shows its own). |
-| Tap the Elevation or Sun cell | Scrolls Details to the tiles. |
-| Tap ✕ on the spot line | Clear the marked spot. |
-| Tap the spot line | Menu: Lock to Spot · Clear Marked Spot. |
-| Map controls | Unchanged, wherever the map card is. "Open in Maps" is also added to ⋯. |
-| Scroll Details | Only Details moves; the head stays. |
+| **Header bar** | 48 high (52 on iPad) × k, radius 14, full column width, the existing sky gradient. Line 1: the place, 17 semibold (the state is dropped first, then it truncates). Line 2: "Sun, Nov 1 · 9:41 AM", 13 at white 75%, and the **Sample** pill. Trailing, fixed on every layout: the sky symbol (20, decorative), the **map button** (only when the map is neither a tile nor a card), then **⋯** (44×44 pt / 48×48 dp, 8 apart). ⋯ never moves. |
+| **Dial** | Unchanged drawing. Centred, side margin e (§4). |
+| **Readout** | "228° SW". Line height 1.1 × the heading size; heading 56 (64 on iPad) × the layout's readout scale. |
+| **Status line** | 13, white 60%, one centred line: "True north · 8° E declination · ±8° accuracy". Amber warnings take the same slot. Wraps to 2 lines only at k > 1.1, at a "·". |
+| **Lock chip** | Only when a bearing is locked: a 28-high capsule 8 below the status line, accent at 20% (night 25%), `lock.fill` 13, "Locked 240° · turn 12° right" 13 semibold, trailing ✕ (44×44 hit area) unlocks. |
+| **Spot row** | Only when a spot is marked: a full-width tile, 44 high, 8 above the grid, leading-aligned. Pin 17, "Marked spot" 15 medium, "9.2 mi · 46° NE" 15 tabular, ✕ 8 after the text (44 / 48 dp target). Tap: Lock to Spot, Clear Marked Spot. |
+| **Tile grid** | 3 columns, unit u = (C − 16) / 3, gutters 8. **Full:** POSITION (2u) \| ELEVATION, then SUN \| MOON \| MAP. **Compact row:** POSITION (2u) \| ELEVATION \| SUN (Moon stays on the dial and in the Details sheet). Tiles 72 high, growing to 88 when height is spare; rows 8 apart. |
+| **Map card** | Full column width, height = the spare height (at least 140), radius 16. One control cluster on every layout: 36 circles (44 / 48 dp hit areas), 8 apart, inset 12 top-trailing (+, −, follow heading, open in Maps); speed chip inset 12 top-leading; 24 clear at the bottom for the attribution. |
+| **Map sheet** | Full height (`.large` + grabber + Done; Android `skipPartiallyExpanded`), the same cluster and chip. |
+| **Details sheet** | iOS `.sheet` with `[.medium, .large]` and a grabber; Android `ModalBottomSheet`. Accuracy, fix age, format name, pressure, moon phase name, rise and set azimuths, as a grouped list. |
 
-Pull the coordinate tap/long-press logic out of the Longitude tile into one shared view,
-`CoordinateText` (Swift) / `CoordinateText()` (Compose, today's `combinedClickable` in `MainScreen.kt`),
-used by the strip and the tiles so they behave identically.
+**The tile** (one component on both platforms, matching the widgets): `frostedTile()` / `surfaceContainer`,
+radius 16 continuous, padding 12 × 10, leading-aligned. Caption 11 semibold caps, tracking 0.6, white 60%;
+value 17 medium tabular, white; secondary 13, white 60%. The tokens live in one `Look` constant shared
+with the widgets (which keep 10 pt captions).
 
----
+| Tile | Caption | Value | Secondary | Tap / long-press |
+|---|---|---|---|---|
+| Position (2u) | `POSITION · DD` (DD, DMS, DDM, UTM, MGRS, PLUS) | "39.09898° N" over "106.94117° W" | dims when the fix is stale | Tap: next format. Long-press: Copy, Details… |
+| Elevation | `ELEVATION` | "9,587 ft" | "2,922 m" (order follows Units) | Details sheet |
+| Sun | `SUN` | "↑ 6:36 AM" over "↓ 5:08 PM" (12/24-hour from the locale) | polar: "Up all day" / "Down all day" | Details sheet |
+| Moon | `MOON` | phase glyph + "53%" | "Last quarter" | Details sheet |
+| Map | `MAP` on a 40% black scrim | live thumbnail, north-up, heading cone, no controls or gestures, attribution visible | — | Map sheet |
 
-## 6. The Layout setting
-
-- **Name in the UI:** "Layout". Options: **Small, Medium, Large, Extra Large**.
-- **Persisted key:** `"layout"`; values `small`, `medium`, `large`, `extraLarge`. Unknown or missing →
-  `medium`.
-  - Apple: `Navigator` gains `@Published var layout: Layout { didSet { defaults.set(layout.rawValue,
-    forKey: "layout") } }`, read in `init` next to `format`. `enum Layout: String, CaseIterable { case
-    small, medium, large, extraLarge }`.
-  - Android: the same enum in Kotlin, stored in the existing `prefs` under `"layout"`, exposed from the
-    navigator like `format`.
-- **Default:** Medium on every platform and device (Mac included).
-- **Menu placement:** the first group in the ⋯ menu.
-  - Apple: `Picker("Layout", selection: $nav.layout)` with `.pickerStyle(.menu)` inside a `Menu("Layout")`,
-    so it shows as a submenu whose subtitle is the current choice; a checkmark on the current option.
-  - Android: a "Layout" header item followed by four radio-checked items in the DropdownMenu, the same
-    `Check` style as the other groups.
-- **Live preview:** choosing an option animates the layout with a 0.35 s spring
-  (`.animation(.spring(duration: 0.35), value: nav.layout)`; Compose `animateDpAsState` with a spring).
-  With Reduce Motion (Android: animator duration scale 0), it changes without animation.
-- **Mac:** a "View › Layout" command menu with the four options and **⌘=** larger, **⌘−** smaller,
-  **⌘0** Medium.
-- The setting is a **target**: the planner (§4) may give things up on a small window or with large text,
-  but never takes the dial below 40% of H in a portrait single column.
-- No coach marks or onboarding hints.
+**Values never ellipsize:** text scales down to 0.85×, then wraps; a tile grows taller before anything
+truncates. Before the first fix tiles show "—" with "Finding position…".
 
 ---
 
-## 7. iPad, Mac and landscape: two panes
+## 3. The planner
 
-**When:** `W ≥ 700 && W > H` (iPad landscape, wide Mac windows, Android tablets and foldables at
-≥ 600 dp wide in landscape), or a phone in landscape (`S < 480`).
+`LayoutPlan.swift` (`Sources/Bearings/Views/`) and `ui/LayoutPlan.kt`: one pure function, the same
+constants and order, no UI code.
 
-**Layout:** a plain `HStack` / `Row` (not `.inspector`, not `NavigationSplitView`, not
-`material3-adaptive`):
+**Gaps** (tokens 4 / 8 / 12 / 16 / 24 only): safe-area top → header 4 · header → dial 12 · dial → readout
+12 · readout → status 6 · status → lock chip 8 · readout group → spot row or grid 16 · spot row → grid and
+between rows 8 · grid → map card 12 · last block → safe-area bottom 8. Side margins 16 (20 on iPad).
+Column **C = min(W − 2 × margin, 640)**.
 
-- **Leading pane:** the head (sky card or bar, dial, readout, subline, spot line), centred vertically.
-  `dial = min(paneWidth − 48, S − headBelowDial − headerHeight − 2 × gap)`.
-- **Trailing column:** the title row "Bearings" with ⋯ (when it fits), then Details (strip, map, tiles,
-  footer) in a scroll view. Width = `clamp(W × c, 300, 440)` with c = **0.50 / 0.45 / 0.40 / 0.35** for
-  Small / Medium / Large / Extra Large. So the setting still changes the dial: a narrower column gives the
-  dial pane more width.
-- The 40% floor is automatically met in two panes (the dial is sized by height); assert it in tests.
+With **S** the safe height and **H** the full height:
 
-**iPad portrait** and the **default Mac window (420×840)** use the single column of §3 with `C =
-min(W, 760)`. The Mac window keeps its minimum of 380×720 and ideal 420×840.
+1. Place the fixed blocks: header, readout group, lock chip (if locked), spot row (if marked), and the
+   grid in the layout's default mode.
+2. **Dial = min(cap, S − fixed)**; cap = C + 2 × margin − 2e on phones (the screen width less the
+   layout's margins), and also ≤ 0.48 H on tablets.
+3. If the dial falls below the layout's **floor**: (a) Large: the grid collapses to the compact row and
+   Map moves to the header button; (b) Small: the map card shrinks toward 140, then the dial goes down to
+   its floor; (c) otherwise the screen becomes the scrolling list (§7).
+4. Spare height (the dial at its cap): (a) 160 or more → the map becomes a full-width card filling it;
+   (b) otherwise the tiles grow 72 → 88; (c) then up to +12 on each of three gaps (header → dial, dial →
+   readout, readout group → grid); (d) the rest is split above the header and below the grid, **never more
+   than 24 at the bottom** (nor above the header); anything still left widens the three gaps further.
 
-**Mac has no live compass**: the dial is static with `noCompassText`. The setting still applies; Medium
-is the default.
-
----
-
-## 8. Accessibility
-
-- **Dial** (one element): label "Compass"; value "Heading 228 degrees, southwest. True north. Sun 245
-  degrees, up. Moon 110 degrees, down. Marked spot 0.4 miles at 245 degrees. Locked 240, turn 12
-  right." (parts present only when they apply; announcements stay rate-limited as today).
-  - Custom actions: **Lock Bearing / Unlock Bearing**, **Larger Compass**, **Smaller Compass** (the
-    last two step the layout setting; disabled at the ends). Android: `CustomAccessibilityAction`s with
-    the same names.
-- **Strip cells**, each one element with the full text, e.g. "Coordinates, 39.09898 north, 106.94117
-  west, decimal degrees" with actions **Next Format** and **Copy**; "Elevation, 9,596 feet, 2,925
-  metres, from GPS, pressure 1,013 hectopascals"; "Sun, rises 6:42 AM, sets 5:01 PM, moon waxing gibbous,
-  82 percent".
-- **Spot line**: "Marked spot, 0.4 miles, 245 degrees southwest"; actions **Lock to Spot**, **Clear**.
-- **Reading order:** sky, dial, readout + subline (one element), spot line, Details heading, strip,
-  map, tiles, footer.
-- **Touch targets:** at least 44×44 pt on iOS, 28×28 pt on macOS, 48×48 dp on Android: the ⋯ menu in
-  every header, the spot ✕, strip cells (64 tall), map controls (32 visual circles with 44 hit areas, as
-  today).
-- **Contrast:** any text that carries information is at least 4.5:1 against its background (white at 60%
-  on the frosted tile passes; do not go lower). Nothing important is only in 13 pt muted text: the muted
-  second lines in the strip repeat or extend what is in the first line or in the tiles.
-- **Text size:** all text scales with Dynamic Type / font scale. Layout uses `k` (capped at 1.3 Apple,
-  1.4 Android) for heights; at accessibility sizes (§4 step 1) the strip becomes a vertical list via
-  `ViewThatFits` (Apple) or a width check (Compose), the coordinate cell wraps, and the heading number is
-  capped at `.accessibility2`. Details takes up the extra length by scrolling.
-- **Night mode:** the red multiply covers the whole stack, Details and the sky bar included.
+Output: two panes or one column, dial, floor, readout scale, grid (full, compact, list), map (tile, card,
+button) and its height, tile height, the three gaps, top and bottom spare, and the trailing pane's width.
 
 ---
 
-## 9. Android specifics
+## 4. The four layouts
 
-- `MainScreen.kt`: replace `dialFor` with `LayoutPlan.plan(...)`. Structure:
-  `Column(head…, Box(Modifier.weight(1f)) { Column(Modifier.verticalScroll(state)) { strip, map, tiles } })`;
-  when `scrollsWhole`, one `verticalScroll` around everything.
-- Two panes via `BoxWithConstraints` (`maxWidth >= 600.dp && maxWidth > maxHeight`, or height < 480 dp).
-  No new dependency.
-- Not used: `BottomSheetScaffold` (experimental, focus quirks), `ModalBottomSheet` (scrim blocks the
-  dial), `HorizontalPager` (TalkBack page-focus bug, issuetracker 354109776).
-- `MainActivity.kt`: read `intent.getStringExtra("layout")` next to `format` and `night`, applied
-  **without saving** (like `night`), so CI runs don't change the stored choice.
+| | **Small**: "Compass and map" | **Medium** (default): "Balanced" | **Large**: "Bigger compass" | **Extra Large**: "Biggest compass" |
+|---|---|---|---|---|
+| Dial | 0.36 H; floor 0.30 H, so the map card keeps 140 | fills to the cap (e = 16); floor 0.38 H | e = 12; floor 0.42 H | e = 8; floor 0.42 H |
+| Readout scale | 1.0 | 1.0 | 1.08 | 1.15 |
+| Grid | compact row | full grid with the Map tile | full grid; compact row before the dial shrinks | compact row |
+| Map | full-width card filling the rest (≥ 140) | tile; a card when 160 or more is spare | tile, or the header button when the grid collapses | the header map button; a card when 160 or more is spare |
 
-## 10. Apple specifics
+### 4.1 Planner results by device
 
-- `MainView.swift`: replace `dialSide`, `columnHeight`, `isCompact` and `mapMinimum` with
-  `LayoutPlan`. Head in a `VStack`; Details in a `ScrollView` below it.
-- **ImageRenderer cannot draw a `ScrollView`, sheet, menu or MapKit `Map`.** Add an environment value
-  `\.flatDetails` (default false). When true, Details is a plain `VStack` clipped to the viewport instead of
-  a `ScrollView`. `Mac/SelfTest.swift` sets it. MapKit still renders blank there, as today.
-- `BearingsPhoneApp.swift` / `PhoneLaunch`: `--layout <id>` next to `--format`, applied without saving.
-- Mac: `BearingsMacApp.swift` adds the View › Layout commands; `--layout <id>` is honoured with
-  `--selftest`.
+From the planner at the default text size. Each cell: **dial · grid · map · empty at the bottom** (grid:
+"grid" = full, "row" = compact; "list" = the scrolling list). Safe heights are the usual insets (Pixel 7:
+915 − 52 − 24 = 839 dp).
 
----
+**Nothing locked or marked:**
 
-## 11. CI and self-tests
+| Device (W×H) | Small | **Medium** | Large | Extra Large |
+|---|---|---|---|---|
+| iPhone SE (375×667) | 239 · row · card 140 · 0 | **311 · grid · tile · 0** | 306 · grid · tile · 0 | 359 · row · button · 0 |
+| iPhone 16 (393×852) | 307 · row · card 185 · 0 | **361 · grid · tile · 0** | 369 · grid · tile · 0 | 377 · row · button · 24 |
+| iPhone 16 Pro (402×874) | 315 · row · card 196 · 0 | **370 · grid · tile · 2** | 378 · grid · tile · 0 | 386 · row · button · 24 |
+| iPhone 17 Pro Max (440×956) | 344 · row · card 250 · 0 | **408 · grid · tile · 24** | 416 · grid · tile · 19 | 424 · row · card 161 · 0 |
+| Pixel 7 (412×915 dp) | 329 · row · card 242 · 0 | **380 · grid · tile · 24** | 388 · grid · tile · 21 | 396 · row · card 166 · 0 |
+| Mac window (420×840) | 302 · row · card 270 · 0 | **388 · grid · tile · 24** | 396 · grid · tile · 18 | 404 · row · card 159 · 0 |
+| Mac minimum (380×720) | 259 · row · card 193 · 0 | **348 · grid · tile · 0** | 356 · grid · tile · 0 | 364 · row · button · 20 |
+| iPad 11" portrait (834×1210) | 436 · row · card 450 · 0 | **581 · grid · card 225 · 0** | 581 · grid · card 219 · 0 | 581 · row · card 294 · 0 |
+| iPad 13" portrait (1032×1376) | 495 · row · card 556 · 0 | **648 · grid · card 324 · 0** | 656 · grid · card 310 · 0 | 660 · row · card 381 · 0 |
 
-**Launch argument:** `--layout small|medium|large|extraLarge` (iPhone, iPad, Mac). Android extra:
-`--es layout <id>`. Neither is saved.
+**Locked and marked (the sample):**
 
-**Unit tests (new; the first real layout tests):**
-- `Tests/BearingsTests/LayoutPlanTests.swift` and `android/app/src/test/java/com/bradcowdrey/bearings/LayoutPlanTest.kt`,
-  the same table: devices {iPhone SE, iPhone 16, iPhone 17 Pro Max, iPad 11" and 13" in both
-  orientations, Mac 380×720 and 420×840, Pixel 7, phone landscape} × 4 layouts × k {1.0, 1.3,
-  accessibility} × {no spot, spot} × {no update banner, banner}.
-- Assert: in portrait single column, `dial ≥ 0.40 × H` (within 0.5 pt); the head plus the guaranteed
-  content does not overflow S unless `scrollsWhole` is set; the Details viewport is ≥ 96 unless
-  `scrollsWhole`; the dial never exceeds `C − 2e`; Medium is the default.
+| Device (W×H) | Small | **Medium** | Large | Extra Large |
+|---|---|---|---|---|
+| iPhone SE (375×667) | list | **list** | 298 · row · button · 0 | 294 · row · button · 0 |
+| iPhone 16 (393×852) | 263 · row · card 140 · 0 | **335 · grid · tile · 0** | 369 · row · button · 0 | 377 · row · button · 0 |
+| iPhone 16 Pro (402×874) | 282 · row · card 140 · 0 | **354 · grid · tile · 0** | 378 · row · button · 0 | 386 · row · button · 0 |
+| iPhone 17 Pro Max (440×956) | 344 · row · card 162 · 0 | **408 · grid · tile · 0** | 416 · grid · tile · 0 | 424 · row · button · 17 |
+| Pixel 7 (412×915 dp) | 329 · row · card 154 · 0 | **380 · grid · tile · 0** | 388 · grid · tile · 0 | 396 · row · button · 19 |
+| Mac window (420×840) | 302 · row · card 182 · 0 | **388 · grid · tile · 0** | 396 · grid · tile · 0 | 404 · row · button · 16 |
+| Mac minimum (380×720) | 224 · row · card 140 · 0 | **296 · grid · tile · 0** | 356 · row · button · 0 | 364 · row · button · 0 |
+| iPad 11" portrait (834×1210) | 436 · row · card 362 · 0 | **581 · grid · tile · 24** | 581 · grid · tile · 24 | 581 · row · card 206 · 0 |
+| iPad 13" portrait (1032×1376) | 495 · row · card 468 · 0 | **648 · grid · card 236 · 0** | 656 · grid · card 222 · 0 | 660 · row · card 293 · 0 |
 
-**Mac self-test (`Mac/SelfTest.swift`):** keep every existing check and file name.
-- `mac-main.png` and `mac-night.png`: Medium at 420×840 (unchanged names; the image changes once).
-- Add `mac-layout-small.png`, `mac-layout-large.png`, `mac-layout-extraLarge.png` at 420×840 and
-  `mac-layout-extraLarge-min.png` at 380×720.
-- Keep the "more than 3 colours" check on each image, and add: run the planner table and fail the
-  self-test if any case breaks the 40% floor.
-
-**iPhone and iPad (`.github/workflows/ios.yml`, `run_on` and the large-text block):** keep
-`-1-terms`, `-2-sample`, `-3-mgrs`, `iphone-4-live`, `iphone-5-large-text` (all at the Medium default).
-Add per device:
-- `$P-6-small.png`: `--sample --layout small`
-- `$P-7-large.png`: `--sample --layout large`
-- `$P-8-xl.png`: `--sample --layout extraLarge`
-- `iphone-9-xl-large-text.png`: extra-extra-large Text Size, `--sample --layout extraLarge`
-- `ipad-9-landscape.png` if the simulator can be rotated (`--sample`, two panes)
-
-**Android (`scripts/android-selftest.sh`):** keep `android-1-terms` … `android-6-large-text`. Add
-`android-7-small` (`--ez sample true --es layout small`), `android-8-large`, `android-9-xl`, and
-`android-10-xl-large-text` (font scale 1.3, `--es layout extraLarge`). `SelfTest.kt` writes the
-planner's result for the running screen (dial, % of H, layout) to `report.txt` and reports FAILED if the
-dial is under 40% of H in portrait.
-
-**App Store (`.github/workflows/app-store.yml`):** pass `--layout medium` explicitly to every shot. Keep
-exactly 6 screenshots. The images change once because the default dial grows (Pro Max: about 291 → 408).
-
-**Web (`docs/app.html`):** follows later with the same table, key and order; not part of this change.
+Where the bottom shows 0 with the map as a tile or button, the spare went into 88-high tiles and wider
+gaps. The tests (§8) hold these to the rules, not to the exact numbers, except the iPhone 16 Pro worked
+numbers of REFINE.md §3.4 (Medium 370 with 88 tiles; with the sample, about 352, full grid; Large with the
+sample, the compact row and the header map button).
 
 ---
 
-## 12. Phase 2 (only if testing shows people miss the map)
+## 5. iPad, Mac and landscape
 
-A tray inside the layout (`safeAreaInset(edge: .bottom)`; Compose a `Box` overlay), **not** a sheet:
-a 44-pt handle "Map & details ⌃" that shows the live heading, two fixed heights toggled by tap (no
-hand-written drag at first), with a plain scroll view inside holding the map and tiles. Its handle's
-accessibility value carries elevation and sun times; hidden content is removed from focus. Ship only
-after owner testing.
+- **Portrait iPad, and Mac windows taller than wide:** one centred column, C = min(W − 40, 640), the same
+  four layouts. Larger iPads usually promote the map to a card (step 4a); on iPad mini Map stays a tile.
+- **Two panes** (W > H and W ≥ 700, or a phone in landscape):
+  - one full-width header bar across the top;
+  - **leading pane** (W − trailing): dial, readout, status line and lock chip, centred as one group; dial
+    = min(pane − 2 × margin, the height left for the group);
+  - **trailing pane** = clamp(share × W, 320, 480), share 0.48 / 0.42 / 0.36 / 0.36 (Small / Medium /
+    Large / Extra Large), top-aligned with the dial: spot row, grid (3 columns at 360 wide or more,
+    otherwise 2 with Map spanning both), then the map card filling the rest (at least 160; otherwise Map
+    stays a tile);
+  - the Mac and iPad footer ("Made by Bradley Cowdrey · bradcowdrey.com ↗", 13 secondary) is the last line
+    of the trailing pane. No strip, nothing shown twice.
+- **Mac update banner:** 44 high, tile style, full width between the header and the content.
+- **Mac** has no live compass: the dial is static with the no-compass state (REFINE.md §4.2). The window
+  keeps `.hiddenTitleBar`, minimum 380×720, ideal 420×840; the window title says Bearings.
 
 ---
 
-## 13. Why (best-practice evidence)
+## 6. The Layout setting and interactions
 
-- **The compass apps that people rate highest never shrink the dial to fit tiles.** Apple Compass gives
-  the dial roughly 40–45% of the screen with a short list of facts under it (heading, place,
-  coordinates, elevation; touch-and-hold copies the coordinates). Trail Sense, GPS Status & Toolbox and
-  Commander Compass give the dial about half the screen and put the extra data on the ring or close
-  around it. Bearings already draws the sun, moon, marked spot and locked bearing on the dial, so the
-  dial carries the most important information itself.
-- **Hero first, details in a scroll below** is how Apple Weather presents a large hero and cards (the
-  same structure as Two Degrees), and the native, accessible pattern for "more than fits": Dynamic Type at
-  200% and Android font scaling only make the scroll longer. Nothing is squeezed out or hidden behind a
-  gesture.
-- **A fixed set of named sizes, not a slider**, follows WidgetKit's model (small sizes show only the
-  most critical data, larger ones add detail) and the familiar Small / Medium / Large / Extra Large
-  wording. A setting in a menu is discoverable; a pinch is only a shortcut (Apple and Android both warn
-  against gesture-only features).
-- **Why not a pull-up sheet:** Apple's HIG says sheets on macOS are always modal and dim the window,
-  and that an app should show one sheet at a time (Bearings' Terms, About and Share would collide);
-  `interactiveDismissDisabled` has reported regressions on iOS 18.1+; ImageRenderer cannot draw sheets,
-  so the Mac self-test would lose the tiles. Material's `ModalBottomSheet` blocks the screen behind it and
-  `BottomSheetScaffold` is still experimental.
-- **Why not swipeable pages:** `TabView(.page)` does not exist on macOS; page dots are easy to miss; the
-  Compose pager has a TalkBack focus bug (issuetracker 354109776); and coordinates would no longer be
-  visible at a glance.
-- **Two panes on wide screens** follow Android's window size classes (and its warning that phones in
-  landscape need the height checked too) and iPadOS/macOS practice of a content column beside the main
-  view.
-- **Accessibility minimums:** 44×44 pt (iOS), 28×28 pt (macOS), 48×48 dp (Android) touch targets; text
-  that scales; 4.5:1 contrast; and nothing important only behind a hidden page or collapsed panel.
+- **Menu:** the first group in ⋯, a "Layout" submenu with four items (Small, Medium, Large, Extra Large),
+  each with a symbol, its one-line subtitle and a checkmark on the current choice (Android:
+  `DropdownMenuItem` with supporting text).
+- **Stored** under `"layout"` as `small`, `medium`, `large`, `extraLarge`; unknown or missing → `medium`.
+  Medium is the default everywhere.
+- **Mac:** View › Layout with the four options, **⌘=** larger, **⌘−** smaller, **⌘0** Medium.
+- **Change:** animated (0.35 s spring; none with Reduce Motion / animator scale 0), focus stays put.
+- **Dial accessibility actions:** Lock / Unlock Bearing, **Larger Compass**, **Smaller Compass** (step the
+  layout; disabled at the ends).
+- **Gestures:** tap the dial to lock/unlock; tap Position for the next format, long-press for Copy (Mac:
+  right-click "Copy Coordinates"); Elevation, Sun and Moon open the Details sheet; Map (tile, card or
+  header button) opens the map sheet; tap the spot row for its menu, ✕ to clear.
 
-Sources: Apple HIG (Sheets, Page Controls, Accessibility, Layout); SwiftUI docs for `presentationDetents`,
-`scrollTargetBehavior`, `PageTabViewStyle`, `ViewThatFits`, `containerRelativeFrame`, `WidgetFamily`;
-Android developers: window size classes, bottom sheets, Pager, accessibility; Trail Sense navigation
-guide; Gadget Hacks and Mytour on Apple Compass; Sound & Vision on GPS Status & Toolbox; onX and Gaia GPS
-compass-mode help; Tom's Guide and 9to5Mac on iOS 18 Weather; Apple developer forum threads 767475 and
-767056.
+---
+
+## 7. Text size and accessibility
+
+- **k up to 1.3** (Dynamic Type; Android fontScale): heights are k-scaled; tiles grow before anything
+  truncates; coordinates scale to 0.85× and then wrap. Android's 1.15× clamp is gone; iOS
+  `minimumScaleFactor` is 0.85.
+- **Accessibility sizes** (iOS AX1+; Android fontScale ≥ 1.5), or when nothing fits even at the floor: the
+  whole screen is one `ScrollView` / `LazyColumn`, indicator flashed on appear: header (wraps), dial at
+  min(C − 32, 0.40 H), readout, status line and lock chip, spot row, tiles as full-width rows, map card at
+  200, footer. Every block is complete.
+- **Reading order:** header, dial, readout + status line, lock chip, spot row, tiles (Position, Elevation,
+  Sun, Moon, Map), map card. Each tile is one element with its caption, value and secondary spelled out;
+  Position has the actions **Next Format** and **Copy**.
+- **Targets:** 44×44 pt (iOS), 28×28 pt (macOS), 48×48 dp (Android). **Contrast:** 4.5:1 for every text that
+  carries information; night secondary text at least `#E03020` on black.
+- **Screen title:** iOS keeps "Bearings" as the accessibility title; Android sets `paneTitle`.
+
+---
+
+## 8. CI and tests
+
+**Launch arguments** (applied for that launch only, never saved): Apple `--sample`, `--format <id>`,
+`--layout small|medium|large|extraLarge`, `--map-sheet` (opens the map sheet), `--show-terms`,
+`--selftest`. Android extras: `--ez sample true`, `--es format <id>`, `--es layout <id>`,
+`--ez mapSheet true`, `--es show terms`, `--ez selftest true`, `--ez night true`.
+
+**The golden table** (REFINE.md §4.7): devices {iPhone SE, 16, 16 Pro, 17 Pro Max, Pixel 7, iPad mini, 11"
+and 13" in both orientations, Mac 380×720 and 420×840, a phone in landscape} × 4 layouts × {none, locked,
+marked, both} × {k 1.0, 1.3, accessibility} × {no banner, banner}. It fails if more than 24 is left empty
+at the bottom, the blocks add up to more than S (something partly visible), the dial falls below its floor
+or above its cap, or a map card is under 140; and it checks the iPhone 16 Pro worked numbers.
+
+- `LayoutPlan.tableFailures()` (Swift) and `LayoutPlan.tableFailures()` (Kotlin) run it; the Mac, iPhone and
+  Android self-tests report it, with one line per layout for the sample screen.
+- `Tests/BearingsTests/LayoutPlanTests.swift` (`swift test`, the Tests workflow) runs it plus the rules
+  above per device, the layout ids, the accessibility list, two panes and night contrast.
+- `android/app/src/test/.../LayoutPlanTest.kt` (`testDebugUnitTest`, the Android workflow) runs the Kotlin
+  table and the layout ids.
+- The self-tests also check night secondary contrast ≥ 4.5:1 and that no coordinate string contains "…".
+
+**Screenshots:**
+
+| Where | Files |
+|---|---|
+| iPhone and iPad (`ios.yml`, `$P` = iphone / ipad) | `$P-1-terms`, `$P-2-sample` (Medium), `$P-3-mgrs`, `$P-6-small`, `$P-7-large`, `$P-8-xl`, `$P-10-map-sheet`; `iphone-4-live`, `iphone-5-large-text`, `iphone-9-xl-large-text`; `ipad-9-landscape` when the Simulator can rotate |
+| Android (`scripts/android-selftest.sh`) | `android-1-terms`, `-2-live`, `-3-sample` (Medium), `-4-mgrs`, `-5-night`, `-6-large-text`, `-7-small`, `-8-large`, `-9-xl`, `-10-xl-large-text`, `-11-map-sheet` |
+| Mac (`mac.yml`, ImageRenderer) | `mac-main` (Medium), `mac-night`, `mac-layout-small`, `mac-layout-large`, `mac-layout-extraLarge` (420×840), `mac-layout-extraLarge-min` (380×720). ImageRenderer cannot draw sheets or MapKit, so there is no Mac map-sheet shot. |
+| App Store (`app-store.yml`) | 3 per device, layouts named explicitly: Medium, Extra Large, Small (UTM). None may show empty space. |
+
+---
+
+## 9. Platform notes
+
+- **Apple:** `MainView.swift` reads `LayoutPlan.plan(...)` from the root `GeometryReader` (H = size + the
+  safe-area insets). The environment value `\.flatDetails` (set by `Mac/SelfTest.swift`) draws plain stacks
+  instead of a `ScrollView` and the ⋯ symbol instead of a `Menu`, because ImageRenderer cannot draw those.
+  `BearingsPhoneApp.swift` / `PhoneLaunch` and `BearingsMacApp.swift` read the launch arguments.
+- **Android:** `MainScreen.kt` uses `BoxWithConstraints` and `LayoutPlan.plan(...)`; two panes at
+  `maxWidth ≥ 700.dp && maxWidth > maxHeight`, or a height under 480 dp. `MainActivity.kt` reads the
+  `layout` and `mapSheet` extras without saving them. No new dependencies.
+- **Web** (`docs/app.html`) follows later with the same table, key and order.
+
+---
+
+## 10. Why a fixed panel
+
+The old scrolling page under a hero dial caused every problem in REFINE.md §2: tiles below the fold, a map
+cut at it, and black above it. Bearings has five facts and a map, which fit on one screen when laid out
+compactly. Instruments are glanced at, not read: Apple Compass, the Apple Watch Compass, Garmin data pages
+and the compass views in Gaia GPS and onX all show a fixed panel with every value visible without a
+gesture. One tile component (the widgets' caption-over-value) carries everything, so the app and its
+widgets look like one product. The map is a tile that opens a sheet where a usable map does not fit (the
+pattern Apple Weather uses for its map module, and Material's expanding card), and a full card where it
+does. Only accessibility text sizes scroll, as HIG and Material expect.

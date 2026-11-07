@@ -3,7 +3,7 @@ import UIKit
 
 /// Bearings for iPhone and iPad: the same one screen as the Mac, with the live compass and level.
 /// Launch arguments for CI: `--selftest` (checks, report in Documents), `--sample` (the sample place),
-/// `--format <id>`, `--layout <id>` (not saved), `--show-terms`.
+/// `--format <id>`, `--layout <id>` (not saved), `--map-sheet` (opens the map sheet), `--show-terms`.
 @main
 struct BearingsPhoneApp: App {
     @StateObject private var nav = Navigator.shared
@@ -41,9 +41,17 @@ struct BearingsPhoneApp: App {
         if let id = PhoneLaunch.value(after: "--format"), let format = Geo.Format(rawValue: id) { nav.format = format }
         // `--layout small|medium|large|extraLarge`: shown for this launch, not saved.
         if let id = PhoneLaunch.value(after: "--layout") { nav.showLayout(id) }
-        if PhoneLaunch.sample { SharedStore.enabled = false; nav.showSample(lock: 240); return }
+        if PhoneLaunch.sample {
+            SharedStore.enabled = false
+            nav.showSample(lock: 240)
+            if PhoneLaunch.mapSheet { nav.mapSheet = true }
+            return
+        }
         if PhoneLaunch.selfTest { await PhoneSelfTest.run(nav: nav); return }
-        if !askTerms { nav.start() }
+        if !askTerms {
+            nav.start()
+            if PhoneLaunch.mapSheet { nav.mapSheet = true }
+        }
     }
 }
 
@@ -52,6 +60,8 @@ enum PhoneLaunch {
     static let selfTest = args.contains("--selftest")
     static let sample = args.contains("--sample")
     static let showTerms = args.contains("--show-terms")
+    /// CI's photograph of the map sheet (docs/REFINE.md §3.2).
+    static let mapSheet = args.contains("--map-sheet")
     static func value(after flag: String) -> String? {
         guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
         return args[i + 1]

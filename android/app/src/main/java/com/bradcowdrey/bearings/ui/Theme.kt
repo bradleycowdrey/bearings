@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,6 +87,31 @@ object Op {
     const val FILL = 0.12f
     const val TILE = 0.08f
     const val ROW_FILL = 0.07f
+    /** Secondary text in night mode: white at 90% through the red multiply is #E6291C, about 4.7:1 on black (§4.3). */
+    const val NIGHT_SECONDARY = 0.9f
+    /** The readout's "—°" before there is a heading. */
+    const val NO_HEADING = 0.4f
+}
+
+/** True while night mode's red multiply is on, for colours that must stay legible through it. */
+val LocalNight = compositionLocalOf { false }
+
+/** Secondary text: white at 60% by day, at 90% at night (so it stays 4.5:1 or better through the red multiply). */
+@Composable
+fun secondary(): Color = white(if (LocalNight.current) Op.NIGHT_SECONDARY else Op.CAPTION)
+
+/** Header line 2: white at 75% by day, at 90% at night. */
+@Composable
+fun headerSecondary(): Color = white(if (LocalNight.current) Op.NIGHT_SECONDARY else 0.75f)
+
+/** WCAG contrast of night mode's secondary text on black, for the self-test (§4.7): white at [alpha] × the night red. */
+object NightContrast {
+    private fun linear(c: Float): Double { val v = c.toDouble(); return if (v <= 0.03928) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4) }
+    fun luminance(c: Color) = 0.2126 * linear(c.red) + 0.7152 * linear(c.green) + 0.0722 * linear(c.blue)
+    /** The colour white at [alpha] on black becomes through the multiply. */
+    fun nightColor(alpha: Float) = Color(alpha * Palette.nightRed.red, alpha * Palette.nightRed.green, alpha * Palette.nightRed.blue)
+    fun ratioOnBlack(c: Color) = (luminance(c) + 0.05) / 0.05
+    val secondary: Double get() = ratioOnBlack(nightColor(Op.NIGHT_SECONDARY))
 }
 
 /** White at a step of the ladder. */
@@ -107,6 +133,22 @@ object Look {
     const val CAPTION_SIZE = 12f
     const val VALUE_SIZE = 20f
     val shape = RoundedCornerShape(16.dp)
+
+    // The tile component (docs/REFINE.md §3.2), shared with the widgets (which keep 10 sp captions for their size).
+    const val TILE_CAPTION = 11f
+    const val TILE_CAPTION_LINE = 13f
+    const val TILE_CAPTION_TRACKING = 0.6f
+    const val TILE_VALUE = 17f
+    const val TILE_VALUE_LINE = 19f
+    const val TILE_SECONDARY = 13f
+    const val TILE_SECONDARY_LINE = 16f
+    const val WIDGET_CAPTION = 10f
+    val tilePaddingH = 12.dp
+    val tilePaddingV = 10.dp
+    /** The header bar's corners. */
+    val headerShape = RoundedCornerShape(14.dp)
+    /** Values may shrink this far before they wrap; they never ellipsize. */
+    const val MIN_TEXT_SCALE = 0.85f
 }
 
 /**

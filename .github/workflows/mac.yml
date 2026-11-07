@@ -3,7 +3,7 @@ name: Mac
 # Builds the Mac app and its widget on a real Mac, checks the packaged widget (entitlements, App Group,
 # extension point), and runs `Bearings --selftest`: the core's known answers, a live ground elevation
 # from Open-Meteo, naming a place, the update check, the screen drawn with the sample place in every
-# compass layout (docs/LAYOUTS.md §11), the layout planner's 40% floor, and every widget size drawn. The
+# layout (docs/LAYOUTS.md §8), the layout planner's golden table, and every widget size drawn. The
 # report and pictures go to the ci-shots branch; the job fails if any check fails or a layout isn't drawn.
 on:
   push:
@@ -68,7 +68,7 @@ jobs:
       - name: Fail on any failed check
         run: |
           grep -E "^FAIL" "$RUNNER_TEMP/shots/report.txt" | sed 's/^/::error::/' || true
-          # The screen in every layout (docs/LAYOUTS.md §11): Medium is mac-main.png.
+          # The screen in every layout (docs/LAYOUTS.md §8): Medium is mac-main.png.
           for F in mac-main mac-night mac-layout-small mac-layout-large mac-layout-extraLarge mac-layout-extraLarge-min; do
             [ -s "$RUNNER_TEMP/shots/$F.png" ] || { echo "::error::The self-test didn't draw $F.png"; exit 1; }
           done
