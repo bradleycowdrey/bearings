@@ -1,0 +1,105 @@
+ALL PASSED (58 checks)
+PASS Decimal degrees
+PASS Degrees, minutes, seconds
+PASS Degrees, decimal minutes
+PASS UTM
+PASS MGRS
+PASS Plus Code
+PASS Compass points
+PASS Short way round
+PASS Smoothing across north
+PASS Elevation in feet and metres
+PASS Sun's direction
+PASS Sunrise and sunset
+PASS Polar night in Longyearbyen
+PASS Moon's direction
+PASS Moon's phase
+PASS Distance and bearing to a spot
+PASS Distances in words
+PASS Speed
+PASS Air pressure
+PASS Place in words
+PASS Open-Meteo ground elevation at Maroon Bells (2931 m)
+PASS Place list bundled (34191 places)
+PASS Offline place name at Maroon Bells (66 mi NE of Montrose, Colorado)
+PASS Far from any town in the Pacific
+PASS Place name at Maroon Bells (Aspen, Colorado)
+PASS Update version comparison
+PASS Layout planner table (gaps are tokens, header pinned, nothing empty or cut, rows add up to C, layouts distinct)
+PASS Medium at 420 × 840 with the sample: dial 358 pt, 3-column grid with the Map tile, 0 pt spare
+PASS Large at 420 × 840 with the sample: 2 × 2, the map in the header, dial 374 pt (16 or more over Medium's)
+PASS Mac window margins 24 / 24 / 24 pt (24 on every edge)
+PASS Owner's rule: dial ≥ 40% of H (every layout, sample and live, Text Size 1.0 and 1.3)
+INFO 420 × 840, sample: small: dial 336 (40% of H), compact row, map tile 106, tiles 72, bottom 0
+INFO 420 × 840, sample: medium: dial 358 (43% of H), 3-column grid, map tile, tiles 80, bottom 0
+INFO 420 × 840, sample: large: dial 374 (44% of H), 2 × 2 grid, map in header, tiles 72, bottom 0
+INFO 420 × 840, sample: extraLarge: dial 404 (48% of H), compact row, map in header, tiles 72, bottom 20
+INFO 420 × 840, live: small: dial 336 (40% of H), compact row, map card 226, tiles 72, bottom 0
+INFO 420 × 840, live: medium: dial 388 (46% of H), 3-column grid, map tile, tiles 88, bottom 37 (centred)
+INFO 420 × 840, live: large: dial 404 (48% of H), 2 × 2 grid, map in header, tiles 72, bottom 45 (centred)
+INFO 420 × 840, live: extraLarge: dial 404 (48% of H), compact row, map in header, tiles 72, bottom 80 (centred)
+INFO 420 × 780, sample: small: dial 312 (40% of H), compact row, map in header, tiles 72, bottom 41 (centred)
+INFO 420 × 780, sample: medium: dial 314 (40% of H), 3-column grid, map tile, tiles 72, bottom 0
+INFO 420 × 780, sample: large: dial 394 (50% of H), compact row, map in header, tiles 72, bottom 0
+INFO 420 × 780, sample: extraLarge: dial 404 (52% of H), compact row, map in header, rows merged, tiles 72, bottom 24
+INFO 420 × 780, live: small: dial 312 (40% of H), compact row, map card 190, tiles 72, bottom 0
+INFO 420 × 780, live: medium: dial 388 (50% of H), 3-column grid, map tile, tiles 88, bottom 7
+INFO 420 × 780, live: large: dial 404 (52% of H), 2 × 2 grid, map in header, tiles 72, bottom 15
+INFO 420 × 780, live: extraLarge: dial 404 (52% of H), compact row, map in header, tiles 72, bottom 50 (centred)
+PASS No ellipsis in the tiles, the lock row or the header (every value fits or wraps)
+PASS No-heading readout drawn as a centred dash (within 4 pt of the digits' midline)
+PASS Both Position lines drawn at one size
+PASS Window drawn as planned at 420 × 840 (header pinned, grids as planned and distinct, bottom as planned)
+INFO 420 × 840 small sample: dial 336 (40% of H), compact row, map tile 106, tiles 72, bottom 0
+INFO 420 × 840 medium sample: dial 358 (43% of H), 3-column grid, map tile, tiles 80, bottom 0
+INFO 420 × 840 large sample: dial 374 (44% of H), 2 × 2 grid, map in header, tiles 72, bottom 0
+INFO 420 × 840 extraLarge sample: dial 404 (48% of H), compact row, map in header, tiles 72, bottom 20
+INFO 420 × 840 small no compass: dial 336 (40% of H), compact row, map card 150, tiles 72, bottom 0
+INFO 420 × 840 medium no compass: dial 388 (46% of H), 3-column grid, map tile, tiles 87, bottom 0
+INFO 420 × 840 large no compass: dial 404 (48% of H), 2 × 2 grid, map in header, tiles 72, bottom 7
+INFO 420 × 840 extraLarge no compass: centred, 42 over and under the panel
+INFO 420 × 840 extraLarge no compass: dial 404 (48% of H), compact row, map in header, tiles 72, bottom 42 (centred)
+INFO 420 × 840 small live: dial 336 (40% of H), compact row, map card 226, tiles 72, bottom 0
+INFO 420 × 840 medium live: centred, 37 over and under the panel
+INFO 420 × 840 medium live: dial 388 (46% of H), 3-column grid, map tile, tiles 88, bottom 37 (centred)
+INFO 420 × 840 large live: centred, 45 over and under the panel
+INFO 420 × 840 large live: dial 404 (48% of H), 2 × 2 grid, map in header, tiles 72, bottom 45 (centred)
+INFO 420 × 840 extraLarge live: centred, 80 over and under the panel
+INFO 420 × 840 extraLarge live: dial 404 (48% of H), compact row, map in header, tiles 72, bottom 80 (centred)
+PASS Window drawn as planned at 420 × 780 (header pinned, grids as planned and distinct, bottom as planned)
+INFO 420 × 780 small sample: centred, 41 over and under the panel
+INFO 420 × 780 small sample: dial 312 (40% of H), compact row, map in header, tiles 72, bottom 41 (centred)
+INFO 420 × 780 medium sample: dial 314 (40% of H), 3-column grid, map tile, tiles 72, bottom 0
+INFO 420 × 780 large sample: dial 394 (50% of H), compact row, map in header, tiles 72, bottom 0
+INFO 420 × 780 extraLarge sample: dial 404 (52% of H), compact row, map in header, rows merged, tiles 72, bottom 24
+INFO 420 × 780 small no compass: dial 312 (40% of H), compact row, map tile 114, tiles 72, bottom 0
+INFO 420 × 780 medium no compass: dial 342 (44% of H), 3-column grid, map tile, tiles 80, bottom 0
+INFO 420 × 780 large no compass: dial 358 (46% of H), 2 × 2 grid, map in header, tiles 72, bottom 0
+INFO 420 × 780 extraLarge no compass: dial 404 (52% of H), compact row, map in header, tiles 72, bottom 12
+INFO 420 × 780 small live: dial 312 (40% of H), compact row, map card 190, tiles 72, bottom 0
+INFO 420 × 780 medium live: dial 388 (50% of H), 3-column grid, map tile, tiles 88, bottom 7
+INFO 420 × 780 large live: dial 404 (52% of H), 2 × 2 grid, map in header, tiles 72, bottom 15
+INFO 420 × 780 extraLarge live: centred, 50 over and under the panel
+INFO 420 × 780 extraLarge live: dial 404 (52% of H), compact row, map in header, tiles 72, bottom 50 (centred)
+PASS Night secondary text contrast 4.69:1
+PASS Coordinates without an ellipsis in every format
+PASS Sample has a marked spot and the sun's day (9.2 mi · 46° NE)
+PASS Drew the screen (mac-main.png)
+PASS Drew night mode (mac-night.png)
+PASS Sample without a compass has no heading
+PASS Drew the no-compass state (mac-nocompass.png)
+PASS Drew the live state (mac-live.png)
+PASS Drew Small at 420 × 840 (mac-layout-small.png, dial 336 pt, 40%, 0 pt spare)
+PASS Drew Large at 420 × 840 (mac-layout-large.png, dial 374 pt, 44%, 0 pt spare)
+PASS Drew Extra Large at 420 × 840 (mac-layout-extraLarge.png, dial 404 pt, 48%, 20 pt spare)
+PASS Drew Extra Large at 420 × 780 (mac-layout-extraLarge-min.png, dial 404 pt, 52%, 24 pt spare)
+PASS Drew Medium at 1200 × 800 (mac-wide-medium.png, dial 384 pt, 48%, 0 pt spare)
+PASS Drew Large at 1200 × 800 (mac-wide-large.png, dial 432 pt, 54%, 182 pt spare)
+PASS Map picture for the large widget
+PASS Widget timeline: every 15 minutes for 2 hours
+PASS small widget draws
+PASS small widget draws before a fix
+PASS medium widget draws
+PASS medium widget draws before a fix
+PASS large widget draws
+PASS large widget draws before a fix

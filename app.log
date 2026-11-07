@@ -1,0 +1,8 @@
+2026-11-07 11:40:41.667 Bearings[2883:11842] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-11-07 11:40:43.157 Bearings[2883:11842] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-11-07 11:40:43.599 Bearings[2883:11842] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-11-07 11:40:43.999 Bearings[2883:11842] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-11-07 11:40:44.184 Bearings[2883:11842] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-11-07 11:40:44.967 Bearings[2883:11842] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-11-07 11:40:45.373 Bearings[2883:11842] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+ALL PASSED (58 checks)
