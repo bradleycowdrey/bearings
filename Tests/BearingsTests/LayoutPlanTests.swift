@@ -545,5 +545,19 @@ final class LayoutPlanTests: XCTestCase {
         XCTAssertEqual(LayoutPlan.plan(w: 1200, h: 800, s: 800, mac: true).dial, 496, accuracy: 1)
         // A phone on its side is two panes too.
         XCTAssertTrue(LayoutPlan.plan(w: 852, h: 393, s: 372, isLandscapePhone: true).twoPane)
+        // Extra Large keeps its strip only where the strip's Position column holds a longitude: a 900 × 700
+        // window's 360 pane can't (134 of 156), so it takes two rows, Position full width, at 96.
+        let narrow = LayoutPlan.plan(w: 900, h: 700, s: 700, layout: .extraLarge, hasSpot: true, locked: true, mac: true)
+        XCTAssertTrue(narrow.twoPane)
+        XCTAssertEqual(narrow.grid, .twoRow)
+        XCTAssertEqual(narrow.cells[0].map(\.tile), [.position])
+        XCTAssertEqual(narrow.rowHeights, [LayoutPlan.tileTablet, LayoutPlan.tileTablet])
+        XCTAssertGreaterThanOrEqual(narrow.mapHeight, LayoutPlan.mapPane - 0.5)
+        for d in LayoutPlan.devices {
+            let p = LayoutPlan.plan(w: d.w, h: d.h, s: d.s, layout: .extraLarge, mac: d.mac)
+            if p.twoPane && p.grid == .strip {
+                XCTAssertGreaterThanOrEqual(p.stripWidths[0], LayoutPlan.stripPositionNeed(k: 1, tablet: p.tablet) - 0.5, d.name)
+            }
+        }
     }
 }

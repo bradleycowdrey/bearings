@@ -226,6 +226,21 @@ class LayoutPlanTest {
         }
     }
 
+    /** Two panes: Extra Large keeps its strip only where the strip's Position column holds a longitude; else two rows. */
+    @Test fun narrowPaneStripGivesWayToTwoRows() {
+        for (d in LayoutPlan.devices) for (k in listOf(1f, 1.15f)) {
+            val p = LayoutPlan.planFor(d, Layout.EXTRA_LARGE, k)
+            if (p.grid == GridMode.STRIP) assertTrue("${d.name} k$k", p.rows[0].widths[0] >= LayoutPlan.stripPositionNeed(k) - 0.5f)
+        }
+        // A 760 × 700 window: Extra Large's pane is 272 wide, its strip's Position column 104 (a longitude needs 112).
+        val narrow = LayoutPlan.plan(760f, 700f, 652f, Layout.EXTRA_LARGE, locked = true, hasSpot = true)
+        assertTrue(narrow.twoPane)
+        assertEquals(GridMode.TWO_ROW, narrow.grid)
+        assertEquals(listOf(TileKind.POSITION), narrow.rows[0].tiles)
+        assertEquals(LayoutPlan.tileHeight(1f, narrow.tablet), narrow.tile, 0.01f)
+        assertEquals(GridMode.STRIP, LayoutPlan.planFor(device("Android tablet landscape"), Layout.EXTRA_LARGE).grid)
+    }
+
     /** A.8: a tablet column is at most 720 wide, tiles 96. */
     @Test fun tablet() {
         val p = LayoutPlan.planFor(device("iPad 11 portrait"), Layout.MEDIUM)

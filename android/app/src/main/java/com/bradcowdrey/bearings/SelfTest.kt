@@ -187,10 +187,14 @@ object SelfTest {
             for (t in times) {
                 val line = TextFit.sunLine("↑", t)
                 if (width(line, size * k * 0.85f, face) <= inner) continue
+                // A list row whose trailing 60% can't hold the time whole puts the times under the caption at the
+                // tile's full width (MainScreen's SunTile, stacked).
+                val sunRoom = if (p.list) cell - 32f else inner
+                if (p.list && width(line, size * k * 0.85f, face) <= sunRoom) continue
                 val (main, suffix) = TextFit.splitClock(t)
                 if (suffix != null) wrapped++
-                if ('…' in t || suffix == null || width("↑\u00A0$main\u202F", size * k * 0.85f, face) + width(suffix, 11f * k, medium) > inner) {
-                    cutText += "$name Sun \"$line\" in ${inner.toInt()}"
+                if ('…' in t || suffix == null || width("↑\u00A0$main\u202F", size * k * 0.85f, face) + width(suffix, 11f * k, medium) > sunRoom) {
+                    cutText += "$name Sun \"$line\" in ${sunRoom.toInt()}"
                 }
             }
         }

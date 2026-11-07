@@ -992,7 +992,8 @@ strip**:
 **Live (no lock, no spot)**: the Targets card is absent (A2 sheet 1). Its height plus the 8 gap goes to the
 layout's growth:
 - Small: the map card.
-- Medium: row 1 to 88, then row 2 up to 176. At ≥ 150, the Sun tile becomes `SUN` + "10 h 32 m of
+- Medium: row 1 to 88, then row 2 up to 176. At ≥ 165 (× k; the tall tile's drawn height, so it never
+  overflows a shorter row), the Sun tile becomes `SUN` + "10 h 32 m of
   daylight" over a hairline and a `MOON` section ("◐ 53%" / "Last quarter"), and the Map tile shows the
   speed chip.
 - Large: rows to 104, then the dial to its width cap.

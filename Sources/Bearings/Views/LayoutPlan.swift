@@ -128,7 +128,8 @@ struct LayoutPlan: Equatable {
     /// - `six`: Large's 3 × 2 (Latitude | Longitude | Elevation, Sunrise | Moon | Pressure or Speed).
     /// - `strip`: Extra Large's one summary tile, Position | Elevation | Sun.
     /// - `quadCompact`: 2 × 2 of 64 tiles (Position | Elevation, Sun | Pressure or Speed).
-    /// - `twoRow`: large text: Position full width, then Elevation | Sun (Small: Elevation | Map).
+    /// - `twoRow`: large text: Position full width, then Elevation | Sun (Small: Elevation | Map); also Extra
+    ///   Large in a right pane too narrow for the strip's longitude (a 900-wide Mac window).
     /// - `row`: one 72 compact row, Position | Elevation | Sun (Small: Elevation | Map), the map in the header.
     /// - `mapRows`: Small giving up its card: the compact row, then a full-width Map tile.
     /// - `list`: the scrolling list's rows.
@@ -394,8 +395,10 @@ struct LayoutPlan: Equatable {
     static let tileGrown: CGFloat = 88
     static let tileTall: CGFloat = 176
     static let tileLarge: CGFloat = 104
-    /// Medium's Sun tile adds the daylight and the moon once its row is this tall.
-    static let tallSun: CGFloat = 150
+    /// Medium's Sun tile adds the daylight and the moon once its row is this tall (× k): the tall tile's true
+    /// drawn height (10 + caption + 6 + two times + daylight + hairline + MOON + 53% + phase + 10 ≈ 165 at
+    /// 1.0). A shorter row keeps the plain Sun tile, so what is drawn never overflows the planned row.
+    static let tallSun: CGFloat = 165
     static let strip: CGFloat = 88
     static let stripTablet: CGFloat = 104
     static let stripGrown: CGFloat = 120
@@ -404,6 +407,12 @@ struct LayoutPlan: Equatable {
     static let bandPadding: CGFloat = 12
     /// The strip's dividers.
     static let divider: CGFloat = 1
+    /// The strip's columns: 12 across each side.
+    static let stripInset: CGFloat = 12
+    /// "106.94117° W" on one line at 0.85 of the strip's value size: about 88 at 15 pt (phone), 129 at 22 pt
+    /// (iPad and large windows), with a little to spare.
+    static let positionLine: CGFloat = 88
+    static let positionLineTablet: CGFloat = 132
     /// The compact row: Elevation and Sun are max(104, 0.27 C) wide.
     static let compactMin: CGFloat = 104
     static let compactShare: CGFloat = 0.27
@@ -443,6 +452,11 @@ struct LayoutPlan: Equatable {
     // MARK: Heights, shared with MainView so what it draws is what was planned
 
     static func cardHeight(k: CGFloat, tablet: Bool) -> CGFloat { (tablet ? cardTablet : card) * k }
+    /// The narrowest strip Position column that holds the longest longitude on one line at text size `k`.
+    /// In two panes, Extra Large's strip with a narrower Position column gives way to `twoRow`.
+    static func stripPositionNeed(k: CGFloat, tablet: Bool) -> CGFloat {
+        (tablet ? positionLineTablet : positionLine) * k + 2 * stripInset
+    }
     /// The readout's trimmed block: cap height to 4 under the baseline.
     static func readoutHeight(headingSize: CGFloat) -> CGFloat { headingSize * readoutCap + readoutBelow }
     /// The readout's slot: with no compass it also holds "No heading" on its 40 × k line.
@@ -741,6 +755,14 @@ struct LayoutPlan: Equatable {
         p.leftWidth = i.w - 2 * marginLarge - paneGap - right
         p.widthCap = p.leftWidth
         apply([], to: &p)
+        // Extra Large in a narrow right pane (40% of a 900-wide Mac window): the strip's Position column is
+        // too narrow for a longitude, so the pane takes two rows instead: Position full width, then
+        // Elevation | Sun, at the full tile height (72, 96 on a tablet, × k).
+        if p.grid == .strip && p.stripWidths[0] < stripPositionNeed(k: i.k, tablet: p.tablet) - 0.5 {
+            p.grid = .twoRow
+            let row: CGFloat = (p.tablet ? tileTablet : tile) * i.k
+            p.rowHeights = [row, row]
+        }
         let group = p.gapDialReadout + p.readoutSlot + p.gapReadoutStatus + p.statusHeight
         let dial = min(p.leftWidth, p.end - p.topBand - p.gapTopDial - group, i.layout.paneShare * i.h)
         if dial < dialMin { return listPlan(i) }

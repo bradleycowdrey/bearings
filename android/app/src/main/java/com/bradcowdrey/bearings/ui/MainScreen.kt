@@ -1134,11 +1134,13 @@ private fun TileGrid(nav: Navigator, plan: Plan, a: Actions) {
                         row.tiles.forEachIndexed { i, kind ->
                             // The value's room: the tile less its insets; in a list row, the trailing 60%.
                             val inner = (if (listRow) (row.widths[i] - 2 * r.padH.value) * 0.6f else row.widths[i] - 2 * r.padH.value).coerceAtLeast(1f).dp
+                            // The tile's whole width inside its insets (where a list row's Sun times go when the 60% is too narrow).
+                            val full = (row.widths[i] - 2 * r.padH.value).coerceAtLeast(1f).dp
                             when (kind) {
                                 TileKind.POSITION -> PositionTile(nav, r, stale, inner, listRow, openPositionMenu, a)
                                 TileKind.LATITUDE, TileKind.LONGITUDE -> AxisTile(nav, r, kind == TileKind.LATITUDE, stale, inner, openPositionMenu, a)
                                 TileKind.ELEVATION -> ElevationTile(nav, plan, r, stale, inner, listRow, a)
-                                TileKind.SUN -> SunTile(nav, plan, r, inner, height, listRow, a)
+                                TileKind.SUN -> SunTile(nav, plan, r, inner, full, height, listRow, a)
                                 TileKind.MOON -> MoonTile(nav, r, inner, listRow, a)
                                 TileKind.PRESSURE -> PressureTile(nav, r, inner, listRow, a)
                                 TileKind.SPEED -> SpeedTile(nav, r, inner, listRow)
@@ -1187,16 +1189,25 @@ private fun TileRow(row: TileRowPlan, total: Float, minHeight: Float, mapIndex: 
 /**
  * One tile (A.2): radius 16, the tile fill and a 1 dp edge; the caption (caps, tracking 0.6, secondary, text only)
  * at the top inset and the value block with its last baseline at the bottom inset, so a grown tile is never half
- * empty at the bottom. With [listRow] (the scrolling list) the caption leads and the value block trails. TalkBack
- * reads it as one element ([spoken]).
+ * empty at the bottom. With [listRow] (the scrolling list) the caption leads and the value block trails; with [stacked]
+ * too, the value block goes under the caption at the tile's full width, still trailing. TalkBack reads it as one
+ * element ([spoken]).
  */
 @Composable
 private fun Tile(caption: @Composable () -> Unit, spoken: String, r: Ramp, click: Modifier = Modifier, listRow: Boolean = false,
-                 content: @Composable ColumnScope.() -> Unit) {
+                 stacked: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     // Clipped before the click, so the ripple keeps the rounded corners.
     val base = Modifier.fillMaxSize().clip(Look.shape).then(click).frostedTile()
         .semantics(mergeDescendants = true) { contentDescription = spoken }
         .padding(horizontal = r.padH, vertical = r.padV)
+    if (listRow && stacked) {
+        Column(base) {
+            caption()
+            Spacer(Modifier.height(4.dp))
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, content = content)
+        }
+        return
+    }
     if (listRow) {
         Row(base, verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(0.4f)) { caption() }
@@ -1465,7 +1476,7 @@ private fun moonSpoken(phase: com.bradcowdrey.bearings.MoonPhase) =
  * SUN with the daylight, a hairline, then a MOON section. Opens the Details sheet, which has the moon in full.
  */
 @Composable
-private fun SunTile(nav: Navigator, plan: Plan, r: Ramp, inner: Dp, rowHeight: Float, listRow: Boolean, a: Actions) {
+private fun SunTile(nav: Navigator, plan: Plan, r: Ramp, inner: Dp, full: Dp, rowHeight: Float, listRow: Boolean, a: Actions) {
     val click = Modifier.clickable(role = Role.Button, onClickLabel = "Show the details", onClick = a.details)
     val phase = nav.moonPhase
     val withMoon = sunCarriesMoon(plan, rowHeight)
@@ -1512,11 +1523,26 @@ private fun SunTile(nav: Navigator, plan: Plan, r: Ramp, inner: Dp, rowHeight: F
             MoonValue(phase, r)
             Text(Sky.phaseName(phase), style = secondaryStyle(r))
         }
-        else -> Tile(caption, "${t.spoken}$moonSpoken", r, click, listRow) {
-            SunTime("↑", t.rise, style, inner)
-            SunTime("↓", t.set, style, inner)
+        else -> {
+            // The scrolling list: where a time can't stay whole at 0.85 in the trailing 60% (font scale 2 on a 360 dp
+            // phone), the times go under the caption at the tile's full width, each still whole on its own line.
+            val stacked = listRow && !sunLinesFit(listOf(t.rise, t.set), style, inner)
+            val room = if (stacked) full else inner
+            Tile(caption, "${t.spoken}$moonSpoken", r, click, listRow, stacked) {
+                SunTime("↑", t.rise, style, room)
+                SunTime("↓", t.set, style, room)
+            }
         }
     }
+}
+
+/** Whether every "↑ 6:36 AM" line fits [width] on one line at 0.85 of its size or more. */
+@Composable
+private fun sunLinesFit(times: List<String>, style: TextStyle, width: Dp): Boolean {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val max = with(density) { width.roundToPx() }.coerceAtLeast(1)
+    return remember(times, max, style, density) { times.all { fitScale(measurer, TextFit.sunLine("↑", it), style, max) != null } }
 }
 
 /** The moon's glyph, drawn for its phase, and "53%". */
@@ -1658,7 +1684,7 @@ private fun Strip(nav: Navigator, plan: Plan, stale: Boolean, onLongPress: () ->
         row.tiles.forEachIndexed { i, kind ->
             if (i > 0) Box(Modifier.width(row.gap.dp).fillMaxHeight().background(Palette.tileStroke))
             Summary(nav, plan, kind, band = false, a, Modifier.width(row.widths[i].dp).fillMaxHeight(),
-                PaddingValues(horizontal = 12.dp, vertical = 14.dp), stale, onLongPress)
+                PaddingValues(horizontal = LayoutPlan.STRIP_INSET.dp, vertical = 14.dp), stale, onLongPress)
         }
     }
 }

@@ -1332,7 +1332,7 @@ struct MainView: View {
             Spacer(minLength: 2)
             value()
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, LayoutPlan.stripInset)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -2095,18 +2095,20 @@ extension MainView {
                         }
                     }
                     // Small's band and Extra Large's strip: the longitude and the times in their columns.
-                    if p.grid == .band && k == 1 {
+                    // (At k 1.3 Small has no band: it takes two rows; the band's text is 13 × k wherever it shows.)
+                    if p.grid == .band {
                         let w = p.bandWidths
-                        let lonWidth = textWidth(longitude, size: 13 * Look.minScale, weight: .semibold)
+                        let lonWidth = textWidth(longitude, size: 13 * k * Look.minScale, weight: .semibold)
                         if lonWidth > w[0] + 0.5 { failures.append("\(name): the band's \(longitude) needs \(Int(lonWidth)) of \(Int(w[0])) pt") }
-                        let timeWidth = textWidth("↓\u{00A0}\(Look.timeText(sunset))", size: 13 * Look.minScale, weight: .semibold)
+                        let timeWidth = textWidth("↓\u{00A0}\(Look.timeText(sunset))", size: 13 * k * Look.minScale, weight: .semibold)
                         if timeWidth > w[2] + 0.5 { failures.append("\(name): the band's sunset needs \(Int(timeWidth)) of \(Int(w[2])) pt") }
                     }
                     if p.grid == .strip && k == 1 {
                         let w = p.stripWidths
                         let size: CGFloat = (p.tablet ? ramp.value : Look.compactValueSize) * Look.minScale
                         let lonWidth = textWidth(longitude, size: size, weight: .medium)
-                        if lonWidth > w[0] - 24 + 0.5 { failures.append("\(name): the strip's \(longitude) needs \(Int(lonWidth)) of \(Int(w[0] - 24)) pt") }
+                        let room = w[0] - 2 * LayoutPlan.stripInset
+                        if lonWidth > room + 0.5 { failures.append("\(name): the strip's \(longitude) needs \(Int(lonWidth)) of \(Int(room)) pt") }
                     }
                 }
             }

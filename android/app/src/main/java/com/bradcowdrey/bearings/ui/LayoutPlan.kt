@@ -50,7 +50,8 @@ enum class Layout(
  * - [STRIP] Extra Large: one summary tile, Position | Elevation | Sun (1.25 | 1 | 1, 1 dp dividers);
  * - [QUAD_COMPACT] Large given way (or at large text): Position | Elevation, Sun | Pressure or Speed;
  * - [ROW] the give-way row (A.6 step 6): Position (C − 16 − 2w) | Elevation (w) | Sun (w), the map in the card's button;
- * - [TWO_ROW] large text (k ≥ 1.3): Position full width, then Elevation | Sun;
+ * - [TWO_ROW] large text (k ≥ 1.3): Position full width, then Elevation | Sun; also Extra Large in a trailing pane
+ *   too narrow for the strip's longitude;
  * - [ROWS] the scrolling list: one full-width row each.
  */
 enum class GridMode { BAND, QUAD, SIX, STRIP, QUAD_COMPACT, ROW, TWO_ROW, ROWS }
@@ -264,15 +265,22 @@ object LayoutPlan {
     const val TARGET_ROW_LIST = 84f
     const val TILE = 72f
     const val TILE_MEDIUM_MAX = 88f
-    /** Medium with no Targets card: row 2 grows on to 176; from 150 the Sun tile adds the moon and the Map tile the speed. */
+    /**
+     * Medium with no Targets card: row 2 grows on to 176; from 165 (the tall Sun tile's drawn height, as on Apple) the
+     * Sun tile adds the daylight and the moon and the Map tile the speed. A shorter row keeps the plain Sun tile.
+     */
     const val TILE_MEDIUM_TALL = 176f
-    const val SUN_MOON_FROM = 150f
+    const val SUN_MOON_FROM = 165f
     const val TILE_LARGE_MAX = 104f
     const val TILE_TABLET = 96f
     const val QUAD_COMPACT = 64f
     const val BAND = 72f
     const val STRIP = 104f
     const val STRIP_MAX = 120f
+    /** The strip's columns: 12 across each side. */
+    const val STRIP_INSET = 12f
+    /** "106.94117° W" on one line at 0.85 of the strip's 15 sp value, with a little to spare (Apple: the same at 15 pt). */
+    const val POSITION_LINE = 88f
     const val MAP_MIN = 140f
     /** Two panes: the map card is at least this tall (Small: 60% of the pane too). */
     const val PANE_MAP = 240f
@@ -372,6 +380,11 @@ object LayoutPlan {
     fun bandHeight(k: Float) = max(BAND, 23f + 47f * k)
     /** Extra Large's strip: 14 above and below, the caption, 6 and two 19 lines. */
     fun stripHeight(k: Float, tablet: Boolean = false) = max(STRIP, 34f + 51f * k) + (if (tablet) 0f else 0f)
+    /**
+     * The narrowest strip Position column that holds the longest longitude on one line at text size [k]. In two panes,
+     * Extra Large's strip with a narrower Position column gives way to [GridMode.TWO_ROW] (as on Apple).
+     */
+    fun stripPositionNeed(k: Float) = POSITION_LINE * k + 2 * STRIP_INSET
     /** A row in the scrolling list: 96 at the accessibility sizes. */
     fun listTileHeight(k: Float) = max(64f, 20f + 38f * k)
 
@@ -628,13 +641,18 @@ object LayoutPlan {
         val dial = min(min(pane - 48f, avail - group), max(DIAL_MIN, layout.paneShare * h))
         val location = locationHeight(k, inp.locationLines)
         val banner = if (inp.banner) BANNER + TARGETS_GAP else 0f
+        // Extra Large in a narrow trailing pane: the strip's Position column is too narrow for a longitude, so the pane
+        // takes two rows instead (Position full width, then Elevation | Sun) at the full tile height.
+        val narrowStrip = layout == Layout.EXTRA_LARGE && !inp.big &&
+            rows(GridMode.STRIP, MapMode.CARD, trailing)[0].widths[0] < stripPositionNeed(k) - 0.5f
         val own = when (layout) {
             Layout.SMALL -> if (inp.big) GridMode.TWO_ROW else GridMode.BAND
             Layout.MEDIUM -> GridMode.QUAD
             Layout.LARGE -> if (inp.big) GridMode.QUAD_COMPACT else GridMode.SIX
-            Layout.EXTRA_LARGE -> if (inp.big) GridMode.TWO_ROW else GridMode.STRIP
+            Layout.EXTRA_LARGE -> if (inp.big || narrowStrip) GridMode.TWO_ROW else GridMode.STRIP
         }
-        val t0 = minTile(own, k, tablet)
+        fun rowMin(g: GridMode) = if (narrowStrip && g == GridMode.TWO_ROW) tileHeight(k, tablet) else minTile(g, k, tablet)
+        val t0 = rowMin(own)
         val gridH = gridHeight(own, t0, t0)
         val cardMin = if (layout == Layout.SMALL) max(PANE_MAP, PANE_SMALL_SHARE * avail) else PANE_MAP
         fun content(rowH: Float, grid: GridMode, g: Float, card: Float) =
@@ -657,7 +675,7 @@ object LayoutPlan {
                 }
             }
         }
-        var t = minTile(grid, k, tablet)
+        var t = rowMin(grid)
         var t2 = t
         if (map != MapMode.CARD && location + GRID_GAP + gridHeight(grid, t, t) > avail + 0.5f) return null
         if (map != MapMode.CARD) {
