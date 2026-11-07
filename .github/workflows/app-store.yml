@@ -72,6 +72,8 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APP_REVIEW_EMAIL: ${{ secrets.APP_REVIEW_EMAIL }}
+          APP_REVIEW_PHONE: ${{ secrets.APP_REVIEW_PHONE }}
         run: |
           brew install fastlane >/dev/null; export PATH="$(brew --prefix)/bin:$PATH"
           python3 -c 'import json, os; json.dump({"key_id": os.environ["ASC_KEY_ID"], "issuer_id": os.environ["ASC_ISSUER_ID"], "key": os.environ["ASC_KEY_P8"], "in_house": False}, open("fastlane/api_key.json", "w"))'

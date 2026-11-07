@@ -13,6 +13,7 @@ BUNDLE_ID = "com.bradcowdrey.bearings"
 platform :ios do
   lane :listing do |options|
     prepare_app_store
+    ensure_review_detail
     upload_to_app_store(
       api_key_path: API_KEY,
       app_identifier: BUNDLE_ID,
@@ -121,4 +122,36 @@ platform :ios do
         relationships: { territory: { data: { type: "territories", id: t } } } } } })
     report("Availability (all countries)", code, body)
   end
+
+  # A new version has no App Review contact record yet, and the listing upload fails fetching it
+  # ("No data"), so create one. Email and phone come from the optional APP_REVIEW_EMAIL and
+  # APP_REVIEW_PHONE secrets; they're needed only to submit for review.
+  private_lane :ensure_review_detail do
+    root = File.basename(Dir.pwd) == "fastlane" ? File.dirname(Dir.pwd) : Dir.pwd
+    app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
+    version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
+    next if version.nil?
+    detail = begin
+      version.fetch_app_store_review_detail
+    rescue StandardError
+      nil
+    end
+    if detail
+      UI.message("App Review details already exist")
+    else
+      read = ->(name) { path = File.join(root, "fastlane/metadata/review_information/#{name}.txt"); File.exist?(path) ? File.read(path).strip : nil }
+      blank = ->(v) { v.nil? || v.empty? ? nil : v }
+      attributes = {
+        contact_first_name: read.call("first_name"),
+        contact_last_name: read.call("last_name"),
+        contact_email: blank.call(ENV["APP_REVIEW_EMAIL"]),
+        contact_phone: blank.call(ENV["APP_REVIEW_PHONE"]),
+        notes: read.call("notes"),
+        demo_account_required: false
+      }.compact
+      version.create_app_store_review_detail(attributes: attributes)
+      UI.success("Created App Review details")
+    end
+  end
+
 end

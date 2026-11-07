@@ -1,0 +1,9 @@
+Purpose and audience: Bearings is a free compass for hikers, travellers and anyone who wants to know which way they're facing, where they are, and how high they are. One screen shows the compass heading, the place name with the date and time, coordinates, elevation, the sun and moon, and a map.
+
+How to use it: No account, login or setup. On first launch, tap I Agree on the Terms screen and allow location access. Turn the phone to see the heading change. Tap a coordinate tile to switch format (decimal degrees, DMS, UTM, MGRS, Plus Code); touch and hold to copy. The ⋯ menu marks a spot, locks a bearing, switches true or magnetic north, feet or metres, satellite map and night mode, and shares your location. Widgets: Home Screen (small, medium, large) and Lock Screen; they read the last location from the app through an App Group. The compass needs a real device; in the Simulator the app shows a message instead of the dial heading.
+
+External services: Open-Meteo (api.open-meteo.com) receives a position rounded to about 100 m to look up ground elevation; no other data is sent. The map is Apple Maps. Place names come from the iPhone's own geocoder, or from a built-in list of towns from GeoNames (CC BY 4.0).
+
+Regions: Bearings works the same in every region.
+
+Data: No data is collected; no ads; no in-app purchases; no accounts or user-generated content.
