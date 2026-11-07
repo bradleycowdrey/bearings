@@ -26,6 +26,24 @@ platform :ios do
       submit_for_review: false,
       ignore_language_directory_validation: true
     )
+    attach_build(options)
+  end
+
+  # Picks the newest processed build of this version for the App Store version, which is also what
+  # makes App Store Connect show the app's icon. Choosing a build doesn't submit anything.
+  private_lane :attach_build do |options|
+    _, apps = asc(:get, "v1/apps?filter[bundleId]=#{BUNDLE_ID}")
+    app = apps.dig("data", 0, "id")
+    _, versions = asc(:get, "v1/apps/#{app}/appStoreVersions?filter[platform]=IOS&filter[versionString]=#{options[:version]}")
+    version = versions.dig("data", 0, "id")
+    _, builds = asc(:get, "v1/builds?filter[app]=#{app}&filter[preReleaseVersion.version]=#{options[:version]}&filter[processingState]=VALID&sort=-uploadedDate&limit=1")
+    build = builds.dig("data", 0)
+    if version && build
+      code, body = asc(:patch, "v1/appStoreVersions/#{version}/relationships/build", { data: { type: "builds", id: build["id"] } })
+      report("Build #{build.dig("attributes", "version")} attached to #{options[:version]}", code, body)
+    else
+      UI.important("No App Store version or processed build to attach yet")
+    end
   end
 
   def asc(method, path, body = nil)

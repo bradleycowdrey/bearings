@@ -49,7 +49,7 @@ jobs:
             xcrun simctl privacy "$D" grant location $ID || true
             xcrun simctl location "$D" set 39.09898,-106.94117 || true
             n=1
-            for args in "--sample" "--sample --format utm" "--sample --satellite" "--sample --night"; do
+            for args in "--sample" "--sample --format utm" "--sample --format mgrs"; do
               xcrun simctl terminate "$D" $ID 2>/dev/null || true
               xcrun simctl launch "$D" $ID $args; sleep 8
               xcrun simctl io "$D" screenshot "$SHOTS/$2-0$n.png"; n=$((n + 1))
@@ -59,7 +59,7 @@ jobs:
           shoot "$(pick 'iPhone 1[6-9] Pro Max$')" iphone
           shoot "$(pick 'iPad Pro 13')" ipad
           sips -g pixelWidth -g pixelHeight "$SHOTS"/*.png
-          [ "$(ls "$SHOTS"/*.png | wc -l)" -eq 8 ] || { echo "::error::Expected 8 screenshots"; exit 1; }
+          [ "$(ls "$SHOTS"/*.png | wc -l)" -eq 6 ] || { echo "::error::Expected 6 screenshots"; exit 1; }
       - name: Publish the screenshots for review (ci-appstore branch)
         run: |
           D="$RUNNER_TEMP/pub"; mkdir -p "$D"; cp fastlane/screenshots/en-US/*.png "$D/"
