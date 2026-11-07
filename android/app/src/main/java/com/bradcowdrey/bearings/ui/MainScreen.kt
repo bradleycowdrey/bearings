@@ -136,24 +136,32 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             // Short screens drop the title row and put the ⋯ menu in the sky card, so the dial keeps its room.
-            val compact = maxHeight < Look.compactHeight
+            // So does a larger font size when the title row would leave the dial under 140 (as on iPhone).
             val fs = LocalDensity.current.fontScale.coerceIn(1f, 1.4f)
+            val titleH = maxOf(Look.titleRow, (40 * fs).dp)
+            fun dialFor(compact: Boolean): Dp {
+                val gap = if (compact) 8.dp else Look.gap
+                val readoutSize = if (compact) 44f else 56f
+                val tileTall = if (compact) 8.dp else 12.dp
+                // What everything but the dial and the map takes, so the dial gets what's left (at most 36% of
+                // the height and 360) and the map keeps at least its minimum. At a larger font size each tile
+                // keeps a second detail line. At the top: the title row (48, or the title's line at a larger font
+                // size, and 4 below it) and the sky card (padding and two lines; at least the menu's 48 dp target
+                // and its padding when compact).
+                val skyH = if (compact) maxOf(72.dp, 24.dp + (44 * fs).dp) else Look.skyPadding * 2 + (44 * fs).dp
+                val top = (if (compact) 0.dp else titleH + 4.dp) + skyH
+                val tileH = (58 * fs).dp + (if (fs > 1.1f) (16 * fs).dp else 0.dp) + tileTall * 2
+                val fixed = top + gap + 4.dp + (readoutSize * 1.1f * fs).dp + (18 * fs * (if (fs > 1.1f) 2 else 1)).dp + gap +
+                    (if (nav.mark != null && nav.fix != null) 46.dp + gap else 0.dp) + tileH * 2 + Look.tileGap + gap + 12.dp
+                val mapMin = if (compact) 96.dp else 120.dp
+                return minOf(minOf(maxWidth - 32.dp, maxHeight * 0.36f), minOf(360.dp, maxHeight - fixed - mapMin)).coerceAtLeast(120.dp)
+            }
+            val compact = maxHeight < Look.compactHeight || dialFor(false) < 140.dp
             val gap = if (compact) 8.dp else Look.gap
             val readoutSize = if (compact) 44f else 56f
             val tileTall = if (compact) 8.dp else 12.dp
-            // What everything but the dial and the map takes, so the dial gets what's left (at most 36% of
-            // the height and 360) and the map keeps at least its minimum. At a larger font size each tile
-            // keeps a second detail line. At the top: the title row (48, or the title's line at a larger font
-            // size, and 4 below it) and the sky card (padding and two lines; at least the menu's 48 dp target
-            // and its padding when compact).
-            val titleH = maxOf(Look.titleRow, (40 * fs).dp)
-            val skyH = if (compact) maxOf(72.dp, 24.dp + (44 * fs).dp) else Look.skyPadding * 2 + (44 * fs).dp
-            val top = (if (compact) 0.dp else titleH + 4.dp) + skyH
             val tileH = (58 * fs).dp + (if (fs > 1.1f) (16 * fs).dp else 0.dp) + tileTall * 2
-            val fixed = top + gap + 4.dp + (readoutSize * 1.1f * fs).dp + (18 * fs * (if (fs > 1.1f) 2 else 1)).dp + gap +
-                (if (nav.mark != null && nav.fix != null) 46.dp + gap else 0.dp) + tileH * 2 + Look.tileGap + gap + 12.dp
-            val mapMin = if (compact) 96.dp else 120.dp
-            val dialSide = minOf(minOf(maxWidth - 32.dp, maxHeight * 0.36f), minOf(360.dp, maxHeight - fixed - mapMin)).coerceAtLeast(120.dp)
+            val dialSide = dialFor(compact)
 
             Column(
                 Modifier.fillMaxSize().widthIn(max = 520.dp).align(Alignment.TopCenter)
