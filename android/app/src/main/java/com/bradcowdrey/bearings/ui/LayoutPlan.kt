@@ -282,6 +282,11 @@ object LayoutPlan {
     /** The compact row's Elevation and Sun: w = max(104, round(0.27 C)) (C2.2 #1). */
     const val COMPACT_MIN = 104f
     const val COMPACT_SHARE = 0.27f
+    /**
+     * The longest Position line, a decimal-degrees longitude ("106.94117° W"), at the compact row's 15 sp shrunk
+     * to 0.85, at text size 1.0, with a little in hand; scaled by k. (Apple: 96, and 128 for its tablet ramp.)
+     */
+    const val POSITION_LINE = 96f
     /** The text multiplier's cap for the fixed panel; font scale 1.5 and up is the scrolling list. */
     const val MAX_K = 1.3f
     /** What TalkBack hears for the no-heading readout (the dash itself is drawn, C3.2 #3). */
@@ -637,9 +642,14 @@ object LayoutPlan {
         var grid: GridMode
         var map: MapMode
         var mapHeight = 0f
+        // A narrow trailing pane: where the compact row's Position is too narrow for a longitude at this text size,
+        // Small and Extra Large take the 2 × 2 instead, if it fits (as on Apple).
+        val quadFits = rows + gridHeight(GridMode.QUAD, tile, columns, k) <= avail + 0.5f
+        val narrow = compactWidths(trailing)[0] < positionNeed(k) - 0.5f && quadFits
+        val oneRow = if (narrow) GridMode.QUAD else GridMode.COMPACT
         when (layout) {
             Layout.SMALL -> {
-                grid = GridMode.COMPACT
+                grid = oneRow
                 val card = avail - rows - gridHeight(grid, tile, columns, k) - MAP_GAP * k
                 if (card >= MAP_MIN) { map = MapMode.CARD; mapHeight = card } else map = MapMode.BUTTON
             }
@@ -649,7 +659,7 @@ object LayoutPlan {
                 if (card >= PANE_MAP) { map = MapMode.CARD; mapHeight = card } else map = MapMode.TILE
             }
             Layout.LARGE -> { grid = GridMode.QUAD; map = MapMode.BUTTON }
-            Layout.EXTRA_LARGE -> { grid = GridMode.COMPACT; map = MapMode.BUTTON }
+            Layout.EXTRA_LARGE -> { grid = oneRow; map = MapMode.BUTTON }
         }
         val content = rows + gridHeight(grid, tile, columns, k) + (if (map == MapMode.CARD) MAP_GAP * k + mapHeight else 0f)
         // Too tall for the pane even without a card: the list.
@@ -662,6 +672,7 @@ object LayoutPlan {
             bottomSpare = 0f, centred = map != MapMode.CARD, trailingWidth = trailing, leadingTop = leadingTop,
             trailingTop = trailingTop, locked = locked, hasSpot = hasSpot, used = s, noHeading = noHeading,
             lockTwoLines = two.lock, spotTwoLines = two.spot,
+            rung = if (grid == GridMode.QUAD && layout != Layout.LARGE) Rung.GIVEN_UP else Rung.OWN,
         )
     }
 
@@ -750,6 +761,12 @@ object LayoutPlan {
      * w = max(104, round(0.27 C)). They come from C, not from grid units, so the row is exactly as wide as the
      * column: 146 | 104 | 104 at C = 370, 156 | 104 | 104 at 380, 306 | 189 | 189 at 700.
      */
+    /**
+     * The narrowest Position tile that holds the longest coordinate line on one line at text size [k]: the line
+     * and the tile's 12 inset each side. In two panes a compact row whose Position is narrower gives way to the 2 × 2.
+     */
+    fun positionNeed(k: Float): Float = POSITION_LINE * k + 2 * 12f
+
     fun compactWidths(c: Float): List<Float> {
         val w = max(COMPACT_MIN, (COMPACT_SHARE * c).roundToInt().toFloat())
         return listOf(c - 2 * ROW_GAP - 2 * w, w, w)

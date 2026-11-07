@@ -5,7 +5,7 @@ import SwiftUI
 /// north up or turning with you (docs/REFINE.md §3.2). As a **card** (and in the map sheet) the controls
 /// are one vertical stack everywhere (C2.3 #10): 36 pt circles in 44 pt targets, 8 apart, 12 in from the
 /// top-trailing corner: +, −, follow heading, open in Maps, or on a card under 192 tall +, − and ⋯ (follow
-/// and open in Maps in its menu). Your speed shows top left while you're moving; the bottom stays clear for
+/// and open in Maps in its menu), in a row on a card under 148 (Small's map tile). Your speed shows top left while you're moving; the bottom stays clear for
 /// Apple Maps' logo and Legal link. In the map sheet (`bleed`) it runs edge to edge under the sheet's
 /// translucent bar (`topInset`). As a **thumbnail** (the Map tile, C3.4 #9) it is a still picture
 /// (MKMapSnapshotter) north up with your dot and heading cone, no controls and no gestures, on a 24 pt
@@ -86,11 +86,16 @@ struct MapSnippet: View {
 
                 if !thumbnail {
                     // One vertical stack on every card and sheet. 8 plus the 4 inside each 44 target puts
-                    // the circles 12 from the corner; under 192 the stack is +, − and ⋯.
+                    // the circles 12 from the corner; under 192 the stack is +, − and ⋯; under 148 (Small's
+                    // map tile, a strip a tile high, or a 140 card) the same three in a row, 60 high. (Without
+                    // the row, ViewThatFits fell back to the 148 stack, which made the card taller than its
+                    // planned height and pushed everything under it down.)
                     ViewThatFits(in: .vertical) {
                         VStack(spacing: 0) { controls(fix) }
                             .padding(.vertical, 8)
                         VStack(spacing: 0) { shortControls(fix) }
+                            .padding(.vertical, 8)
+                        HStack(spacing: 0) { shortControls(fix) }
                             .padding(.vertical, 8)
                     }
                     .padding(.top, topInset)

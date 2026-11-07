@@ -333,6 +333,22 @@ struct LayoutPlan: Equatable {
     /// The compact row: Elevation and Sun are max(104, 0.27 C) wide.
     static let compactMin: CGFloat = 104
     static let compactShare: CGFloat = 0.27
+    /// The longest Position line, a decimal-degrees longitude ("106.94117° W"), at the compact row's smallest
+    /// size (0.85 of 15 pt; of 20 semibold on a tablet) at Text Size 1.0, with a little in hand (the self-test
+    /// measures 120 on a tablet). Scaled by k.
+    static let positionLine: CGFloat = 96
+    static let positionLineTablet: CGFloat = 128
+    /// A tile's horizontal inset each side (Ramp.insetH: 12; 14 on a tablet).
+    static let tileInset: CGFloat = 12
+    static let tileInsetTablet: CGFloat = 14
+
+    /// The narrowest Position tile that holds the longest coordinate line on one line at text size `k`.
+    /// In two panes a compact row whose Position is narrower than this gives way to the 2 × 2.
+    static func positionNeed(k: CGFloat, tablet: Bool) -> CGFloat {
+        let line: CGFloat = tablet ? positionLineTablet : positionLine
+        let inset: CGFloat = tablet ? tileInsetTablet : tileInset
+        return line * k + 2 * inset
+    }
     /// Medium: spare at or above this (dial at its cap) turns the Map tile into a full-width card…
     static let mapPromote: CGFloat = 160
     /// …of at least this height, taken from the dial.
@@ -509,6 +525,13 @@ struct LayoutPlan: Equatable {
             let row = (p.tablet ? tileTablet : tilePane) * k
             p.tileHeight = row
             p.grid = layout.compactRow ? .compact : (layout == .large ? .twoByTwo : .full)
+            // A narrow trailing pane (Extra Large's 40% of a 900 window): the compact row's Position would be
+            // too narrow for a longitude at this text size, so the pane takes the 2 × 2 instead, where it fits.
+            let positionWidth: CGFloat = compactWidths(p.columnWidth).position
+            let quadHeight: CGFloat = above(merged: false) + 2 * row + p.gapRows
+            if p.grid == .compact && positionWidth < positionNeed(k: k, tablet: p.tablet) - 0.5 && quadHeight <= below + 0.5 {
+                p.grid = .twoByTwo
+            }
             let gridRows: CGFloat = p.grid == .compact ? 1 : 2
             var used = above(merged: false) + gridRows * row + (gridRows - 1) * p.gapRows
             let forMap = below - used - p.gapGridMap

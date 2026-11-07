@@ -130,6 +130,9 @@ map tile", with the bottom spare) and held by the golden table's rules, not by t
   - Medium: 3-column rows and the map card.
   - Large: 2 × 2, map in the header, pane stack centred vertically.
   - Extra Large: leading pane 60% wide, compact row, stack centred.
+  - Small and Extra Large: where the compact row's Position is too narrow for a longitude at the current
+    text size (a narrow trailing pane, e.g. a 900-wide Mac window), the pane takes the 2 × 2 instead, if it
+    fits (both ports).
   The four layouts give **four distinct plans** in landscape too (a test).
 - **No compass on iPad:** the layout's own grid; the freed readout height goes to the dial, then the card.
 - **Mac:** no live compass (the no-compass state); `.hiddenTitleBar`; 24 on all four edges; header pinned.

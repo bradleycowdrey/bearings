@@ -10,17 +10,26 @@ import XCTest
 /// the accessibility sizes, no dial under 0.40 H. The same golden table runs in the Mac and
 /// iPhone self-tests (which also check the drawing against the plan) and, ported, on Android.
 final class LayoutPlanTests: XCTestCase {
-    /// Width, full height, safe height (pt; dp on the Pixel), and a Mac window.
-    private let phones: [(name: String, w: CGFloat, h: CGFloat, s: CGFloat, mac: Bool)] = [
-        ("iPhone SE", 375, 667, 647, false),
-        ("iPhone 16", 393, 852, 759, false),
-        ("iPhone 16 Pro", 402, 874, 778, false),
-        ("iPhone 17 Pro Max", 440, 956, 862, false),
-        ("Pixel 7", 412, 915, 839, false),
-        ("Mac 420x840", 420, 840, 840, true),
-        ("Mac 420x780", 420, 780, 780, true),
-        ("iPad 11 portrait", 834, 1210, 1166, false),
-        ("iPad 13 portrait", 1032, 1376, 1332, false),
+    /// A window the tests plan for: width, full height, safe height (pt; dp on the Pixel), and whether it is a
+    /// Mac window. (A struct, so a list of them never infers as [Any].)
+    private struct TestWindow {
+        let name: String
+        let w: CGFloat
+        let h: CGFloat
+        let s: CGFloat
+        let mac: Bool
+    }
+
+    private let phones: [TestWindow] = [
+        TestWindow(name: "iPhone SE", w: 375, h: 667, s: 647, mac: false),
+        TestWindow(name: "iPhone 16", w: 393, h: 852, s: 759, mac: false),
+        TestWindow(name: "iPhone 16 Pro", w: 402, h: 874, s: 778, mac: false),
+        TestWindow(name: "iPhone 17 Pro Max", w: 440, h: 956, s: 862, mac: false),
+        TestWindow(name: "Pixel 7", w: 412, h: 915, s: 839, mac: false),
+        TestWindow(name: "Mac 420x840", w: 420, h: 840, s: 840, mac: true),
+        TestWindow(name: "Mac 420x780", w: 420, h: 780, s: 780, mac: true),
+        TestWindow(name: "iPad 11 portrait", w: 834, h: 1210, s: 1166, mac: false),
+        TestWindow(name: "iPad 13 portrait", w: 1032, h: 1376, s: 1332, mac: false),
     ]
     private let states: [(name: String, locked: Bool, spot: Bool)] = [
         ("none", false, false), ("locked", true, false), ("marked", false, true), ("both", true, true),
@@ -144,8 +153,12 @@ final class LayoutPlanTests: XCTestCase {
     /// may sit at that floor, Medium at or over it, Large over Medium, Extra Large the largest. A dial under
     /// 0.40 H fails.
     func testOwnersRuleDialAtLeast40PercentOfH() {
-        let windows = phones + [("iPhone 16e", 390, 844, 763, false), ("Mac 420x1000", 420, 1000, 1000, true),
-                                ("iPad mini portrait", 744, 1133, 1089, false)]
+        let more: [TestWindow] = [
+            TestWindow(name: "iPhone 16e", w: 390, h: 844, s: 763, mac: false),
+            TestWindow(name: "Mac 420x1000", w: 420, h: 1000, s: 1000, mac: true),
+            TestWindow(name: "iPad mini portrait", w: 744, h: 1133, s: 1089, mac: false),
+        ]
+        let windows: [TestWindow] = phones + more
         for d in windows {
             for state in states {
                 for k in [CGFloat(1), 1.15, 1.3] {
@@ -156,14 +169,17 @@ final class LayoutPlanTests: XCTestCase {
                         }
                         let name = "\(d.name) \(state.name) k\(k)\(noCompass ? " no compass" : "")"
                         for p in plans {
-                            let floor = min(0.40 * d.h, p.columnWidth + 2 * p.margin - 2 * p.layout.e)
+                            let widthCap: CGFloat = p.columnWidth + 2 * p.margin - 2 * p.layout.e
+                            let heightFloor: CGFloat = LayoutPlan.ownerShare * d.h
+                            let floor: CGFloat = min(heightFloor, widthCap)
                             XCTAssertFalse(p.twoPane, name)
                             XCTAssertGreaterThanOrEqual(p.dial, floor - 0.5,
                                                         "\(name) \(p.layout.rawValue): dial \(Int(p.dial)) is \(Int(100 * p.dial / d.h))% of H")
                             XCTAssertEqual(p.ownerFloor(h: d.h), floor, accuracy: 0.01, name)
                         }
                         let (small, medium, large, xl) = (plans[0], plans[1], plans[2], plans[3])
-                        if !small.list { XCTAssertEqual(small.dial, min(0.40 * d.h, small.dialCap), accuracy: 0.5, "\(name): Small at the floor") }
+                        let smallFloor: CGFloat = min(LayoutPlan.ownerShare * d.h, small.dialCap)
+                        if !small.list { XCTAssertEqual(small.dial, smallFloor, accuracy: 0.5, "\(name): Small at the floor") }
                         if !small.list && !medium.list { XCTAssertGreaterThanOrEqual(medium.dial, small.dial - 0.5, name) }
                         if !medium.list && !large.list {
                             // (Extra Large held at the floor, on its row or as the list, holds Large there too.)
@@ -456,5 +472,24 @@ final class LayoutPlanTests: XCTestCase {
         }
         // A phone on its side is two panes too.
         XCTAssertTrue(LayoutPlan.plan(w: 852, h: 393, s: 372, isLandscapePhone: true).twoPane)
+    }
+
+    /// Two panes: the compact row is used only where its Position holds the longest coordinate line; in a narrow
+    /// trailing pane (Extra Large in a 900 × 700 Mac window, 84 pt for a 120 pt longitude) it takes the 2 × 2.
+    func testTwoPaneCompactRowHoldsALongitude() {
+        for d in LayoutPlan.devices {
+            for layout in [Layout.small, Layout.extraLarge] {
+                let p = LayoutPlan.plan(w: d.w, h: d.h, s: d.s, layout: layout, hasSpot: true, locked: true, mac: d.mac)
+                guard p.twoPane && p.grid == .compact else { continue }
+                let need: CGFloat = LayoutPlan.positionNeed(k: p.k, tablet: p.tablet)
+                let width: CGFloat = p.compactWidths.position
+                XCTAssertGreaterThanOrEqual(width, need - 0.5, "\(d.name) \(layout.rawValue): Position \(Int(width)) of \(Int(need))")
+            }
+        }
+        let mac = LayoutPlan.plan(w: 900, h: 700, s: 700, layout: .extraLarge, hasSpot: true, locked: true, mac: true)
+        XCTAssertTrue(mac.twoPane)
+        XCTAssertEqual(mac.grid, .twoByTwo)
+        XCTAssertEqual(mac.map, .button)
+        XCTAssertFalse(mac.trailingScrolls)
     }
 }
