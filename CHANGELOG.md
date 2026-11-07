@@ -3,6 +3,19 @@
 On a Mac, Bearings shows a banner when a new version is out. Every version is on
 [Releases](https://github.com/bradleycowdrey/bearings/releases).
 
+## [2.1.0] - 2026-11-07
+
+A new look, in the style of Two Degrees.
+
+- **Black, with a sky card**: a large Bearings title, and a card for the place, date and time whose colour
+  follows the real sun where you are: blue by day, twilight at dusk, deep navy at night.
+- **The dial on black**: white ticks and letters, with pink kept for north.
+- **Frosted tiles** with small captions: Latitude, Longitude, Elevation and Sun.
+- **Widgets** in the same style, on iPhone, iPad, Mac and Android.
+- **A new icon** in the app's colours: the sky, a white dial and pink north.
+- On a small screen or with a larger text size, the title makes way so the dial stays big.
+- The iPhone app includes Apple's privacy manifest.
+
 ## [2.0.0] - 2026-11-01
 
 The first public release of Bearings: get your bearings, on one screen.
