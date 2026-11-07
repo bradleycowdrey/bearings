@@ -1,0 +1,129 @@
+ALL PASSED (50 checks)
+PASS Decimal degrees
+PASS Degrees, minutes, seconds
+PASS Degrees, decimal minutes
+PASS UTM
+PASS MGRS
+PASS Plus Code
+PASS Compass points
+PASS Short way round
+PASS Smoothing across north
+PASS Elevation in feet and metres
+PASS Sun's direction
+PASS Sunrise and sunset
+PASS Polar night in Longyearbyen
+PASS Moon's direction
+PASS Moon's phase
+PASS Distance and bearing to a spot
+PASS Distances in words
+PASS Speed
+PASS Air pressure
+PASS Place in words
+PASS Layout planner table (gaps are tokens, header pinned, nothing empty or cut, rows add up to C, layouts distinct)
+INFO iPhone SE, sample: small: dial 267 (40% of H), compact row, map in header, tiles 72, bottom 9
+INFO iPhone SE, sample: medium: dial 269 (40% of H), compact row, map in header, tiles 72, bottom 8
+INFO iPhone SE, sample: large: dial 285 (43% of H), compact row, map in header, tiles 72, bottom 0
+INFO iPhone SE, sample: extraLarge: dial 343 (51% of H), compact row, map in header, rows merged, tiles 72, bottom 0
+INFO iPhone SE, live: small: dial 267 (40% of H), compact row, map tile 126, tiles 72, bottom 0
+INFO iPhone SE, live: medium: dial 309 (46% of H), 3-column grid, map tile, tiles 80, bottom 0
+INFO iPhone SE, live: large: dial 325 (49% of H), 2 × 2 grid, map in header, tiles 72, bottom 0
+INFO iPhone SE, live: extraLarge: dial 359 (54% of H), compact row, map in header, tiles 72, bottom 18
+INFO iPhone 16, sample: small: dial 341 (40% of H), compact row, map in header, tiles 72, bottom 28 (centred)
+INFO iPhone 16, sample: medium: dial 361 (42% of H), compact row, map in header, tiles 72, bottom 18
+INFO iPhone 16, sample: large: dial 377 (44% of H), compact row, map in header, tiles 72, bottom 10
+INFO iPhone 16, sample: extraLarge: dial 377 (44% of H), compact row, map in header, tiles 72, bottom 5
+INFO iPhone 16, live: small: dial 341 (40% of H), compact row, map card 164, tiles 72, bottom 0
+INFO iPhone 16, live: medium: dial 361 (42% of H), 3-column grid, map tile, tiles 88, bottom 22
+INFO iPhone 16, live: large: dial 377 (44% of H), 2 × 2 grid, map in header, tiles 72, bottom 30 (centred)
+INFO iPhone 16, live: extraLarge: dial 377 (44% of H), compact row, map in header, tiles 72, bottom 65 (centred)
+INFO iPhone 16 Pro, sample: small: dial 350 (40% of H), compact row, map in header, tiles 72, bottom 33 (centred)
+INFO iPhone 16 Pro, sample: medium: dial 370 (42% of H), compact row, map in header, tiles 72, bottom 23
+INFO iPhone 16 Pro, sample: large: dial 386 (44% of H), compact row, map in header, tiles 72, bottom 15
+INFO iPhone 16 Pro, sample: extraLarge: dial 386 (44% of H), compact row, map in header, tiles 72, bottom 10
+INFO iPhone 16 Pro, live: small: dial 350 (40% of H), compact row, map card 174, tiles 72, bottom 0
+INFO iPhone 16 Pro, live: medium: dial 370 (42% of H), 3-column grid, map tile, tiles 88, bottom 27 (centred)
+INFO iPhone 16 Pro, live: large: dial 386 (44% of H), 2 × 2 grid, map in header, tiles 72, bottom 35 (centred)
+INFO iPhone 16 Pro, live: extraLarge: dial 386 (44% of H), compact row, map in header, tiles 72, bottom 70 (centred)
+INFO iPad 11 portrait, sample: small: dial 484 (40% of H), compact row, map card 239, tiles 96, bottom 0
+INFO iPad 11 portrait, sample: medium: dial 583 (48% of H), 3-column grid, map tile, tiles 96, bottom 24
+INFO iPad 11 portrait, sample: large: dial 631 (52% of H), 2 × 2 grid, map in header, tiles 96, bottom 0
+INFO iPad 11 portrait, sample: extraLarge: dial 718 (59% of H), compact row, map in header, tiles 96, bottom 0
+INFO iPad 11 portrait, live: small: dial 484 (40% of H), compact row, map card 359, tiles 96, bottom 0
+INFO iPad 11 portrait, live: medium: dial 539 (45% of H), 3-column grid, map card 200, tiles 96, bottom 0
+INFO iPad 11 portrait, live: large: dial 703 (58% of H), 2 × 2 grid, map in header, tiles 96, bottom 24
+INFO iPad 11 portrait, live: extraLarge: dial 790 (65% of H), compact row, map in header, tiles 96, bottom 24
+PASS Owner's rule: dial ≥ 40% of H in portrait (every layout, sample and live, Text Size 1.0 and 1.3)
+PASS No ellipsis in the tiles, the lock row or the header (every value fits or wraps)
+PASS No-heading readout drawn as a centred dash (within 4 pt of the digits' midline)
+PASS Both Position lines drawn at one size
+PASS Screen drawn as planned at 402 × 874 (header pinned, grids as planned and distinct, bottom as planned)
+INFO 402 × 874 small sample: dial 350 (40% of H), compact row, map card 150, tiles 72, bottom 0
+INFO 402 × 874 medium sample: dial 370 (42% of H), 3-column grid, map tile, tiles 88, bottom 15
+INFO 402 × 874 large sample: dial 386 (44% of H), 2 × 2 grid, map in header, tiles 72, bottom 23
+INFO 402 × 874 extraLarge sample: centred, 58 over and under the panel
+INFO 402 × 874 extraLarge sample: dial 386 (44% of H), compact row, map in header, tiles 72, bottom 58 (centred)
+INFO 402 × 874 small no compass: dial 350 (40% of H), compact row, map card 194, tiles 72, bottom 0
+INFO 402 × 874 medium no compass: centred, 37 over and under the panel
+INFO 402 × 874 medium no compass: dial 370 (42% of H), 3-column grid, map tile, tiles 88, bottom 37 (centred)
+INFO 402 × 874 large no compass: centred, 45 over and under the panel
+INFO 402 × 874 large no compass: dial 386 (44% of H), 2 × 2 grid, map in header, tiles 72, bottom 45 (centred)
+INFO 402 × 874 extraLarge no compass: centred, 80 over and under the panel
+INFO 402 × 874 extraLarge no compass: dial 386 (44% of H), compact row, map in header, tiles 72, bottom 80 (centred)
+INFO 402 × 874 small live: dial 350 (40% of H), compact row, map card 270, tiles 72, bottom 0
+INFO 402 × 874 medium live: dial 350 (40% of H), 3-column grid, map card 190, tiles 72, bottom 0
+INFO 402 × 874 large live: centred, 83 over and under the panel
+INFO 402 × 874 large live: dial 386 (44% of H), 2 × 2 grid, map in header, tiles 72, bottom 83 (centred)
+INFO 402 × 874 extraLarge live: centred, 118 over and under the panel
+INFO 402 × 874 extraLarge live: dial 386 (44% of H), compact row, map in header, tiles 72, bottom 118 (centred)
+PASS Screen drawn as planned at 375 × 667 (header pinned, grids as planned and distinct, bottom as planned)
+INFO 375 × 667 small sample: dial 267 (40% of H), compact row, map in header, tiles 72, bottom 19
+INFO 375 × 667 medium sample: dial 289 (43% of H), compact row, map in header, tiles 72, bottom 8
+INFO 375 × 667 large sample: dial 305 (46% of H), compact row, map in header, tiles 72, bottom 0
+INFO 375 × 667 extraLarge sample: dial 359 (54% of H), compact row, map in header, rows merged, tiles 72, bottom 2
+INFO 375 × 667 small no compass: centred, 41 over and under the panel
+INFO 375 × 667 small no compass: dial 267 (40% of H), compact row, map in header, tiles 72, bottom 41 (centred)
+INFO 375 × 667 medium no compass: dial 269 (40% of H), 3-column grid, map tile, tiles 72, bottom 0
+INFO 375 × 667 large no compass: dial 347 (52% of H), compact row, map in header, tiles 72, bottom 1
+INFO 375 × 667 extraLarge no compass: dial 347 (52% of H), compact row, map in header, rows merged, tiles 72, bottom 0
+INFO 375 × 667 small live: dial 267 (40% of H), compact row, map card 146, tiles 72, bottom 0
+INFO 375 × 667 medium live: dial 329 (49% of H), 3-column grid, map tile, tiles 80, bottom 0
+INFO 375 × 667 large live: dial 345 (52% of H), 2 × 2 grid, map in header, tiles 72, bottom 0
+INFO 375 × 667 extraLarge live: centred, 28 over and under the panel
+INFO 375 × 667 extraLarge live: dial 359 (54% of H), compact row, map in header, tiles 72, bottom 28 (centred)
+PASS Screen drawn as planned at 834 × 1210 (header pinned, grids as planned and distinct, bottom as planned)
+INFO 834 × 1210 small sample: dial 484 (40% of H), compact row, map card 283, tiles 96, bottom 0
+INFO 834 × 1210 medium sample: dial 627 (52% of H), 3-column grid, map tile, tiles 96, bottom 24
+INFO 834 × 1210 large sample: dial 653 (54% of H), 2 × 2 grid, map in header, tiles 96, bottom 11
+INFO 834 × 1210 extraLarge sample: dial 762 (63% of H), compact row, map in header, tiles 96, bottom 0
+INFO 834 × 1210 small no compass: dial 484 (40% of H), compact row, map card 327, tiles 96, bottom 0
+INFO 834 × 1210 medium no compass: centred, 32 over and under the panel
+INFO 834 × 1210 medium no compass: dial 655 (54% of H), 3-column grid, map tile, tiles 96, bottom 32 (centred)
+INFO 834 × 1210 large no compass: dial 671 (55% of H), 2 × 2 grid, map in header, tiles 96, bottom 24
+INFO 834 × 1210 extraLarge no compass: dial 774 (64% of H), compact row, map in header, tiles 96, bottom 16
+INFO 834 × 1210 small live: dial 484 (40% of H), compact row, map card 403, tiles 96, bottom 0
+INFO 834 × 1210 medium live: dial 581 (48% of H), 3-column grid, map card 202, tiles 96, bottom 0
+INFO 834 × 1210 large live: dial 747 (62% of H), 2 × 2 grid, map in header, tiles 96, bottom 24
+INFO 834 × 1210 extraLarge live: centred, 38 over and under the panel
+INFO 834 × 1210 extraLarge live: dial 806 (67% of H), compact row, map in header, tiles 96, bottom 38 (centred)
+PASS Night secondary text contrast 4.69:1
+PASS Coordinates without an ellipsis in every format
+PASS Place list bundled (34191 places)
+PASS Offline place name at Maroon Bells (66 mi NE of Montrose, Colorado)
+PASS Location fix (39.09898, -106.94117)
+PASS Elevation 2931 m (Terrain data)
+PASS Place name (Aspen, Colorado)
+PASS Sun and moon for here and now
+PASS Compass state (unavailable)
+PASS Map picture for the large widget
+PASS small widget draws
+PASS small widget draws before a fix
+PASS medium widget draws
+PASS medium widget draws before a fix
+PASS large widget draws
+PASS large widget draws before a fix
+PASS lock-circular widget draws
+PASS lock-circular widget draws before a fix
+PASS lock-rectangular widget draws
+PASS lock-rectangular widget draws before a fix
+PASS lock-inline widget draws
+PASS lock-inline widget draws before a fix
