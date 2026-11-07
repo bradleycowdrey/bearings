@@ -10,9 +10,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -73,6 +77,7 @@ import org.maplibre.android.style.layers.BackgroundLayer
 import org.maplibre.android.style.layers.FillExtrusionLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import kotlin.math.cos
@@ -105,6 +110,7 @@ fun MapSnippet(
     edge: Boolean = true,
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp,
+    attribution: Boolean = true,
 ) {
     // A rounded card on black: the tile fill before the map loads, a 1 dp edge over it.
     BoxWithConstraints(modifier.clip(shape).background(Palette.tileFill)) {
@@ -113,10 +119,12 @@ fun MapSnippet(
                 textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.Center).padding(16.dp))
         } else {
             var zoom by remember { mutableDoubleStateOf(if (controls) 15.0 else 14.0) }
-            MapContent(fix, trueHeading, follow && controls, live, zoom)
-            // Night mode: the map at 15% brightness or less, so it is never the brightest thing on screen;
-            // the screen's red multiply then does the rest.
-            if (night) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)))
+            // POI labels only from 160 dp of height, road shields only from 200 dp of width (C3.4 #8).
+            val labels = MapDark.Labels(tile = !controls, poi = maxHeight >= MapDark.POI_MIN_HEIGHT.dp, shields = maxWidth >= MapDark.SHIELD_MIN_WIDTH.dp)
+            MapContent(fix, trueHeading, follow && controls, live, zoom, labels)
+            // Night mode (C3.4 #15): the map dimmed to 35% (never near-black), which the screen's red multiply
+            // then tints red.
+            if (night) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 1f - MapDark.NIGHT_BRIGHTNESS)))
             if (controls) {
                 // One vertical stack everywhere: 36 dp circles 8 apart, 12 in from the top-trailing corner (each
                 // sits in a 44 dp cell, its 48 dp target reaching 2 past it). All four need 192 of height.
@@ -138,7 +146,7 @@ fun MapSnippet(
                             .background(Palette.mapControl).padding(horizontal = 10.dp, vertical = 5.dp))
                 }
             }
-            Attribution(controls, night, bottomInset)
+            if (attribution) Attribution(controls, night, bottomInset)
         }
         // The card's edge, drawn over the map.
         if (edge) Box(Modifier.matchParentSize().border(Look.stroke, Palette.tileStroke, shape))
@@ -161,9 +169,9 @@ private fun MapOverflow(follow: Boolean, night: Boolean, onToggleFollow: () -> U
 }
 
 /**
- * The map's attribution, always visible (C2.3 #9, #12): on a card or sheet "© OpenStreetMap" 8 in from the
- * bottom-leading corner, at 11 sp white on a dark scrim (well over 4.5:1), with (i) in a 48 dp target for the
- * sources; on the tile "© OSM" bottom-trailing (MAP sits bottom-leading).
+ * The map's attribution, always visible (C3.4 #8): on a card or sheet one pill, "© OpenStreetMap ⓘ", 8 in from
+ * the bottom-leading corner at 11 sp white on a dark scrim (well over 4.5:1), the whole pill a 48 dp target for
+ * the sources; on a tile without the band (the Map tile draws its own), "© OSM" bottom-trailing.
  */
 @Composable
 private fun BoxScope.Attribution(full: Boolean, night: Boolean, bottomInset: Dp) {
@@ -177,25 +185,26 @@ private fun BoxScope.Attribution(full: Boolean, night: Boolean, bottomInset: Dp)
     }
     var open by remember { mutableStateOf(false) }
     val uri = LocalUriHandler.current
-    Row(Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = bottomInset), verticalAlignment = Alignment.Bottom) {
-        Text("© OpenStreetMap", style = text(11f, FontWeight.Medium, white(Op.STRONG)),
-            modifier = Modifier.padding(bottom = 8.dp).clip(RoundedCornerShape(4.dp)).background(scrim).padding(horizontal = 5.dp, vertical = 2.dp)
-                .semantics { contentDescription = "Map data from OpenStreetMap contributors" })
-        Box {
-            Box(
-                Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Show the map's sources") { open = true }
-                    .semantics { contentDescription = "Map sources" },
-                contentAlignment = Alignment.Center,
+    // A 48 dp high target around a 24 dp pill; nudged down 4 so the pill's edge is 8 from the corner.
+    Box(Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = bottomInset).offset(y = 4.dp)) {
+        Box(
+            Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = "Show the map's sources") { open = true }
+                .semantics(mergeDescendants = true) { contentDescription = "Map data from OpenStreetMap contributors. Map sources" },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Row(
+                Modifier.clip(RoundedCornerShape(12.dp)).background(scrim).heightIn(min = 24.dp).padding(start = 8.dp, end = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(24.dp).clip(CircleShape).background(scrim), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Outlined.Info, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                }
+                Text("© OpenStreetMap", style = text(11f, FontWeight.Medium, white(Op.STRONG)))
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Outlined.Info, null, tint = Color.White, modifier = Modifier.size(15.dp))
             }
-            DropdownMenu(open, onDismissRequest = { open = false }) {
-                for ((label, url) in SOURCES) {
-                    DropdownMenuItem(text = { Text(label, style = text(15f, color = Color.White.night(night))) },
-                        onClick = { uri.openUri(url); open = false })
-                }
+        }
+        DropdownMenu(open, onDismissRequest = { open = false }) {
+            for ((label, url) in SOURCES) {
+                DropdownMenuItem(text = { Text(label, style = text(15f, color = Color.White.night(night))) },
+                    onClick = { uri.openUri(url); open = false })
             }
         }
     }
@@ -209,8 +218,11 @@ private val SOURCES = listOf(
 )
 
 /**
- * The dark map (C2.3 #9): OpenFreeMap's style recoloured once it loads, so the map is not the brightest thing
- * on a black screen. Land about #0F3B3A, roads #5A6470, water #22348A, labels light grey on a dark halo.
+ * The dark map (C2.3 #9, C3.4 #8): OpenFreeMap's style recoloured once it loads, so the map is not the brightest
+ * thing on a black screen. Land about #0F3B3A, roads #5A6470, water #22348A. Every label (a symbol layer's
+ * text) is #C9D3D6 in Noto Sans Regular (never italic or bold, never the style's own cyan), 12 sp (11 in the
+ * tile), on a 1.5 dp #0F3B3A halo, at 70% in the tile. POI labels are hidden on a map under 160 dp tall and
+ * road shields on one under 200 dp wide. The self-test checks these values ([labelColor], [labelFont]).
  */
 object MapDark {
     const val LAND = "#0F3B3A"
@@ -220,11 +232,29 @@ object MapDark {
     const val ROAD = "#5A6470"
     const val CASING = "#2E353D"
     const val BOUNDARY = "#4A6664"
-    const val LABEL = "#C9D1D9"
-    const val HALO = "#0B2A29"
+    const val LABEL = "#C9D3D6"
+    const val HALO = "#0F3B3A"
+    const val HALO_WIDTH = 1.5f
+    const val LABEL_SIZE = 12f
+    const val LABEL_SIZE_TILE = 11f
+    const val TILE_OPACITY = 0.7f
+    /** The one font every label uses: OpenFreeMap's upright regular. */
+    val FONT = arrayOf("Noto Sans Regular")
+    const val POI_MIN_HEIGHT = 160
+    const val SHIELD_MIN_WIDTH = 200
+    /** Night: the map at 35% of its brightness, then the screen's red multiply. */
+    const val NIGHT_BRIGHTNESS = 0.35f
 
-    fun apply(style: Style) {
-        for (layer in style.layers) {
+    /** What the labels of one map should be: the tile's smaller, fainter labels, and which kinds are shown. */
+    data class Labels(val tile: Boolean, val poi: Boolean, val shields: Boolean)
+
+    /** The colour and font a label is drawn in, for the self-test (one rule for every symbol layer). */
+    val labelColor: String get() = LABEL
+    val labelFont: List<String> get() = FONT.toList()
+
+    fun apply(style: Style, labels: Labels) {
+        // Each layer on its own, so one the map engine refuses never leaves the rest in the style's own colours.
+        for (layer in style.layers) runCatching {
             val id = layer.id.lowercase()
             val water = "water" in id || "ocean" in id || "river" in id || "lake" in id
             when (layer) {
@@ -241,7 +271,23 @@ object MapDark {
                     "casing" in id -> CASING
                     else -> ROAD
                 }))
-                is SymbolLayer -> layer.setProperties(PropertyFactory.textColor(LABEL), PropertyFactory.textHaloColor(HALO))
+                is SymbolLayer -> {
+                    // Only the kinds this rule hides are switched (back) on; the style's other choices stay.
+                    val poi = "poi" in id; val shield = "shield" in id
+                    if (poi || shield) {
+                        val hidden = (poi && !labels.poi) || (shield && !labels.shields)
+                        layer.setProperties(PropertyFactory.visibility(if (hidden) Property.NONE else Property.VISIBLE))
+                    }
+                    layer.setProperties(
+                        PropertyFactory.textColor(LABEL),
+                        PropertyFactory.textHaloColor(HALO),
+                        PropertyFactory.textHaloWidth(HALO_WIDTH),
+                        PropertyFactory.textHaloBlur(0f),
+                        PropertyFactory.textFont(FONT),
+                        PropertyFactory.textSize(if (labels.tile) LABEL_SIZE_TILE else LABEL_SIZE),
+                        PropertyFactory.textOpacity(if (labels.tile) TILE_OPACITY else 1f),
+                    )
+                }
                 else -> {}
             }
         }
@@ -249,11 +295,12 @@ object MapDark {
 }
 
 @Composable
-private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean, live: Boolean, zoom: Double) {
+private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean, live: Boolean, zoom: Double, labels: MapDark.Labels) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var loaded by remember { mutableStateOf(false) }
+    var style by remember { mutableStateOf<Style?>(null) }
     // Following, the map turns in whole degrees (smooth enough, and not a camera move per sensor reading).
     val bearing = if (follow && trueHeading != null) Geo.jsRound(trueHeading).toDouble() % 360 else 0.0
     if (live) {
@@ -268,7 +315,7 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
                     // The attribution is drawn by MapSnippet (always visible, with a 48 dp (i)).
                     m.uiSettings.isAttributionEnabled = false
                     m.cameraPosition = CameraPosition.Builder().target(LatLng(fix.latitude, fix.longitude)).zoom(zoom).bearing(bearing).build()
-                    m.setStyle(Brand.MAP_STYLE) { style -> MapDark.apply(style); loaded = true }
+                    m.setStyle(Brand.MAP_STYLE) { st -> MapDark.apply(st, labels); style = st; loaded = true }
                     map = m
                 }
             }
@@ -288,6 +335,8 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) view.onResume()
             onDispose { lifecycle.removeObserver(observer); view.onPause(); view.onStop(); view.onDestroy() }
         }
+        // The dark colours and the label rules, again whenever the map's size changes which labels show.
+        LaunchedEffect(style, labels) { style?.let { MapDark.apply(it, labels) } }
         // One camera for position, zoom and bearing together, so no change cancels another halfway.
         LaunchedEffect(fix.latitude, fix.longitude, zoom, bearing, map) {
             val m = map ?: return@LaunchedEffect

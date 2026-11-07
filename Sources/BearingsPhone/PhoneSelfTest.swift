@@ -17,25 +17,64 @@ enum PhoneSelfTest {
 
         for (name, ok) in CoreChecks.run() { check(ok, name) }
 
-        // The layout planner (docs/REFINE.md §3.3, §4.7 and Cycle 2): every device × layout × state × text size
-        // leaves no more than 24 empty at the bottom, cuts nothing, keeps the dial at its floor or more, has rows
-        // whose widths and gutters add up to C, and gives each layout a result 24 of dial or a grid mode away
-        // from its neighbours.
+        // The layout planner (docs/REFINE.md Cycle 3 §C3.3, one rule set with Android): every device × layout ×
+        // state × compass × text size keeps every gap at its token × k, the header at the safe top + 8, no
+        // more than 24 empty at the bottom (unless the panel is centred), nothing cut, every dial at its floor
+        // (the owner's 0.40 H in portrait) or more, tiles under their cap, rows whose widths and gutters add up
+        // to C, and neighbouring layouts with different grids (Medium and Large also a different map surface
+        // and 16 of dial) unless one gave its grid up to keep the dial at 0.40 H.
         let planFailures = LayoutPlan.tableFailures()
-        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "nothing empty, nothing cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
-        for line in LayoutPlan.summary(w: 402, h: 874, s: 778, hasSpot: true, locked: true) {
-            lines.append("INFO iPhone 16 Pro, sample: \(line)")
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, header pinned, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
+        let summaryDevices: [(String, CGFloat, CGFloat, CGFloat)] = [
+            ("iPhone SE", 375, 667, 647), ("iPhone 16", 393, 852, 759), ("iPhone 16 Pro", 402, 874, 778),
+            ("iPad 11 portrait", 834, 1210, 1166),
+        ]
+        // The owner's hard rule: the compass takes up at least 40% of the screen. In portrait, at Text Size
+        // 1.0 and 1.3, every layout's dial is at least min(0.40 H, its width cap) with the sample (locked and
+        // marked) and live (nothing locked or marked); a dial under it fails.
+        var ownerFailures: [String] = []
+        for (name, w, h, s) in summaryDevices {
+            for (state, both) in [("sample", true), ("live", false)] {
+                for k in [CGFloat(1), 1.3] {
+                    for layout in Layout.allCases {
+                        let p = LayoutPlan.plan(w: w, h: h, s: s, layout: layout, k: k, hasSpot: both, locked: both)
+                        if p.dial < p.ownerFloor(h: h) - 0.5 {
+                            ownerFailures.append("\(name) \(state) \(layout.rawValue) k\(k): dial \(Int(p.dial)) = \(Int((100 * p.dial / h).rounded()))% of H")
+                        }
+                    }
+                }
+            }
+            for line in LayoutPlan.summary(w: w, h: h, s: s, hasSpot: true, locked: true) {
+                lines.append("INFO \(name), sample: \(line)")
+            }
+            for line in LayoutPlan.summary(w: w, h: h, s: s, hasSpot: false, locked: false) {
+                lines.append("INFO \(name), live: \(line)")
+            }
         }
-        // No "…" anywhere (C2): the tiles' and the header's strings, and what the compact row and the header
-        // must hold measured in the system font on every device, at Text Size 1.0 and 1.3.
+        check(ownerFailures.isEmpty, "Owner's rule: dial ≥ 40% of H in portrait (\(ownerFailures.isEmpty ? "every layout, sample and live, Text Size 1.0 and 1.3" : ownerFailures.prefix(3).joined(separator: "; ")))")
+        // No "…" anywhere (C2): the tiles' and the header's strings, and what the tiles and the header must
+        // hold measured in the system font on every device, at Text Size 1.0 and 1.3.
         let sampleTimes = Sky.sunTimes(at: Navigator.sampleTime, lat: 39.09898, lon: -106.94117)
         if let rise = sampleTimes.sunriseDate, let set = sampleTimes.sunsetDate {
             let fit = MainView.fitFailures(sunrise: rise, sunset: set, now: Navigator.sampleTime, lat: 39.09898, lon: -106.94117)
-            check(fit.isEmpty, "No ellipsis in the tiles or the header time (\(fit.isEmpty ? "every value fits or wraps" : fit.prefix(3).joined(separator: "; ")))")
+            check(fit.isEmpty, "No ellipsis in the tiles, the lock row or the header (\(fit.isEmpty ? "every value fits or wraps" : fit.prefix(3).joined(separator: "; ")))")
         } else {
             check(false, "No ellipsis in the tiles or the header time (no sunrise for the sample)")
         }
-        check(MainView.noHeadingText == "\u{2014}°", "The no-compass readout is \"\(MainView.noHeadingText)\"")
+        // What is drawn (C3): the no-heading dash on the digits' midline (it drew as "_ °"), both Position
+        // lines at one size, and the whole screen against its plan in every layout and state: the header
+        // pinned, the grid each layout plans (Large is not Medium), and no more empty at the bottom than planned.
+        let dash = MainView.dashFailures()
+        check(dash.isEmpty, "No-heading readout drawn as a centred dash (\(dash.isEmpty ? "within 4 pt of the digits' midline" : dash.prefix(2).joined(separator: "; ")))")
+        let position = MainView.positionSizeFailures()
+        check(position.isEmpty, "Both Position lines drawn at one size\(position.isEmpty ? "" : " (\(position.joined(separator: "; ")))")")
+        let drawNav = Navigator(defaults: UserDefaults(suiteName: "bearings.selftest.drawing") ?? .standard)
+        let drawSizes: [(CGFloat, CGFloat)] = [(402, 874), (375, 667), (834, 1210)]
+        for (w, h) in drawSizes {
+            let drawn = MainView.drawingFailures(nav: drawNav, width: w, height: h)
+            check(drawn.failures.isEmpty, "Screen drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "header pinned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
+            lines += drawn.info.map { "INFO \($0)" }
+        }
         // Night secondary text: at least 4.5:1 on black (§4.3).
         let contrast = Palette.nightSecondaryContrast()
         check(contrast >= 4.5, String(format: "Night secondary text contrast %.2f:1", contrast))

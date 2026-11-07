@@ -591,9 +591,9 @@ class Navigator(private val context: Context, private val displayRotation: () ->
     /**
      * Maroon Bells, Colorado, at 9:41 AM on 1 November 2026 (as on Apple), walking at 3.2 mph, with a spot marked
      * near Aspen and a bearing locked. [noCompass] shows the same place on a phone without a compass (§4.2): no
-     * heading and no lock.
+     * heading and no lock. [sampleLock] null and [markSpot] false give the live state (no lock row, no spot row).
      */
-    fun showSample(sampleHeading: Double = 228.0, sampleLock: Double? = 240.0, noCompass: Boolean = false) {
+    fun showSample(sampleHeading: Double = 228.0, sampleLock: Double? = 240.0, noCompass: Boolean = false, markSpot: Boolean = true) {
         stop()
         sample = true
         zone = TimeZone.getTimeZone("America/Denver")
@@ -614,7 +614,7 @@ class Navigator(private val context: Context, private val displayRotation: () ->
             lock = sampleLock
         }
         speedReset?.cancel(); speed = 1.43
-        mark = 39.1911 to -106.8175
+        mark = if (markSpot) 39.1911 to -106.8175 else null
         pressure = 721.0
         access = Access.ALLOWED
     }

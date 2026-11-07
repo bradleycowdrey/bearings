@@ -231,13 +231,13 @@ private struct WhereBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 6) {
+                // One line, scaled to 0.8 if it must (C3.4 #19): a two-line place pushed the medium
+                // widget's content to 12 from the bottom.
                 Text(r.place)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(ink.primary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-                    // No fixed height: when a long place and two coordinate lines leave no room, the
-                    // place gives way to one line rather than pushing the block out of the widget.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 WidgetSkySymbol(r: r, ink: ink, size: 15)
             }
@@ -333,10 +333,10 @@ private struct SunRow: View {
                 sunColumn
                 // Read together, as before: "Sunrise 6:36 AM, sunset 6:02 PM" (the sunset column is
                 // folded into the sunrise column's label, so the columns keep their equal widths).
-                timeColumn("Sunrise", symbol: "sunrise.fill", date: rise)
+                timeColumn("Rise", arrow: "↑", date: rise)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Sunrise \(r.sunrise ?? ""), sunset \(r.sunset ?? "")")
-                timeColumn("Sunset", symbol: "sunset.fill", date: down)
+                timeColumn("Set", arrow: "↓", date: down)
                     .accessibilityHidden(true)
             }
         } else {
@@ -370,12 +370,12 @@ private struct SunRow: View {
         .accessibilityLabel("Sun, \(direction), \(sun.altitude > 0 ? height : "below the horizon")")
     }
 
-    private func timeColumn(_ label: String, symbol: String, date: Date) -> some View {
+    /// RISE / SET with the app's ↑ / ↓ (C3.4 #19), in the sun's gold.
+    private func timeColumn(_ label: String, arrow: String, date: Date) -> some View {
         let clock = WidgetReadings.clock(date)
         return column(label, value: clock.time, sub: clock.period) {
-            Image(systemName: symbol)
-                .font(.system(size: 14))
-                .symbolRenderingMode(.monochrome)
+            Text(arrow)
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(ink.sun)
         }
     }
@@ -383,9 +383,11 @@ private struct SunRow: View {
     private func column<Mark: View>(_ label: String, first: Bool = false, value: String, sub: String,
                                     @ViewBuilder mark: () -> Mark) -> some View {
         VStack(spacing: 3) {
-            Text(label)
-                .font(.system(size: Look.widgetCaptionSize, weight: first ? .semibold : .medium))
-                .foregroundStyle(first ? ink.label : ink.muted)
+            // The app's caption style (C3.4 #19): 11 semibold caps, tracking 0.6, secondary.
+            Text(label.uppercased())
+                .font(.system(size: Look.tileCaptionSize, weight: .semibold))
+                .tracking(Look.tileCaptionTracking)
+                .foregroundStyle(ink.muted)
             mark()
                 .frame(height: 34)
             Text(value)

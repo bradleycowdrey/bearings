@@ -52,8 +52,9 @@ import com.bradcowdrey.bearings.Brand
  * Terms of Use and Privacy: asked once, and again when Brand.TERMS_VERSION changes, at most once a month
  * (the same rule as the Mac and iPhone). It stays until the person agrees; Back leaves the app. Agreeing
  * then asks Android for location, which Bearings needs to show where you are. Laid out as docs/REFINE.md
- * §4.1 and C2.3 #20: the content centred in the space above the buttons (at least 48 under the safe area), a
- * 480 column, three short rows with 24 dp outlined symbols that wrap, and the buttons pinned 16 above the bottom.
+ * §4.1, C2.3 #20 and C3.4 #18: the content centred in the space above the buttons (at least 48 under the safe
+ * area), a 480 column, three short rows with 24 dp outlined symbols that wrap; "Next, Bearings asks for your
+ * location." at 13 secondary 24 above the buttons, which are 12 apart and pinned 16 above the bottom.
  */
 @Composable
 fun TermsScreen(onAgree: () -> Unit) {
@@ -83,9 +84,12 @@ fun TermsScreen(onAgree: () -> Unit) {
                         append(".")
                     }
                     Text(legal, style = text(15f, color = Palette.textSecondary).copy(lineHeight = 21.sp))
-                    Text("Next, ${Brand.APP_NAME} asks for your location.", style = text(15f, color = Palette.textSecondary).copy(lineHeight = 21.sp))
                 }
             }
+            // C3.4 #18: the note sits with the buttons it explains, 13 secondary, 24 above them.
+            Text("Next, ${Brand.APP_NAME} asks for your location.", style = text(13f, color = Palette.textSecondary).copy(lineHeight = 18.sp),
+                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(24.dp))
             Box(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(CircleShape).border(1.dp, Palette.border, CircleShape)
                     .clickable(role = Role.Button) { uri.openUri(Brand.LEGAL) },

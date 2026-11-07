@@ -7,7 +7,8 @@ import SwiftUI
 /// (never closer than 48 to the safe area's top) in a column of at most 480, the app mark (80) and title
 /// (28 bold) centred, three short rows instead of a paragraph, the legal sentence with the terms as an
 /// underlined link in a 44 pt target, and the buttons pinned 16 above the home indicator on iPhone, or
-/// grouped 32 under the text on iPad.
+/// grouped 32 under the text on iPad. C3.4 #18: "Next, Bearings asks for your location." no longer floats
+/// alone in the text; it heads the buttons at 13 pt secondary, 24 above them (the buttons 12 apart).
 struct TermsView: View {
     let agree: () -> Void
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -103,15 +104,19 @@ struct TermsView: View {
                 }
                 .accessibilityHint("Opens the terms")
             }
-            Text("Next, \(Brand.appName) asks for your location.")
-                .font(.system(size: 15))
-                .foregroundStyle(Palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var buttons: some View {
         VStack(spacing: 12) {
+            Text("Next, \(Brand.appName) asks for your location.")
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                // 24 above the buttons (12 here and the stack's 12).
+                .padding(.bottom, 12)
             Link(destination: Brand.legal) {
                 Text("Read the Terms")
                     .font(.body.weight(.medium))

@@ -45,30 +45,69 @@ enum SelfTest {
 
         check(Updater.isNewer("0.2.0", than: "0.1.9") && !Updater.isNewer("0.1.0", than: "0.1.0") && !Updater.isNewer("1.0", than: "dev"), "Update version comparison")
 
-        // The layout planner (docs/REFINE.md §3.3, §4.7 and Cycle 2): every device × layout × state × text size
-        // leaves no more than 24 empty at the bottom, cuts nothing, keeps the dial at its floor or more, has rows
-        // whose widths and gutters add up to C, keeps a Mac window 16 or more from every edge, and gives each
-        // layout a result 24 of dial or a grid mode away from its neighbours.
+        // The layout planner (docs/REFINE.md Cycle 3 §C3.3, one rule set with Android): every device × layout ×
+        // state × compass × text size keeps every gap at its token × k, the header at the safe top + 8 (24
+        // from a Mac window's edge), no more than 24 empty at the bottom (unless the panel is centred),
+        // nothing cut, every dial at its floor (the owner's 0.40 H) or more, tiles under their cap, rows whose
+        // widths and gutters add up to C, and neighbouring layouts with different grids (Medium and Large also
+        // a different map surface and 16 of dial) unless one gave its grid up to keep the dial at 0.40 H.
         let planFailures = LayoutPlan.tableFailures()
-        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "nothing empty, nothing cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, header pinned, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
         let mac = LayoutPlan.plan(w: 420, h: 840, s: 840, hasSpot: true, locked: true, mac: true)
-        check(abs(mac.dial - 374) < 1 && mac.layout == .medium && mac.grid == .full && mac.map == .tile && mac.bottomSpare <= LayoutPlan.maxSpare,
-              "Medium at 420 × 840 with the sample: dial \(Int(mac.dial.rounded())) pt, full grid with the Map tile, \(Int(mac.bottomSpare.rounded())) pt spare")
-        check(mac.margin >= 16 && mac.topInset >= 16 && mac.bottomInset >= 16,
-              "Mac window margins \(Int(mac.margin)) / \(Int(mac.topInset)) / \(Int(mac.bottomInset)) pt (16 or more on every edge)")
-        for line in LayoutPlan.summary(w: 420, h: 840, s: 840, hasSpot: true, locked: true, mac: true) {
-            lines.append("INFO 420 × 840, sample: \(line)")
+        let macLarge = LayoutPlan.plan(w: 420, h: 840, s: 840, layout: .large, hasSpot: true, locked: true, mac: true)
+        check(abs(mac.dial - 358) < 1 && mac.layout == .medium && mac.grid == .full && mac.map == .tile && mac.bottomSpare <= LayoutPlan.maxSpare,
+              "Medium at 420 × 840 with the sample: dial \(Int(mac.dial.rounded())) pt, 3-column grid with the Map tile, \(Int(mac.bottomSpare.rounded())) pt spare")
+        check(macLarge.grid == .twoByTwo && macLarge.map == .button && macLarge.dial >= mac.dial + LayoutPlan.layoutStep - 0.5,
+              "Large at 420 × 840 with the sample: 2 × 2, the map in the header, dial \(Int(macLarge.dial.rounded())) pt (16 or more over Medium's)")
+        check(mac.margin == LayoutPlan.macInset && mac.topInset == LayoutPlan.macInset && mac.bottomInset == LayoutPlan.macInset,
+              "Mac window margins \(Int(mac.margin)) / \(Int(mac.topInset)) / \(Int(mac.bottomInset)) pt (24 on every edge)")
+        // The owner's hard rule: the compass takes up at least 40% of the window. At 420 × 840 and the smallest
+        // window, at Text Size 1.0 and 1.3, every layout's dial is at least min(0.40 H, its width cap) with the
+        // sample (locked and marked) and live; a dial under it fails.
+        var ownerFailures: [String] = []
+        for (w, h) in [(CGFloat(420), CGFloat(840)), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
+            for (state, both) in [("sample", true), ("live", false)] {
+                for k in [CGFloat(1), 1.3] {
+                    for layout in Layout.allCases {
+                        let p = LayoutPlan.plan(w: w, h: h, s: h, layout: layout, k: k, hasSpot: both, locked: both, mac: true)
+                        if p.dial < p.ownerFloor(h: h) - 0.5 {
+                            ownerFailures.append("\(Int(w)) × \(Int(h)) \(state) \(layout.rawValue) k\(k): dial \(Int(p.dial)) = \(Int((100 * p.dial / h).rounded()))% of H")
+                        }
+                    }
+                }
+            }
         }
-        // No "…" anywhere (C2): the tiles' and the header's strings, and what the compact row and the header
-        // must hold measured in the system font on every device, at Text Size 1.0 and 1.3.
+        check(ownerFailures.isEmpty, "Owner's rule: dial ≥ 40% of H (\(ownerFailures.isEmpty ? "every layout, sample and live, Text Size 1.0 and 1.3" : ownerFailures.prefix(3).joined(separator: "; ")))")
+        for (w, h) in [(CGFloat(420), CGFloat(840)), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
+            for line in LayoutPlan.summary(w: w, h: h, s: h, hasSpot: true, locked: true, mac: true) {
+                lines.append("INFO \(Int(w)) × \(Int(h)), sample: \(line)")
+            }
+            for line in LayoutPlan.summary(w: w, h: h, s: h, hasSpot: false, locked: false, mac: true) {
+                lines.append("INFO \(Int(w)) × \(Int(h)), live: \(line)")
+            }
+        }
+        // No "…" anywhere (C2): the tiles' and the header's strings, and what the tiles and the header must
+        // hold measured in the system font on every device, at Text Size 1.0 and 1.3.
         if let rise = Sky.sunTimes(at: Navigator.sampleTime, lat: 39.09898, lon: -106.94117).sunriseDate,
            let set = Sky.sunTimes(at: Navigator.sampleTime, lat: 39.09898, lon: -106.94117).sunsetDate {
             let fit = MainView.fitFailures(sunrise: rise, sunset: set, now: Navigator.sampleTime, lat: 39.09898, lon: -106.94117)
-            check(fit.isEmpty, "No ellipsis in the tiles or the header time (\(fit.isEmpty ? "every value fits or wraps" : fit.prefix(3).joined(separator: "; ")))")
+            check(fit.isEmpty, "No ellipsis in the tiles, the lock row or the header (\(fit.isEmpty ? "every value fits or wraps" : fit.prefix(3).joined(separator: "; ")))")
         } else {
             check(false, "No ellipsis in the tiles or the header time (no sunrise for the sample)")
         }
-        check(MainView.noHeadingText == "\u{2014}°", "The no-compass readout is \"\(MainView.noHeadingText)\"")
+        // What is drawn (C3): the no-heading dash on the digits' midline (it drew as "_ °"), both Position
+        // lines at one size, and the whole window against its plan in every layout and state: the header
+        // pinned, the grid each layout plans (Large is not Medium), and no more empty at the bottom than planned.
+        let dash = MainView.dashFailures()
+        check(dash.isEmpty, "No-heading readout drawn as a centred dash (\(dash.isEmpty ? "within 4 pt of the digits' midline" : dash.prefix(2).joined(separator: "; ")))")
+        let position = MainView.positionSizeFailures()
+        check(position.isEmpty, "Both Position lines drawn at one size\(position.isEmpty ? "" : " (\(position.joined(separator: "; ")))")")
+        let drawNav = Navigator(defaults: UserDefaults(suiteName: "bearings.selftest.drawing") ?? .standard)
+        for (w, h) in [(CGFloat(420), CGFloat(840)), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
+            let drawn = MainView.drawingFailures(nav: drawNav, width: w, height: h)
+            check(drawn.failures.isEmpty, "Window drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "header pinned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
+            lines += drawn.info.map { "INFO \($0)" }
+        }
         // Night secondary text: at least 4.5:1 on black (§4.3).
         let contrast = Palette.nightSecondaryContrast()
         check(contrast >= 4.5, String(format: "Night secondary text contrast %.2f:1", contrast))
@@ -94,11 +133,17 @@ enum SelfTest {
         check(render(screen(nav, width: 420, height: 840), to: folder.appendingPathComponent("mac-night.png")),
               "Drew night mode (mac-night.png)")
         nav.nightMode = night
-        // No compass (as on every Mac): "—°", NO HEADING, the rose at 40% and the two-line note.
+        // No compass (as on every Mac): the drawn dash, the rose at 40% and the two-line note.
         nav.showSample(noCompass: true)
         check(nav.noCompass && nav.heading == nil, "Sample without a compass has no heading")
         check(render(screen(nav, width: 420, height: 840), to: folder.appendingPathComponent("mac-nocompass.png")),
               "Drew the no-compass state (mac-nocompass.png)")
+        // Live: nothing locked or marked (C3.4 #14), on a navigator of its own so the sample's spot stays.
+        drawNav.showSample()
+        drawNav.clearSpot()
+        drawNav.showLayout(nav.layout.rawValue)
+        check(render(screen(drawNav, width: 420, height: 840), to: folder.appendingPathComponent("mac-live.png")),
+              "Drew the live state (mac-live.png)")
         nav.showSample(lock: 240)
         // Each other layout at the default window, and Extra Large at the smallest.
         for (layout, width, height, name) in layoutShots {
@@ -130,12 +175,15 @@ enum SelfTest {
         NSApp.terminate(nil)
     }
 
-    /// The layouts drawn besides Medium (docs/REFINE.md §3.4), and Extra Large at the smallest window.
+    /// The layouts drawn besides Medium (docs/REFINE.md §3.4), Extra Large at the smallest window, and two
+    /// panes (a wide window, as iPad landscape) in Medium and Large.
     static let layoutShots: [(Layout, CGFloat, CGFloat, String)] = [
         (.small, 420, 840, "mac-layout-small.png"),
         (.large, 420, 840, "mac-layout-large.png"),
         (.extraLarge, 420, 840, "mac-layout-extraLarge.png"),
         (.extraLarge, LayoutPlan.macMinWidth, LayoutPlan.macMinHeight, "mac-layout-extraLarge-min.png"),
+        (.medium, 1200, 800, "mac-wide-medium.png"),
+        (.large, 1200, 800, "mac-wide-large.png"),
     ]
 
     /// The main screen at a window size, drawn without ScrollViews or menus (ImageRenderer can't draw them).
