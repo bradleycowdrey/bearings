@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Runs the Android app in the emulator (in CI): photographs the first-launch terms, runs the self-test
 # with the emulator placed at Maroon Bells, Colorado (live data), then photographs the live screen, the
-# sample place (sun, moon, a marked spot and a locked bearing) in two coordinate formats, and night mode.
+# sample place (sun, moon, a marked spot and a locked bearing) in two coordinate formats, night mode,
+# larger text, and every compass layout (the "layout" extra: small, medium, large, extraLarge; never
+# saved, so the other shots stay on the Medium default; docs/LAYOUTS.md §11).
 # Usage: scripts/android-selftest.sh <apk> <output folder>
 set -uo pipefail
 APK="$1"; OUT="$2"; mkdir -p "$OUT"
@@ -44,7 +46,13 @@ launch --ez sample true --es format dd --ez night true; sleep 8; shot android-5-
 # A larger font size (Settings → Display → Font size): the screen must still fit, with larger type.
 adb shell settings put system font_scale 1.3 || true
 launch --ez sample true --es format dd; sleep 8; shot android-6-large-text; stop
+# The same font size at Extra Large: the planner gives things up, the dial stays at 40% or more.
+launch --ez sample true --es format dd --es layout extraLarge; sleep 8; shot android-10-xl-large-text; stop
 adb shell settings put system font_scale 1.0 || true
+# 4. Every compass layout with the sample place (Medium is android-3-sample).
+launch --ez sample true --es format dd --es layout small; sleep 8; shot android-7-small; stop
+launch --ez sample true --es format dd --es layout large; sleep 8; shot android-8-large; stop
+launch --ez sample true --es format dd --es layout extraLarge; sleep 8; shot android-9-xl; stop
 adb shell getprop ro.build.version.release > "$OUT/device.txt"
 adb shell getprop ro.product.model >> "$OUT/device.txt"
 cat "$OUT/report.txt"

@@ -3,7 +3,7 @@ import UIKit
 
 /// Bearings for iPhone and iPad: the same one screen as the Mac, with the live compass and level.
 /// Launch arguments for CI: `--selftest` (checks, report in Documents), `--sample` (the sample place),
-/// `--format <id>`, `--show-terms`.
+/// `--format <id>`, `--layout <id>` (not saved), `--show-terms`.
 @main
 struct BearingsPhoneApp: App {
     @StateObject private var nav = Navigator.shared
@@ -39,6 +39,8 @@ struct BearingsPhoneApp: App {
     @MainActor
     private func launch() async {
         if let id = PhoneLaunch.value(after: "--format"), let format = Geo.Format(rawValue: id) { nav.format = format }
+        // `--layout small|medium|large|extraLarge`: shown for this launch, not saved.
+        if let id = PhoneLaunch.value(after: "--layout") { nav.showLayout(id) }
         if PhoneLaunch.sample { SharedStore.enabled = false; nav.showSample(lock: 240); return }
         if PhoneLaunch.selfTest { await PhoneSelfTest.run(nav: nav); return }
         if !askTerms { nav.start() }

@@ -17,6 +17,10 @@ enum PhoneSelfTest {
 
         for (name, ok) in CoreChecks.run() { check(ok, name) }
 
+        // The layout planner (docs/LAYOUTS.md): the dial never under 40% of the height in a portrait column.
+        let planFailures = LayoutPlan.tableFailures()
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.first ?? "all cases keep the dial at 40% or more"))")
+
         check(Geo.bundledCities.count > 10000, "Place list bundled (\(Geo.bundledCities.count) places)")
         let offline = Geo.offlinePlaceName(lat: 39.09898, lon: -106.94117, feet: true)
         check(offline == "66 mi NE of Montrose, Colorado", "Offline place name at Maroon Bells (\(offline ?? "none"))")

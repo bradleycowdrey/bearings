@@ -32,6 +32,9 @@ works **offline** except the map and the terrain elevation.
 
 ## The one screen (phone, top to bottom)
 
+How large each part is, what scrolls, and the four layouts are in [LAYOUTS.md](LAYOUTS.md), which wins
+over this page for layout.
+
 The apps look like Two Degrees: a black screen with white type, a large title, a sky card, and frosted
 tiles with small uppercase captions. The exact colours, sizes and tokens are in [LOOK.md](LOOK.md).
 Inside the app the highlights are white, and pink means north only. The warm near-black, cream and
@@ -42,7 +45,7 @@ The corner radius is 16 (continuous) for tiles, the sky card and the map, and 28
 web. Every control is at least 44 × 44.
 
 1. **Title** (48 high): "Bearings", 34 bold, with the ⋯ menu on the right (`ellipsis.circle` on Apple
-   devices; a faint white circle on Android). On screens under 700 high there's no title row, and the
+   devices; a faint white circle on Android). The title row is dropped first when space is short ([LAYOUTS.md](LAYOUTS.md) §4), and the
    menu sits in the sky card's corner.
 2. **Sky card**: the place name (20 semibold, one line, ends with … if long) over the date and time
    ("Sat, Nov 1 · 9:41 AM", 14, the device's 12- or 24-hour setting, updated each minute). Both are
@@ -51,7 +54,9 @@ web. Every control is at least 44 × 44.
    symbol sits in the corner. While finding the place: "Finding where you are…". With no location:
    "Bearings". With no place within 200 km, the coordinates' region is skipped and the line reads
    "Far from any town".
-3. **Dial**: as wide as fits, at most 36% of the screen's height and 360. On a faint white disc are
+3. **Dial**: sized first, as a share of the screen's height set by the **Layout** setting (Small, Medium,
+   Large, Extra Large; never under 40% of the height in a portrait column): see [LAYOUTS.md](LAYOUTS.md),
+   which replaces the old "36% of the height and 360" rule. On a faint white disc are
    ticks every 2°, numbers every 30°, the points in white and N in pink. Also on the card:
    - **Sun**: an amber disc with eight short rays at the sun's azimuth, radius 118 (inside the numbers);
      at 35% opacity when it's below the horizon.
@@ -64,8 +69,12 @@ web. Every control is at least 44 × 44.
    it replaces the subline in amber semibold: "Magnet or metal nearby: move away" (field outside
    20–70 µT), or "Low accuracy: move your phone in a figure 8". The locked bearing adds "· Locked 240°
    · turn 12° right" in white semibold.
-6. **Marked spot** (only when one is marked): a pill, "📍 Marked spot · 0.4 mi · 245° SW", with a ✕ to clear.
-7. **Tiles**, 2 × 2, frosted (white at 8%, with a faint edge). Each has a small uppercase caption with a
+6. **Marked spot** (only when one is marked): one line, "📍 Marked spot · 0.4 mi · 245° SW", with a ✕ to
+   clear; tapping the line offers Lock to Spot and Clear Marked Spot. Its size and place:
+   [LAYOUTS.md](LAYOUTS.md) §3.1.
+7. **Tiles**, 2 × 2, frosted, in the scrolling **Details** under the head, after a one-row summary strip
+   (coordinates, elevation, sun) and the map: the order and heights are in [LAYOUTS.md](LAYOUTS.md) §3.2.
+   The tiles are white at 8%, with a faint edge. Each has a small uppercase caption with a
    symbol (LATITUDE, LONGITUDE, ELEVATION, SUN):
    - **Latitude** / **Longitude**: the value (20 medium); details "±16 ft · Just now" (latitude) and the
      format's name (longitude). Tap either to switch format; long-press to copy. UTM, MGRS and Plus Code
@@ -74,18 +83,20 @@ web. Every control is at least 44 × 44.
      "GPS ±4 m", or "Terrain data", plus " · 29.92 inHg" (or "1,013 hPa") with a barometer.
    - **Sun**: "6:42 AM – 5:01 PM" (sunrise–sunset); detail "Waxing Gibbous · 82%" with the moon glyph.
      Polar day or night: "Sun up all day" / "Sun down all day".
-8. **Map**: fills the rest (at least 120), in a rounded card. Controls top right in 32 frosted circles: +, −, the heading button
+8. **Map**: a rounded card in Details, between the summary strip and the tiles; how tall it is and whether
+   it shows on the first screen depend on the layout ([LAYOUTS.md](LAYOUTS.md) §3.2). Controls top right in 32 frosted circles: +, −, the heading button
    (north up ↔ follow heading), and open in Maps. A chip with the speed (top left on Apple devices, clear of the Apple Maps label; bottom left elsewhere) when moving faster
    than 0.5 m/s ("3.2 mph"). Attribution stays visible. Your position is a white dot with a white heading
    cone.
 
-On a Mac and on the web (wider than a phone), the same column in a 460-wide panel, with the footer
-"Made by Bradley Cowdrey · bradcowdrey.com ↗" under the map. On a phone the footer is in About. The
+On a Mac and on the web (wider than a phone), the same column (at most 760 wide; wide windows put Details
+in a column beside the dial, [LAYOUTS.md](LAYOUTS.md) §7), with the footer
+"Made by Bradley Cowdrey · bradcowdrey.com ↗" at the end of Details. On a phone the footer is in About. The
 Mac window hides its title bar, so the large title isn't doubled. The web page keeps its current look
 for now.
 
-**The menu**: Coordinates (the six formats) · Units: Feet First, Metres First · North: True North, Magnetic
-North · Map: Follow Heading, and on Apple Standard / Satellite · Night Mode · Mark This Spot (or Clear
+**The menu**: Layout (Small, Medium, Large, Extra Large) · Coordinates (the six formats) · Units: Feet First, Metres First · North: True North, Magnetic
+North · Map: Follow Heading, Open in Maps, and on Apple Standard / Satellite · Night Mode · Mark This Spot (or Clear
 Marked Spot) · Lock This Bearing (or Clear) · Copy Coordinates · Share My Location… · Share Bearings… ·
 Terms & Privacy · About Bearings.
 
@@ -94,8 +105,9 @@ become dark reds), the map dimmed.
 
 **Accessibility**: VoiceOver/TalkBack read the dial as "Heading 228 degrees, southwest", every tile as one
 element ("Elevation, 9,587 feet, 2,922 metres, from GPS"), and announce the heading at most every few
-seconds. Text scales with the system's text size where the layout allows; reduce motion turns off the
-card's easing.
+seconds. Text scales with the system's text size; the layout gives things up in a fixed order and Details scrolls
+rather than squeezing the dial ([LAYOUTS.md](LAYOUTS.md) §4 and §8, which also lists the dial's spoken
+value and actions); reduce motion turns off the card's easing.
 
 ## Where the place name comes from
 

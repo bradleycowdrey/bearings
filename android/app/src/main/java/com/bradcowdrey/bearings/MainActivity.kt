@@ -16,14 +16,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
+import com.bradcowdrey.bearings.ui.Layout
 import com.bradcowdrey.bearings.ui.MainScreen
 import com.bradcowdrey.bearings.ui.TermsScreen
 import kotlinx.coroutines.launch
 
 /**
  * The app: one screen. Extras for CI: `selftest` runs the checks and writes files/report.txt; `sample`
- * shows the sample place; `format` picks a coordinate format; `night` turns on night mode (without saving
- * it); `show` = "terms" shows the terms.
+ * shows the sample place; `format` picks a coordinate format; `night` turns on night mode and `layout`
+ * (small, medium, large, extraLarge) picks the compass size, both without saving; `show` = "terms" shows
+ * the terms.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var nav: Navigator
@@ -42,6 +44,7 @@ class MainActivity : ComponentActivity() {
         nav = Navigator(applicationContext) { currentRotation() }
         intent.getStringExtra("format")?.let { nav.setFormat(Geo.Format.of(it)) }
         if (intent.hasExtra("night")) nav.setNight(intent.getBooleanExtra("night", false), save = false)
+        intent.getStringExtra("layout")?.let { nav.setLayout(Layout.of(it), save = false) }
         val prefs = getSharedPreferences("bearings", MODE_PRIVATE)
         askTerms = intent.getStringExtra("show") == "terms" ||
             (!ci && TermsSchedule.shouldAsk(prefs.getString("terms.accepted", null), prefs.getLong("terms.acceptedAt", 0L)))

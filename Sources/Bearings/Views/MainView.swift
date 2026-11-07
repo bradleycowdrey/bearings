@@ -5,35 +5,44 @@ import UIKit
 import AppKit
 #endif
 
-/// Bearings' one screen, top to bottom: where you are and the time, the dial with the sun, moon and a
-/// marked spot, the heading, latitude and longitude, elevation, the sun's day, and a map filling the
-/// rest. The same view on Mac, iPhone and iPad; it fits one iPhone screen without scrolling (the dial
-/// gives way first). It wears Two Degrees' look (docs/LOOK.md): black, a large title, a sky card, frosted
-/// tiles with uppercase captions, and white highlights.
+/// Bearings' one screen (docs/LAYOUTS.md). The **head** never scrolls: the sky, the dial, the readout, the
+/// subline and, when a spot is marked, the spot line. Under it, **Details** scrolls: a summary strip, the
+/// map, the 2 × 2 tiles and (Mac and iPad) the footer. The dial is sized first, as a share of the screen's
+/// height set by the Layout setting (LayoutPlan); wide windows put Details in a column beside the dial. The
+/// same view on Mac, iPhone and iPad, in Two Degrees' look (docs/LOOK.md): black, a large title, a sky
+/// card, frosted tiles with uppercase captions, and white highlights.
 struct MainView: View {
     @EnvironmentObject private var nav: Navigator
     /// "Bearings 0.2.0 is available" on the Mac (nil elsewhere).
     var update: (version: String, url: URL)?
     @State private var toast: String?
     @State private var showAbout = false
+    /// Details has more below its bottom edge (the fade shows).
+    @State private var moreBelow = false
     @Environment(\.openURL) private var openURL
+    /// Details as a plain clipped stack, for ImageRenderer (the Mac self-test), which can't draw a ScrollView.
+    @Environment(\.flatDetails) private var flatDetails
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var lastAnnouncement = Date.distantPast
     #endif
 
     /// Night mode's red: multiplied over everything, so whites turn red and nothing stays blue or green.
     static let nightTint = Color(red: 1, green: 0.18, blue: 0.12)
 
-    // The grid (DESIGN.md, docs/LOOK.md): margins 16, gaps between blocks 12, tiles 8 apart.
+    // The grid (DESIGN.md, docs/LOOK.md): margins 16, tiles 8 apart; the gaps between blocks come from the plan.
     private static let margin: CGFloat = Look.margin
-    private static let gap: CGFloat = Look.gap
     private static let tileGap: CGFloat = Look.tileGap
     private static let tileHeight: CGFloat = 84
-    private static let pillHeight: CGFloat = 46
-    private static let mapMinimum: CGFloat = 120
+    /// Scroll targets inside Details.
+    private static let topID = "details.top"
+    private static let tilesID = "details.tiles"
+    private static let detailsSpace = "details"
 
-    /// The footer under the map: on the Mac and a wide iPad; on a phone it's in About.
+    /// The footer under the tiles: on the Mac and a wide iPad; on a phone it's in About.
     private var showsFooter: Bool {
         #if os(iOS)
         sizeClass == .regular
@@ -45,12 +54,11 @@ struct MainView: View {
     /// The system's Text Size, as a multiplier on the header and tiles: 1 at the default size, up to 1.3.
     @ScaledMetric(relativeTo: .body) private var textScale: CGFloat = 1
 
-    /// Text Size alone, capped at 1.3: decides when the subline may take a second line, so an iPad at the
-    /// default size (whose k is 1.15) keeps one.
-    private var textK: CGFloat { min(max(textScale, 1), 1.3) }
+    /// Text Size alone, capped at 1.3 (the planner's `k`).
+    private var textK: CGFloat { min(max(textScale, 1), LayoutPlan.maxK) }
 
-    /// Whether the subline under the heading may wrap to a second line (at a larger Text Size).
-    private var sublineWraps: Bool { textK > 1.1 }
+    /// A marked spot with a fix: the spot line shows under the readout.
+    private var hasSpotLine: Bool { nav.spot != nil && nav.fix != nil }
 
     /// Keeps a reading's words and units together ("21.29 inHg", "turn 12° right") and lets a line break
     /// only after a " · ", never before it, so a dot never starts a line. A long name with a comma
@@ -67,34 +75,18 @@ struct MainView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let dial = dialSide(for: geo.size)
-            // The readout keeps its proportion to the dial, so a smaller dial isn't overpowered.
-            let big = min(readoutSize(for: geo.size), max(40, (dial * 0.22).rounded()))
-            let wide: CGFloat = Self.isWide(geo.size) ? 1.15 : 1
-            let k: CGFloat = wide * textK
-            let compact = isCompact(geo.size)
-            VStack(spacing: Self.gap) {
-                // The large title, 4 above the sky card (none on a short screen: the menu moves into the card).
-                VStack(spacing: 4) {
-                    if !compact { titleRow(wide: wide) }
-                    if let update { updateBanner(update) }
-                    skyCard(k: k, compact: compact)
+            let plan = makePlan(for: geo)
+            Group {
+                if plan.twoPane {
+                    twoPanes(plan)
+                } else {
+                    singleColumn(plan)
                 }
-                compass(side: dial, big: big, k: k)
-                if nav.spot != nil, nav.fix != nil { spotPill(k: k) }
-                tiles
-                MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
-                           speed: nav.speed.map { Geo.speedText($0, feet: nav.feet) }, dimmed: nav.nightMode)
-                    .frame(minHeight: mapMinimum(for: geo.size), maxHeight: .infinity)
-                if showsFooter { footer }
             }
-            .padding(.horizontal, Self.margin)
-            .padding(.top, 4)
-            .padding(.bottom, 8)
-            .environment(\.uiScale, k)
-            .environment(\.uiWide, wide)
-            .frame(maxWidth: Self.isWide(geo.size) ? 560 : 460)
-            .frame(maxWidth: .infinity)
+            .environment(\.uiScale, plan.k)
+            .environment(\.uiWide, plan.wide)
+            // Choosing a layout animates it (a 0.35 s spring); with Reduce Motion it just changes.
+            .animation(reduceMotion ? nil : .spring(duration: 0.35), value: nav.layout)
         }
         .background(Palette.screen.ignoresSafeArea())
         .foregroundStyle(.white)
@@ -102,6 +94,7 @@ struct MainView: View {
         // No accent colour inside the app: the menu's checks and the alert's buttons are white.
         .tint(.white)
         .environment(\.colorScheme, .dark)
+        // Night mode covers the whole stack: the head, the sky bar and Details.
         .colorMultiply(nav.nightMode ? Self.nightTint : .white)
         #if os(iOS)
         .onChange(of: nav.heading.map { Int($0 / 15) }) { announceHeading() }
@@ -116,60 +109,126 @@ struct MainView: View {
 
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev" }
 
-    /// As wide as fits, at most 36% of the height and 360, and smaller still when the rest of the column
-    /// needs the room (an iPhone SE).
-    private func dialSide(for size: CGSize) -> CGFloat {
-        let room = size.height - columnHeight(for: size, compact: isCompact(size))
-        // An iPad or a wide Mac window gets a bigger dial in a wider column.
-        let cap: CGFloat = Self.isWide(size) ? 420 : 360
-        return max(140, min(size.width - 2 * Self.margin, size.height * 0.36, cap, room))
+    // MARK: The plan
+
+    /// The planner's answer for this window: H is the full height (safe area included, what a screenshot
+    /// shows), S the safe height inside which everything is laid out.
+    private func makePlan(for geo: GeometryProxy) -> LayoutPlan {
+        let w = geo.size.width, s = geo.size.height
+        let h = s + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom
+        #if os(iOS)
+        // An iPhone on its side (every iPhone is vertically compact in landscape).
+        let landscapePhone = verticalSizeClass == .compact && w > s
+        #else
+        let landscapePhone = false
+        #endif
+        return LayoutPlan.plan(w: w, h: h, s: s, layout: nav.layout, k: textK,
+                               accessibilityText: typeSize.isAccessibilitySize, hasSpot: hasSpotLine,
+                               hasUpdateBanner: update != nil, showsFooter: showsFooter,
+                               isLandscapePhone: landscapePhone)
     }
 
-    /// The map gives up a little height before the dial does when a marked spot needs the room.
-    private func mapMinimum(for size: CGSize) -> CGFloat {
-        let base = Self.mapMinimum * (size.height < 700 ? 0.8 : 1)
-        return nav.spot != nil && nav.fix != nil ? base - 20 : base
+    /// One column, C = min(W, 760) wide: the head, then Details filling the height left. When even the
+    /// dial at its floor leaves too little (an accessibility Text Size on a small phone), both scroll as one.
+    @ViewBuilder
+    private func singleColumn(_ plan: LayoutPlan) -> some View {
+        Group {
+            if plan.scrollsWhole && !flatDetails {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: plan.gap) {
+                            head(plan)
+                                .id(Self.topID)
+                            detailsContent(plan, viewport: plan.detailsViewport) { scrollToTiles(proxy) }
+                        }
+                        .padding(.top, LayoutPlan.top)
+                        .padding(.bottom, LayoutPlan.bottom)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollIndicatorsFlash(onAppear: true)
+                    .onChange(of: nav.layout) { proxy.scrollTo(Self.topID, anchor: .top) }
+                }
+            } else {
+                VStack(spacing: 0) {
+                    head(plan)
+                        .padding(.top, LayoutPlan.top)
+                        .padding(.bottom, plan.gap)
+                    detailsArea(plan)
+                        .padding(.bottom, LayoutPlan.bottom)
+                }
+            }
+        }
+        .frame(maxWidth: plan.columnWidth)
+        .frame(maxWidth: .infinity)
     }
 
-    private static func isWide(_ size: CGSize) -> Bool { size.width >= 700 && size.height >= 900 }
+    /// Wide windows and phones on their side: the head centred in a leading pane, and the title row with
+    /// Details in a trailing column (clamp(W × c, 300, 440) wide, narrower for the larger layouts).
+    private func twoPanes(_ plan: LayoutPlan) -> some View {
+        HStack(spacing: 0) {
+            Group {
+                if plan.scrollsWhole && !flatDetails {
+                    ScrollView {
+                        head(plan)
+                            .padding(.top, LayoutPlan.top)
+                            .padding(.bottom, LayoutPlan.bottom)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                } else {
+                    head(plan)
+                        .padding(.top, LayoutPlan.top)
+                        .padding(.bottom, LayoutPlan.bottom)
+                        .frame(maxHeight: .infinity)
+                }
+            }
+            .frame(maxWidth: .infinity)
 
-    /// Everything in the column but the dial.
-    private func columnHeight(for size: CGSize, compact: Bool) -> CGFloat {
-        let k: CGFloat = (Self.isWide(size) ? 1.15 : 1) * textK
-        // The heading, then the subline, which grows with Text Size and may take a second line.
-        let readout = readoutSize(for: size) * 1.2 + 4 + 18 * k + (sublineWraps ? 18 * k : 0) + 4
-        // The title row (none when compact) and the 4 under it, then the sky card.
-        let title: CGFloat = compact ? 0 : Look.titleRow * (Self.isWide(size) ? 1.15 : 1) + 4
-        var rest = title + Self.skyHeight(k: k, compact: compact) + readout + 2 * Self.tileHeight * k + Self.tileGap + mapMinimum(for: size)
-        var gaps = 4
-        if nav.spot != nil && nav.fix != nil { rest += Self.pillHeight; gaps += 1 }
-        if update != nil { rest += 44 + 4 }
-        if showsFooter { rest += 16; gaps += 1 }
-        rest += CGFloat(gaps) * Self.gap + 8   // text runs a little taller than its point size
-        return rest
+            VStack(spacing: LayoutPlan.titleSpace) {
+                titleRow(plan)
+                    .padding(.horizontal, Self.margin)
+                if let update {
+                    updateBanner(update)
+                        .padding(.horizontal, Self.margin)
+                }
+                detailsArea(plan)
+            }
+            .padding(.top, LayoutPlan.top)
+            .padding(.bottom, LayoutPlan.bottom)
+            .frame(width: plan.trailingWidth)
+        }
     }
 
-    /// Under 700 high (an iPhone SE), or when the title row would leave the dial under 140 (a large Text
-    /// Size, the Mac's smallest window): no title row, and the ⋯ menu sits in the sky card.
-    private func isCompact(_ size: CGSize) -> Bool {
-        size.height < Look.compactHeight || size.height - columnHeight(for: size, compact: false) < 140
+    // MARK: The head
+
+    /// The sky (with the title row above it in a single column, when it fits), the dial, the readout and
+    /// subline, and the spot line. Nothing that changes what the dial shows ever leaves the head.
+    private func head(_ plan: LayoutPlan) -> some View {
+        VStack(spacing: plan.gap) {
+            VStack(spacing: LayoutPlan.titleSpace) {
+                if !plan.twoPane && plan.header == .titleRowAndCard { titleRow(plan) }
+                if !plan.twoPane, let update { updateBanner(update) }
+                if plan.header == .bar {
+                    skyBar(plan)
+                } else {
+                    skyCard(plan)
+                }
+            }
+            .padding(.horizontal, Self.margin)
+            compass(plan)
+            if hasSpotLine {
+                spotLine(plan)
+                    .padding(.horizontal, Self.margin)
+            }
+        }
     }
 
-    /// The sky card's height: 28 + 44 × k (24 + 44 × k on a short screen, never under 68 so the menu
-    /// keeps its 44 target).
-    private static func skyHeight(k: CGFloat, compact: Bool) -> CGFloat {
-        compact ? max(68, 24 + 44 * k) : 28 + 44 * k
-    }
-
-    private func readoutSize(for size: CGSize) -> CGFloat { size.height < 700 ? 46 : Self.isWide(size) ? 64 : 56 }
-
-    // MARK: Title and sky card
+    // MARK: Title and sky
 
     /// "Bearings", large, with the ⋯ menu at the right (as Two Degrees' and Meridian's lists).
-    private func titleRow(wide: CGFloat) -> some View {
+    private func titleRow(_ plan: LayoutPlan) -> some View {
         HStack(spacing: 12) {
             Text(Brand.appName)
-                .font(.system(size: Look.titleSize * wide, weight: .bold))
+                .font(.system(size: Look.titleSize * plan.wide, weight: .bold))
                 .tracking(0.4)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -177,12 +236,14 @@ struct MainView: View {
             Spacer(minLength: 8)
             menu
         }
-        .frame(height: Look.titleRow * wide)
+        .frame(height: LayoutPlan.titleHeight(wide: plan.wide))
     }
 
-    /// Where you are and the time, on the sky for the sun's altitude here (Two Degrees' city card).
-    private func skyCard(k: CGFloat, compact: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+    /// Where you are and the time, on the sky for the sun's altitude here (Two Degrees' city card). With no
+    /// title row, the ⋯ menu takes the corner symbol's place.
+    private func skyCard(_ plan: LayoutPlan) -> some View {
+        let k = plan.k, compact = plan.menuInSky
+        return HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(nav.placeTitle)
                     .font(.system(size: 20 * k, weight: .semibold))
@@ -195,14 +256,7 @@ struct MainView: View {
                         .foregroundStyle(Color.white.opacity(Palette.Op.body))
                         .monospacedDigit()
                         .lineLimit(1)
-                    if nav.sample {
-                        Text("Sample")
-                            // 11 is the smallest text size; it grows with the date beside it.
-                            .font(.system(size: 11 * k, weight: .semibold))
-                            .foregroundStyle(Color.black)
-                            .padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(Capsule().fill(Palette.notice))
-                    }
+                    if nav.sample { sampleBadge(k: k) }
                 }
             }
             .accessibilityElement(children: .combine)
@@ -211,19 +265,71 @@ struct MainView: View {
             if compact {
                 menu
             } else {
-                Image(systemName: SkyTone.symbol(for: nav.sunPosition))
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(Palette.Op.body))
-                    .accessibilityHidden(true)
+                skySymbol
             }
         }
         .foregroundStyle(.white)
         .padding(compact ? 12 : Look.skyPadding)
-        // Grows with Text Size as its type does (and as dialSide budgets it), so the date keeps its
-        // distance from the dial.
+        // Grows with Text Size as its type does (and as the planner budgets it).
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .frame(height: Self.skyHeight(k: k, compact: compact), alignment: .top)
+        .frame(height: LayoutPlan.skyCardHeight(k: k, compact: compact), alignment: .top)
         .skyCard(altitude: nav.sunPosition?.altitude)
+    }
+
+    /// Extra Large (or a squeezed window): one line on the same sky, "Crested Butte · Sat, Nov 7 · 4:12 PM",
+    /// the sun or moon symbol, and the ⋯ menu at the end in its 44 × 44 target. The place truncates first.
+    private func skyBar(_ plan: LayoutPlan) -> some View {
+        let k = plan.k
+        return HStack(spacing: 8) {
+            HStack(spacing: 0) {
+                Text(nav.placeTitle)
+                    .font(.system(size: 15 * k, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(0)
+                Text("\u{00A0}· \(dateLine)")
+                    .font(.system(size: 15 * k))
+                    .foregroundStyle(Color.white.opacity(Palette.Op.body))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
+                    .layoutPriority(1)
+                if nav.sample {
+                    sampleBadge(k: k)
+                        .padding(.leading, 6)
+                        .fixedSize()
+                        .layoutPriority(1)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 4)
+            skySymbol
+            if plan.menuInSky { menu }
+        }
+        .foregroundStyle(.white)
+        .padding(.leading, 14)
+        .padding(.trailing, plan.menuInSky ? 0 : 14)
+        .frame(maxWidth: .infinity)
+        .frame(height: LayoutPlan.skyBarHeight(k: k))
+        .skyCard(altitude: nav.sunPosition?.altitude)
+    }
+
+    /// The sun, sunrise or sunset, or moon symbol in the sky's corner (decorative).
+    private var skySymbol: some View {
+        Image(systemName: SkyTone.symbol(for: nav.sunPosition))
+            .font(.system(size: 17, weight: .medium))
+            .foregroundStyle(Color.white.opacity(Palette.Op.body))
+            .accessibilityHidden(true)
+    }
+
+    /// 11 is the smallest text size; it grows with the date beside it.
+    private func sampleBadge(k: CGFloat) -> some View {
+        Text("Sample")
+            .font(.system(size: 11 * k, weight: .semibold))
+            .foregroundStyle(Color.black)
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .background(Capsule().fill(Palette.notice))
     }
 
     /// "Sat, Nov 1 · 9:41 AM", in the device's 12- or 24-hour style.
@@ -232,8 +338,33 @@ struct MainView: View {
         return "\(day) · \(nav.now.formatted(date: .omitted, time: .shortened))"
     }
 
+    /// The ⋯ menu; for ImageRenderer (`flatDetails`, the Mac self-test), which can't draw a menu, its symbol alone.
+    @ViewBuilder
     private var menu: some View {
+        if flatDetails {
+            menuSymbol
+                .accessibilityLabel("Settings and more")
+        } else {
+            settingsMenu
+        }
+    }
+
+    private var menuSymbol: some View {
+        Image(systemName: "ellipsis.circle")
+            .font(.system(size: 22, weight: .regular))
+            .foregroundStyle(.white)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+    }
+
+    private var settingsMenu: some View {
         Menu {
+            // The first group: how large the compass is (a submenu showing the current choice).
+            Picker("Layout", selection: $nav.layout) {
+                ForEach(Layout.allCases) { Text($0.name).tag($0) }
+            }
+            .pickerStyle(.menu)
+            Divider()
             Picker("Coordinates", selection: $nav.format) {
                 ForEach(Geo.Format.allCases) { Text($0.name).tag($0) }
             }
@@ -257,6 +388,10 @@ struct MainView: View {
                     Text("Satellite").tag(true)
                 }
                 .pickerStyle(.menu)
+                Button("Open in Maps", systemImage: "map") {
+                    if let fix = nav.fix { openURL(Navigator.mapsURL(fix)) }
+                }
+                .disabled(nav.fix == nil)
             }
             Toggle("Night Mode", isOn: $nav.nightMode)
             Divider()
@@ -281,11 +416,7 @@ struct MainView: View {
             Link(destination: Brand.legal) { Label("Terms & Privacy", systemImage: "doc.text") }
             Button("About Bearings", systemImage: "info.circle") { showAbout = true }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+            menuSymbol
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -306,25 +437,18 @@ struct MainView: View {
                 .buttonStyle(LookButtonStyle())
         }
         .padding(.leading, 12).padding(.trailing, 6)
-        .frame(height: 44)
+        .frame(height: LayoutPlan.banner)
         .frostedTile()
     }
 
     // MARK: Compass
 
-    private func compass(side: CGFloat, big: CGFloat, k: CGFloat) -> some View {
-        VStack(spacing: 4) {
-            Button { nav.toggleLock() } label: {
-                DialView(rotation: nav.cardRotation, heading: nav.heading, lock: nav.lock, tilt: nav.tilt,
-                         sun: nav.sunPosition.map { DialView.SkyMark(angle: nav.cardAngle($0.azimuth), aboveHorizon: $0.altitude > 0) },
-                         moon: nav.moonPosition.map { DialView.SkyMark(angle: nav.cardAngle($0.azimuth), aboveHorizon: $0.altitude > 0) },
-                         moonPhase: nav.moonPhase.phase,
-                         spot: nav.spotBearing.map { nav.cardAngle($0) })
-                    .frame(width: side, height: side)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(dialLabel)
-            .accessibilityHint(nav.heading == nil ? "" : (nav.lock == nil ? "Locks this bearing" : "Clears the locked bearing"))
+    private func compass(_ plan: LayoutPlan) -> some View {
+        let big = plan.headingSize, k = plan.k
+        let readoutHeight = LayoutPlan.readoutHeight(headingSize: big)
+        let sublineHeight = LayoutPlan.sublineHeight(k: k, wraps: false)
+        return VStack(spacing: 4) {
+            dial(side: plan.dial)
 
             if nav.compass == .unavailable && nav.heading == nil {
                 // No compass: say so where the heading would be, in the readout's own space, so nothing
@@ -336,38 +460,115 @@ struct MainView: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
                     .frame(maxWidth: 300)
-                    .frame(height: big * 1.2 + 4 + 18 * k)
+                    .frame(height: readoutHeight + 4 + sublineHeight)
+                    .padding(.horizontal, Self.margin)
             } else {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(nav.heading.map { "\(Int($0.rounded()) % 360)°" } ?? "–°")
-                    .font(.system(size: big, weight: .light))
-                    .foregroundStyle(nav.heading == nil ? Color.white.opacity(Palette.Op.faint) : .white)
-                    .tracking(-2)
-                Text(nav.heading.map { Geo.point($0) } ?? "")
-                    .font(.system(size: big / 2, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(Palette.Op.caption))
-                    .frame(minWidth: big, alignment: .leading)
-            }
-            .monospacedDigit()
-            .lineLimit(1)
-            .accessibilityHidden(true)
+                // The readout and the subline are read as one element, after the dial.
+                VStack(spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(nav.heading.map { "\(Int($0.rounded()) % 360)°" } ?? "–°")
+                            .font(.system(size: big, weight: .light))
+                            .foregroundStyle(nav.heading == nil ? Color.white.opacity(Palette.Op.faint) : .white)
+                            .tracking(-2)
+                        Text(nav.heading.map { Geo.point($0) } ?? "")
+                            .font(.system(size: big / 2, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(Palette.Op.caption))
+                            .frame(minWidth: big, alignment: .leading)
+                    }
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .frame(height: readoutHeight)
 
-            // Grows with Text Size like the header and tiles; at a larger size it may wrap, but only
-            // after a dot (keepTogether).
-            subline
-                .font(.system(size: 13 * k))
-                .lineLimit(sublineWraps ? 2 : 1)
-                .minimumScaleFactor(0.85)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 18 * k)
+                    // Grows with Text Size like the header and tiles; at a larger size it may wrap, but only
+                    // after a dot (keepTogether).
+                    subline
+                        .font(.system(size: 13 * k))
+                        .lineLimit(plan.sublineWraps ? 2 : 1)
+                        .minimumScaleFactor(0.85)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minHeight: sublineHeight)
+                        .padding(.horizontal, Self.margin)
+                }
+                .accessibilityElement(children: .combine)
             }
         }
     }
 
-    private var dialLabel: String {
-        guard let h = nav.heading else { return "Compass" }
-        return "Heading \(Int(h.rounded()) % 360) degrees, \(Geo.pointName(h).lowercased())"
+    /// The dial: tap to lock or unlock the bearing; pinch to step the layout; VoiceOver reads it as one
+    /// element with its custom actions.
+    private func dial(side: CGFloat) -> some View {
+        Button { nav.toggleLock() } label: {
+            DialView(rotation: nav.cardRotation, heading: nav.heading, lock: nav.lock, tilt: nav.tilt,
+                     sun: nav.sunPosition.map { DialView.SkyMark(angle: nav.cardAngle($0.azimuth), aboveHorizon: $0.altitude > 0) },
+                     moon: nav.moonPosition.map { DialView.SkyMark(angle: nav.cardAngle($0.azimuth), aboveHorizon: $0.altitude > 0) },
+                     moonPhase: nav.moonPhase.phase,
+                     spot: nav.spotBearing.map { nav.cardAngle($0) })
+                .frame(width: side, height: side)
+        }
+        .buttonStyle(.plain)
+        // A pinch steps one layout (only a shortcut: the setting is in the ⋯ menu).
+        .simultaneousGesture(MagnifyGesture().onEnded { pinch($0.magnification) })
+        .accessibilityLabel("Compass")
+        .accessibilityValue(dialValue)
+        .accessibilityHint(nav.heading == nil ? "" : (nav.lock == nil ? "Locks this bearing" : "Clears the locked bearing"))
+        .accessibilityActions {
+            if nav.heading != nil {
+                Button(nav.lock == nil ? "Lock Bearing" : "Unlock Bearing") { nav.toggleLock() }
+            }
+            if nav.layout.larger != nil {
+                Button("Larger Compass") { stepLayout(larger: true) }
+            }
+            if nav.layout.smaller != nil {
+                Button("Smaller Compass") { stepLayout(larger: false) }
+            }
+        }
+    }
+
+    /// Scale over 1.12 is one layout larger, under 0.89 one smaller.
+    private func pinch(_ scale: CGFloat) {
+        if scale > 1.12 { stepLayout(larger: true) } else if scale < 0.89 { stepLayout(larger: false) }
+    }
+
+    private func stepLayout(larger: Bool) {
+        guard nav.stepLayout(larger: larger) else { return }
+        #if os(iOS)
+        UISelectionFeedbackGenerator().selectionChanged()
+        #endif
+        show("Layout: \(nav.layout.name)")
+    }
+
+    /// "Heading 228 degrees, southwest. True north. Sun 245 degrees, up. Moon 110 degrees, down. Marked
+    /// spot 0.4 miles at 245 degrees. Locked 240, turn 12 right." (Only the parts that apply.)
+    private var dialValue: String {
+        var parts: [String] = []
+        if let h = nav.heading {
+            parts.append("Heading \(Int(h.rounded()) % 360) degrees, \(Geo.pointName(h).lowercased())")
+            parts.append(nav.usingTrueNorth ? "True north" : "Magnetic north")
+        } else if nav.compass == .unavailable {
+            parts.append("No compass")
+        }
+        if let sun = nav.sunPosition {
+            parts.append("Sun \(Int(Geo.jsRound(nav.cardAngle(sun.azimuth))) % 360) degrees, \(sun.altitude > 0 ? "up" : "down")")
+        }
+        if let moon = nav.moonPosition {
+            parts.append("Moon \(Int(Geo.jsRound(nav.cardAngle(moon.azimuth))) % 360) degrees, \(moon.altitude > 0 ? "up" : "down")")
+        }
+        if let d = nav.spotDistance, let b = nav.spotBearing {
+            parts.append("Marked spot \(Self.spoken(Geo.distanceText(d, feet: nav.feet))) at \(Int(Geo.jsRound(nav.cardAngle(b))) % 360) degrees")
+        }
+        if let lock = nav.lockText {
+            parts.append(lock.replacingOccurrences(of: "°", with: "").replacingOccurrences(of: " · ", with: ", "))
+        } else if let lock = nav.lock {
+            parts.append("Locked \(Int(lock.rounded()) % 360)")
+        }
+        return parts.isEmpty ? "" : parts.joined(separator: ". ") + "."
+    }
+
+    /// Units as words, for VoiceOver: "0.4 mi" → "0.4 miles", "1,013 hPa" → "1,013 hectopascals".
+    static func spoken(_ text: String) -> String {
+        let words = ["mi": "miles", "km": "kilometres", "ft": "feet", "m": "metres", "hPa": "hectopascals", "inHg": "inches of mercury"]
+        return text.split(separator: " ").map { words[String($0)] ?? String($0) }.joined(separator: " ")
     }
 
     #if os(iOS)
@@ -409,35 +610,321 @@ struct MainView: View {
 
     // MARK: Marked spot
 
-    private func spotPill(k: CGFloat) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "mappin")
-                .font(.system(size: 14 * k, weight: .semibold))
-                .foregroundStyle(.white)
-            (Text("Marked spot").fontWeight(.semibold).foregroundColor(.white)
-             + Text(nav.spotText.map { "\u{00A0}· " + Self.keepTogether($0) } ?? "").foregroundColor(Color.white.opacity(Palette.Op.sub)))
-                .font(.system(size: 14 * k))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Spacer(minLength: 4)
+    /// One line, 28 high: "Marked spot · 0.4 mi · 245° SW". The line opens a small menu (Lock to Spot, Clear
+    /// Marked Spot); the ✕ clears it, with a 44 × 44 target that reaches into the gaps around the line.
+    private func spotLine(_ plan: LayoutPlan) -> some View {
+        let k = plan.k, height = LayoutPlan.spotHeight(k: k)
+        let details = nav.spotText ?? ""
+        // "0.4 miles, 245 degrees southwest" (the point in words, as the dial's value says it).
+        let spokenDetails: String
+        if let d = nav.spotDistance, let b = nav.spotBearing {
+            let shown = nav.cardAngle(b)
+            spokenDetails = "\(Self.spoken(Geo.distanceText(d, feet: nav.feet))), \(Int(Geo.jsRound(shown)) % 360) degrees \(Geo.pointName(shown).lowercased())"
+        } else {
+            spokenDetails = Self.spoken(details.replacingOccurrences(of: " · ", with: ", ").replacingOccurrences(of: "°", with: " degrees"))
+        }
+        return HStack(spacing: 0) {
+            // Balances the ✕, so the line stays centred under the readout.
+            Color.clear.frame(width: 44, height: 1).accessibilityHidden(true)
+            // ImageRenderer can't draw a menu (the Mac self-test): the line alone there.
+            if flatDetails {
+                spotLineLabel(details: details, k: k, height: height)
+            } else {
+                Menu {
+                    Button("Lock to Spot", systemImage: "scope") { nav.lockToSpot() }
+                    Button("Clear Marked Spot", systemImage: "mappin.slash") { nav.clearSpot() }
+                } label: {
+                    spotLineLabel(details: details, k: k, height: height)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .accessibilityLabel("Marked spot, \(spokenDetails)")
+                .accessibilityActions {
+                    Button("Lock to Spot") { nav.lockToSpot() }
+                    Button("Clear") { nav.clearSpot() }
+                }
+            }
             Button { nav.clearSpot() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Color.white.opacity(Palette.Op.caption))
-                    .frame(width: 44)
-                    .frame(minHeight: Self.pillHeight)
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // Laid out in the line's height; its 44 target spills into the gaps above and below.
+            .frame(width: 44, height: height)
             .accessibilityLabel("Clear Marked Spot")
         }
-        .padding(.leading, 14)
-        // At least 46, so the ✕ keeps a full target; taller only if its type needs it.
-        .frame(minHeight: Self.pillHeight)
-        .background(Capsule().fill(Palette.tileFill))
-        .overlay(Capsule().strokeBorder(Palette.tileStroke, lineWidth: Look.stroke))
-        .accessibilityElement(children: .contain)
+        .frame(height: height)
+    }
+
+    /// "📍 Marked spot · 0.4 mi · 245° SW", centred in the line.
+    private func spotLineLabel(details: String, k: CGFloat, height: CGFloat) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "mappin")
+                .font(.system(size: 15 * k, weight: .semibold))
+            (Text("Marked spot") + Text(details.isEmpty ? "" : "\u{00A0}· " + Self.keepTogether(details)))
+                .font(.system(size: 15 * k, weight: .medium))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, minHeight: height)
+        .contentShape(Rectangle())
+    }
+
+    // MARK: Details
+
+    /// The scrolling area under the head (or in the trailing column): it fills the height left. A fade at
+    /// the bottom while more is below, the scroll bar flashes once, nothing bounces when it all fits, and
+    /// changing the layout scrolls back to the top. For ImageRenderer (`flatDetails`), a plain stack clipped
+    /// to the same height.
+    private func detailsArea(_ plan: LayoutPlan) -> some View {
+        GeometryReader { area in
+            let viewport = area.size.height
+            if flatDetails {
+                detailsContent(plan, viewport: viewport) {}
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: area.size.width, height: viewport, alignment: .top)
+                    .clipped()
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        detailsContent(plan, viewport: viewport) { scrollToTiles(proxy) }
+                            .background(GeometryReader { content in
+                                Color.clear.preference(key: DetailsBottomKey.self,
+                                                       value: content.frame(in: .named(Self.detailsSpace)).maxY)
+                            })
+                    }
+                    .coordinateSpace(.named(Self.detailsSpace))
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollIndicatorsFlash(onAppear: true)
+                    .onPreferenceChange(DetailsBottomKey.self) { bottom in moreBelow = bottom > viewport + 1 }
+                    .overlay(alignment: .bottom) {
+                        if moreBelow {
+                            LinearGradient(colors: [Palette.screen.opacity(0), Palette.screen], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 16)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .onChange(of: nav.layout) { proxy.scrollTo(Self.topID, anchor: .top) }
+                }
+            }
+        }
+    }
+
+    private func scrollToTiles(_ proxy: ScrollViewProxy) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) { proxy.scrollTo(Self.tilesID, anchor: .top) }
+    }
+
+    /// Top to bottom: the summary strip, the map card, "DETAILS" and the 2 × 2 tiles, and the footer.
+    /// Small's map fills what's left of the first screen (at least 96); Medium's starts right after the strip,
+    /// its top peeking; Large's and Extra Large's wait below the fold, with calm space under the strip.
+    private func detailsContent(_ plan: LayoutPlan, viewport: CGFloat, scrollToTiles: @escaping () -> Void) -> some View {
+        let stripHeight = LayoutPlan.stripHeight(k: plan.k)
+        return VStack(alignment: .leading, spacing: plan.gap) {
+            strip(plan, scrollToTiles: scrollToTiles)
+                .id(plan.scrollsWhole && !plan.twoPane ? "details.strip" : Self.topID)
+            if plan.mapOnFirstScreen {
+                map.frame(height: max(LayoutPlan.mapMin, viewport - stripHeight - plan.gap))
+            } else {
+                if !plan.mapPeeks {
+                    Color.clear
+                        .frame(height: max(0, viewport - stripHeight - 2 * plan.gap))
+                        .accessibilityHidden(true)
+                }
+                map.frame(height: LayoutPlan.map)
+            }
+            VStack(alignment: .leading, spacing: Self.tileGap) {
+                Text("Details".uppercased())
+                    .font(.system(size: Look.captionSize * plan.k, weight: .semibold))
+                    .tracking(0.3)
+                    .foregroundStyle(Color.white.opacity(Palette.Op.caption))
+                    .accessibilityLabel("Details")
+                    .accessibilityAddTraits(.isHeader)
+                tiles
+            }
+            .id(Self.tilesID)
+            if plan.showsFooter { footer }
+        }
+        .padding(.horizontal, Self.margin)
+    }
+
+    private var map: some View {
+        MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
+                   speed: nav.speed.map { Geo.speedText($0, feet: nav.feet) }, dimmed: nav.nightMode)
+    }
+
+    // MARK: Summary strip
+
+    /// One row, 64 high, frosted: the coordinates (two units wide), the elevation and the sun, divided by
+    /// hairlines. At accessibility Text Sizes it becomes a list, one cell under another.
+    private func strip(_ plan: LayoutPlan, scrollToTiles: @escaping () -> Void) -> some View {
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            let stale = !nav.sample && (nav.fix.map { context.date.timeIntervalSince($0.time) > 120 } ?? false)
+            let k = plan.k
+            Group {
+                if plan.accessibilityText {
+                    VStack(alignment: .leading, spacing: 0) {
+                        coordinateCell(k: k, stale: stale)
+                            .padding(.vertical, 10)
+                        Rectangle().fill(Palette.tileStroke).frame(height: Look.stroke)
+                        elevationCell(k: k, scrollToTiles: scrollToTiles)
+                            .padding(.vertical, 10)
+                        Rectangle().fill(Palette.tileStroke).frame(height: Look.stroke)
+                        sunCell(k: k, scrollToTiles: scrollToTiles)
+                            .padding(.vertical, 10)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    // Two equal halves: the coordinates, then elevation and sun sharing the other half.
+                    HStack(spacing: 0) {
+                        coordinateCell(k: k, stale: stale)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        Rectangle().fill(Palette.tileStroke).frame(width: Look.stroke)
+                        HStack(spacing: 0) {
+                            elevationCell(k: k, scrollToTiles: scrollToTiles)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            Rectangle().fill(Palette.tileStroke).frame(width: Look.stroke)
+                            sunCell(k: k, scrollToTiles: scrollToTiles)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .padding(.vertical, 10)
+                    .frame(height: LayoutPlan.stripHeight(k: k))
+                }
+            }
+            .frostedTile()
+        }
+    }
+
+    /// The coordinates in the current format: latitude over longitude, or one grid reference on one or two
+    /// lines. Tap for the next format, long-press to copy (as the Latitude and Longitude tiles).
+    private func coordinateCell(k: CGFloat, stale: Bool) -> some View {
+        let formatted = nav.fix.map { Geo.format(nav.format, lat: $0.latitude, lon: $0.longitude) }
+        let text: String
+        let spokenValue: String
+        switch formatted {
+        case let .some(.pair(lat, lon)):
+            text = "\(lat)\n\(lon)"
+            spokenValue = "\(Self.spokenCoordinate(lat)), \(Self.spokenCoordinate(lon))"
+        case let .some(.single(value)):
+            text = value
+            spokenValue = value
+        case .none:
+            text = "—"
+            spokenValue = nav.locating ? "finding you" : "not known yet"
+        }
+        // "decimal degrees", but "UTM" and "MGRS" stay in capitals so they're spelled out.
+        let name = nav.format.name
+        let formatWords = name == name.uppercased() ? name : name.lowercased()
+        return CoordinateText(copyAction: "Copy", copy: copyCoordinates) {
+            Text(text)
+                .font(.system(size: 17 * k, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(stale ? Color.white.opacity(Palette.Op.caption) : .white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.6)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Coordinates, \(spokenValue), \(formatWords)")
+        }
+    }
+
+    /// "39.09898° N" → "39.09898 north" (degree, minute and second marks read as numbers).
+    static func spokenCoordinate(_ text: String) -> String {
+        let hemispheres = ["N": "north", "S": "south", "E": "east", "W": "west"]
+        let parts = text.split(separator: " ").map(String.init)
+        guard let last = parts.last, let word = hemispheres[last] else { return text }
+        let number = parts.dropLast().joined(separator: " ")
+            .replacingOccurrences(of: "°", with: " degrees")
+            .replacingOccurrences(of: "′", with: " minutes")
+            .replacingOccurrences(of: "″", with: " seconds")
+        return "\(number) \(word)"
+    }
+
+    /// "9,596 ft" over "2,925 m" (metres first when chosen). Tap: scrolls to the tiles.
+    private func elevationCell(k: CGFloat, scrollToTiles: @escaping () -> Void) -> some View {
+        let main: String, second: String, spokenText: String
+        switch nav.elevation {
+        case let .value(metres, fromGPS, _):
+            let e = Geo.elevation(metres)
+            main = nav.feet ? e.ft : e.m
+            second = nav.feet ? e.m : e.ft
+            let feetWords = "\(Geo.group(metres / Geo.foot)) feet", metreWords = "\(Geo.group(metres)) metres"
+            let pressure = nav.pressure.map { ", pressure \(Self.spoken(Geo.pressureText($0, feet: nav.feet)))" } ?? ""
+            spokenText = "Elevation, \(nav.feet ? feetWords : metreWords), \(nav.feet ? metreWords : feetWords), from \(fromGPS ? "GPS" : "terrain data")\(pressure)"
+        case let .pending(text):
+            main = "—"
+            second = " "
+            spokenText = "Elevation, \(text.trimmingCharacters(in: .whitespaces).isEmpty ? "not known yet" : text)"
+        }
+        return Button(action: scrollToTiles) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(main)
+                    .font(.system(size: 17 * k, weight: .medium))
+                    .foregroundStyle(.white)
+                Text(second)
+                    .font(.system(size: 13 * k))
+                    .foregroundStyle(Color.white.opacity(Palette.Op.caption))
+            }
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(spokenText)
+        .accessibilityHint("Shows the details")
+    }
+
+    /// "6:42–5:01" over the moon and "82%". Tap: scrolls to the tiles.
+    private func sunCell(k: CGFloat, scrollToTiles: @escaping () -> Void) -> some View {
+        let value: String, spokenSun: String
+        if let times = nav.sunTimes {
+            if let rise = times.sunriseDate, let down = times.sunsetDate {
+                value = "\(Self.shortTime(rise))–\(Self.shortTime(down))"
+                spokenSun = "rises \(rise.formatted(date: .omitted, time: .shortened)), sets \(down.formatted(date: .omitted, time: .shortened))"
+            } else {
+                value = times.polar == .day ? "Up all day" : "Down all day"
+                spokenSun = times.polar == .day ? "up all day" : "down all day"
+            }
+        } else {
+            value = "—"
+            spokenSun = "not known yet"
+        }
+        let phase = nav.moonPhase
+        let percent = Int(Geo.jsRound(phase.fraction * 100))
+        return Button(action: scrollToTiles) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.system(size: 15 * k, weight: .medium))
+                    .foregroundStyle(.white)
+                HStack(spacing: 4) {
+                    MoonGlyph(phase: phase.phase, size: 12 * k)
+                    Text("\(percent)%")
+                        .font(.system(size: 13 * k))
+                        .foregroundStyle(Color.white.opacity(Palette.Op.caption))
+                }
+            }
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sun, \(spokenSun), moon \(phase.name.lowercased()), \(percent) percent")
+        .accessibilityHint("Shows the details")
     }
 
     // MARK: Tiles: latitude, longitude, elevation, sun
@@ -458,7 +945,7 @@ struct MainView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 // Tiles fill their row's height (Tile), so both in a row match when one wraps; fixed
-                // here, the rows take only the height they need and the map keeps the rest.
+                // here, the rows take only the height they need.
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -497,17 +984,9 @@ struct MainView: View {
         }
     }
 
-    /// Tap to change the format, long-press to copy (right-click on a Mac).
+    /// Tap to change the format, long-press to copy (right-click on a Mac): the same as the strip's cell.
     private func coordinateTile(_ tile: Tile) -> some View {
-        tile
-            .onTapGesture { nav.cycleFormat() }
-            .onLongPressGesture { copyCoordinates() }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityHint("Changes the coordinate format")
-            .accessibilityAction(named: "Copy Coordinates") { copyCoordinates() }
-            #if os(macOS)
-            .contextMenu { Button("Copy Coordinates") { copyCoordinates() } }
-            #endif
+        CoordinateText(copy: copyCoordinates) { tile }
     }
 
     private func elevationTile(stale: Bool) -> some View {
@@ -607,13 +1086,13 @@ struct MainView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         #endif
-        show("Coordinates copied")
+        show("Coordinates copied", for: 1.2)
     }
 
-    private func show(_ text: String) {
+    private func show(_ text: String, for seconds: Double = 1.6) {
         withAnimation(.easeOut(duration: 0.15)) { toast = text }
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.6))
+            try? await Task.sleep(for: .seconds(seconds))
             withAnimation(.easeIn(duration: 0.2)) { if toast == text { toast = nil } }
         }
     }
@@ -632,6 +1111,47 @@ struct MainView: View {
     }
 }
 
+/// One place for the coordinates' tap and long-press, shared by the summary strip's cell and the Latitude
+/// and Longitude tiles so they behave the same: tap for the next of the six formats, long-press to copy
+/// ("Coordinates copied"), right-click › Copy Coordinates on a Mac, and the same as VoiceOver actions.
+/// The content is expected to be one accessibility element already (a Tile, or a labelled cell).
+struct CoordinateText<Content: View>: View {
+    @EnvironmentObject private var nav: Navigator
+    private let copyAction: String
+    private let copy: () -> Void
+    private let content: Content
+
+    init(copyAction: String = "Copy Coordinates", copy: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+        self.copyAction = copyAction
+        self.copy = copy
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .contentShape(Rectangle())
+            .onTapGesture { nav.cycleFormat() }
+            .onLongPressGesture { copy() }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Changes the coordinate format")
+            .accessibilityAction(named: "Next Format") { nav.cycleFormat() }
+            .accessibilityAction(named: copyAction) { copy() }
+            #if os(macOS)
+            .contextMenu { Button("Copy Coordinates") { copy() } }
+            #endif
+    }
+}
+
+/// The bottom of Details' content in its scroll view, to know whether more is below the fold.
+private struct DetailsBottomKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// Details drawn as a plain stack clipped to its height instead of a ScrollView: ImageRenderer can't draw a
+/// ScrollView (the Mac self-test sets it). False everywhere else.
+private struct FlatDetailsKey: EnvironmentKey { static let defaultValue = false }
+
 /// How much larger the column's type is: the system's Text Size (up to 1.3) times the wider iPad and Mac
 /// column (1.15). 1 on a phone at the default size.
 private struct UIScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
@@ -639,6 +1159,10 @@ private struct UIScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1
 /// Text Size.
 private struct UIWideKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
 extension EnvironmentValues {
+    var flatDetails: Bool {
+        get { self[FlatDetailsKey.self] }
+        set { self[FlatDetailsKey.self] = newValue }
+    }
     var uiScale: CGFloat {
         get { self[UIScaleKey.self] }
         set { self[UIScaleKey.self] = newValue }

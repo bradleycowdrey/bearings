@@ -4,15 +4,21 @@ import WidgetKit
 
 /// `Bearings --selftest <folder>`: what CI checks on a real Mac. The core's known answers, a live ground
 /// elevation from Open-Meteo, naming a place (the geocoder and the bundled list), the update check, the
-/// screen drawn with the sample place (and in night mode), and every widget size drawn the way the
+/// screen drawn with the sample place (and in night mode, and in each layout), the layout planner's table
+/// (the dial never under 40% of the height), and every widget size drawn the way the
 /// widget draws it. Writes report.txt (first line "ALL PASSED" or "FAILED …") and PNGs to the folder,
 /// then quits.
 @MainActor
 enum SelfTest {
     static var folder: URL? {
+        argument(after: "--selftest").map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    /// The launch argument after `flag` (`--selftest <folder>`, `--layout <id>`).
+    static func argument(after flag: String) -> String? {
         let args = CommandLine.arguments
-        guard let i = args.firstIndex(of: "--selftest"), i + 1 < args.count else { return nil }
-        return URL(fileURLWithPath: args[i + 1], isDirectory: true)
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return args[i + 1]
     }
 
     static func run(nav: Navigator, folder: URL) async {
@@ -39,16 +45,34 @@ enum SelfTest {
 
         check(Updater.isNewer("0.2.0", than: "0.1.9") && !Updater.isNewer("0.1.0", than: "0.1.0") && !Updater.isNewer("1.0", than: "dev"), "Update version comparison")
 
+        // The layout planner (docs/LAYOUTS.md §2.1 and §11): every device, layout, text size, marked spot and
+        // banner keeps the dial at 40% of the height or more in a portrait column.
+        let planFailures = LayoutPlan.tableFailures()
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "all cases keep the dial at 40% or more" : planFailures.prefix(3).joined(separator: "; ")))")
+        let mac = LayoutPlan.plan(w: 420, h: 840, s: 840)
+        check(abs(mac.dial - 369.6) < 1 && mac.layout == .medium, "Medium dial at 420 × 840 (\(Int(mac.dial.rounded())) pt, \(Int((mac.share * 100).rounded()))% of the height)")
+
         nav.showSample(lock: 240)
         try? await Task.sleep(for: .milliseconds(300))
         check(nav.spotText != nil && nav.sunTimes?.sunrise != nil, "Sample has a marked spot and the sun's day (\(nav.spotText ?? "no spot"))")
-        check(render(MainView().environmentObject(nav).frame(width: 420, height: 840), to: folder.appendingPathComponent("mac-main.png")),
+        // The main drawings are Medium (or `--layout`), shown without saving; the setting is put back after.
+        let chosen = nav.layout
+        nav.showLayout(argument(after: "--layout") ?? Layout.default.rawValue)
+        check(render(screen(nav, width: 420, height: 840), to: folder.appendingPathComponent("mac-main.png")),
               "Drew the screen (mac-main.png)")
         let night = nav.nightMode
         nav.nightMode = true
-        check(render(MainView().environmentObject(nav).frame(width: 420, height: 840), to: folder.appendingPathComponent("mac-night.png")),
+        check(render(screen(nav, width: 420, height: 840), to: folder.appendingPathComponent("mac-night.png")),
               "Drew night mode (mac-night.png)")
         nav.nightMode = night
+        // Each other layout at the default window, and Extra Large at the smallest.
+        for (layout, width, height, name) in layoutShots {
+            nav.showLayout(layout.rawValue)
+            let plan = LayoutPlan.plan(w: width, h: height, s: height, layout: layout, hasSpot: true)
+            check(render(screen(nav, width: width, height: height), to: folder.appendingPathComponent(name)),
+                  "Drew \(layout.name) at \(Int(width)) × \(Int(height)) (\(name), dial \(Int(plan.dial.rounded())) pt, \(Int((plan.share * 100).rounded()))%)")
+        }
+        nav.showLayout(chosen.rawValue)
 
         // The widgets, drawn from the sample with the sun and moon for its time, and before any fix.
         var snapshot = WidgetSnapshot.sample
@@ -68,6 +92,22 @@ enum SelfTest {
         try? ([head] + lines).joined(separator: "\n").appending("\n").write(to: folder.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
         print(head)
         NSApp.terminate(nil)
+    }
+
+    /// The layouts drawn besides Medium (docs/LAYOUTS.md §11).
+    static let layoutShots: [(Layout, CGFloat, CGFloat, String)] = [
+        (.small, 420, 840, "mac-layout-small.png"),
+        (.large, 420, 840, "mac-layout-large.png"),
+        (.extraLarge, 420, 840, "mac-layout-extraLarge.png"),
+        (.extraLarge, 380, 720, "mac-layout-extraLarge-min.png"),
+    ]
+
+    /// The main screen at a window size, with Details as a plain stack (ImageRenderer can't draw a ScrollView).
+    static func screen(_ nav: Navigator, width: CGFloat, height: CGFloat) -> some View {
+        MainView()
+            .environmentObject(nav)
+            .environment(\.flatDetails, true)
+            .frame(width: width, height: height)
     }
 
     static let widgetSizes: [(WidgetFamily, CGSize, String)] = [

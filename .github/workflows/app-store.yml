@@ -49,7 +49,8 @@ jobs:
             xcrun simctl privacy "$D" grant location $ID || true
             xcrun simctl location "$D" set 39.09898,-106.94117 || true
             n=1
-            for args in "--sample" "--sample --format utm" "--sample --format mgrs"; do
+            # Always the default layout (Medium), named explicitly so a stored choice can't change the listing.
+            for args in "--sample --layout medium" "--sample --format utm --layout medium" "--sample --format mgrs --layout medium"; do
               xcrun simctl terminate "$D" $ID 2>/dev/null || true
               xcrun simctl launch "$D" $ID $args; sleep 8
               xcrun simctl io "$D" screenshot "$SHOTS/$2-0$n.png"; n=$((n + 1))

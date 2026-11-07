@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.bradcowdrey.bearings.ui.Layout
 import com.bradcowdrey.bearings.widget.Snapshot
 import com.bradcowdrey.bearings.widget.WidgetData
 import com.bradcowdrey.bearings.widget.WidgetUpdates
@@ -125,6 +126,8 @@ class Navigator(private val context: Context, private val displayRotation: () ->
     var preferTrueNorth by mutableStateOf(prefs.getBoolean("trueNorth", true)); private set
     var followHeading by mutableStateOf(prefs.getBoolean("followHeading", false)); private set
     var night by mutableStateOf(prefs.getBoolean("night", false)); private set
+    /** The compass size (docs/LAYOUTS.md): Small, Medium (the default), Large or Extra Large. */
+    var layout by mutableStateOf(Layout.of(prefs.getString("layout", null))); private set
 
     private val smoother = HeadingSmoother(0.2)
     private val rotation = FloatArray(9)
@@ -178,6 +181,11 @@ class Navigator(private val context: Context, private val displayRotation: () ->
     /** [save] is false for CI's night-mode screenshot, which shouldn't change the setting. */
     fun setNight(value: Boolean, save: Boolean = true) { night = value; if (save) prefs.edit().putBoolean("night", value).apply() }
     fun cycleFormat() = setFormat(format.next)
+    /** [save] is false for CI's `layout` extra, which shouldn't change the setting. */
+    @JvmName("changeLayout") fun setLayout(value: Layout, save: Boolean = true) {
+        layout = value
+        if (save) prefs.edit().putString("layout", value.id).apply()
+    }
 
     fun allowed(): Boolean =
         context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
@@ -489,6 +497,12 @@ class Navigator(private val context: Context, private val displayRotation: () ->
     fun toggleLock() {
         val h = heading ?: return
         lock = if (lock == null) (Math.round(h) % 360).toDouble() else null
+    }
+
+    /** Locks the bearing to the marked spot, as it sits on the card (the same north as the heading). */
+    fun lockToSpot() {
+        val b = markBearing ?: return
+        lock = (Geo.jsRound(onCard(b)) % 360).toDouble()
     }
 
     /** A true bearing as it sits on the card, which is turned to magnetic north when that's chosen. */

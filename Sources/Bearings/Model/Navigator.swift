@@ -78,6 +78,9 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var followHeading: Bool { didSet { defaults.set(followHeading, forKey: "followHeading") } }
     @Published var satellite: Bool { didSet { defaults.set(satellite, forKey: "satellite") } }
     @Published var nightMode: Bool { didSet { defaults.set(nightMode, forKey: "nightMode") } }
+    /// How large the compass is (docs/LAYOUTS.md): Small, Medium (the default), Large or Extra Large.
+    /// A `--layout` launch argument shows one without saving it (`showLayout`).
+    @Published var layout: Layout { didSet { if !layoutForThisLaunch { defaults.set(layout.rawValue, forKey: "layout") } } }
     @Published private(set) var spot: Spot? {
         didSet {
             guard !sample else { return }
@@ -104,6 +107,8 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
     private var lastShared: WidgetSnapshot?
     private var lastSharedAt: Date?
     private var started = false
+    /// Set only while `showLayout` applies a launch argument, so it isn't saved.
+    private var layoutForThisLaunch = false
     #if os(iOS)
     private let motion = CMMotionManager()
     private let altimeter = CMAltimeter()
@@ -113,6 +118,7 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         format = Geo.Format(rawValue: defaults.string(forKey: "format") ?? "") ?? .dd
+        layout = Layout.of(defaults.string(forKey: "layout"))
         feet = defaults.object(forKey: "feet") as? Bool ?? Geo.prefersFeet(region: Locale.current.region?.identifier)
         preferTrueNorth = defaults.object(forKey: "trueNorth") as? Bool ?? true
         followHeading = defaults.bool(forKey: "followHeading")
@@ -415,6 +421,21 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func cycleFormat() { format = format.next }
 
+    /// Shows a layout without saving it (the `--layout` launch argument; CI's screenshots).
+    func showLayout(_ id: String) {
+        layoutForThisLaunch = true
+        layout = Layout.of(id)
+        layoutForThisLaunch = false
+    }
+
+    /// One layout larger or smaller (⌘= and ⌘−, the dial's VoiceOver actions, a pinch). False at the ends.
+    @discardableResult
+    func stepLayout(larger: Bool) -> Bool {
+        guard let next = larger ? layout.larger : layout.smaller else { return false }
+        layout = next
+        return true
+    }
+
     /// Where a true bearing sits on the card, which is turned to magnetic north when that's in use.
     func cardAngle(_ trueBearing: Double) -> Double {
         if !usingTrueNorth, let d = declination { return Geo.normalize(trueBearing - d) }
@@ -439,6 +460,15 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func clearSpot() { spot = nil }
+
+    /// Locks the bearing toward the marked spot, on the same north as the dial (the spot line's menu).
+    func lockToSpot() {
+        guard let b = spotBearing else { return }
+        lock = Double(Int(Geo.jsRound(cardAngle(b))) % 360)
+        #if os(iOS)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+    }
 
     /// Metres from here to the marked spot.
     var spotDistance: Double? {

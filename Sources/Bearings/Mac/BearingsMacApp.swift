@@ -5,7 +5,8 @@ import WidgetKit
 
 /// Bearings for Mac: the same one screen as on iPhone. Macs have no compass, so the dial rests at
 /// north with a note; coordinates, elevation and the map work as on a phone.
-/// `--selftest <folder>` runs the checks CI uses (SelfTest) and quits.
+/// `--selftest <folder>` runs the checks CI uses (SelfTest) and quits; `--layout <id>` shows a layout
+/// without saving it.
 @main
 struct BearingsMacApp: App {
     @StateObject private var nav = Navigator.shared
@@ -47,6 +48,23 @@ struct BearingsMacApp: App {
                 .disabled(nav.fix == nil && nav.spot == nil)
             }
             CommandGroup(after: .toolbar) {
+                // View › Layout: how large the compass is (docs/LAYOUTS.md §6).
+                Menu("Layout") {
+                    Picker("Layout", selection: $nav.layout) {
+                        ForEach(Layout.allCases) { Text($0.name).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    Divider()
+                    Button("Larger Compass") { nav.stepLayout(larger: true) }
+                        .keyboardShortcut("=", modifiers: .command)
+                        .disabled(nav.layout.larger == nil)
+                    Button("Smaller Compass") { nav.stepLayout(larger: false) }
+                        .keyboardShortcut("-", modifiers: .command)
+                        .disabled(nav.layout.smaller == nil)
+                    Button("Medium") { nav.layout = .medium }
+                        .keyboardShortcut("0", modifiers: .command)
+                }
                 Toggle("Night Mode", isOn: $nav.nightMode)
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                 Toggle("Satellite Map", isOn: $nav.satellite)
@@ -61,6 +79,8 @@ struct BearingsMacApp: App {
 
     @MainActor
     private func launch() async {
+        // `--layout small|medium|large|extraLarge`: shown, not saved (also with --selftest).
+        if let id = SelfTest.argument(after: "--layout") { nav.showLayout(id) }
         if let folder = SelfTest.folder {
             await SelfTest.run(nav: nav, folder: folder)
             return

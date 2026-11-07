@@ -2,9 +2,10 @@ name: iPhone
 
 # Builds the iPhone and iPad app with its widget, checks the packaged widget, and runs the app in the
 # iOS Simulator: --selftest with the Simulator placed at Maroon Bells, Colorado (location fix, live
-# ground elevation, naming the place, the compass's "no compass" state, every widget size drawn), then
-# photographs the terms, the live screen, and the sample place on iPhone and iPad. Results go to the
-# ci-shots-ios branch; the job fails if any check fails.
+# ground elevation, naming the place, the compass's "no compass" state, every widget size drawn, the
+# layout planner's 40% floor), then photographs the terms, the live screen, the sample place and every
+# compass layout (--layout small|large|extraLarge; the rest use the Medium default, docs/LAYOUTS.md §11)
+# on iPhone and iPad. Results go to the ci-shots-ios branch; the job fails if any check fails.
 on:
   push:
     branches: [main]
@@ -17,7 +18,7 @@ permissions:
 jobs:
   simulator:
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,6 +66,15 @@ jobs:
             xcrun simctl io "$DEVICE" screenshot "$OUT/$P-2-sample.png"; xcrun simctl terminate "$DEVICE" $ID || true
             xcrun simctl launch "$DEVICE" $ID --sample --format mgrs; sleep 6
             xcrun simctl io "$DEVICE" screenshot "$OUT/$P-3-mgrs.png"; xcrun simctl terminate "$DEVICE" $ID || true
+            # Every compass layout (docs/LAYOUTS.md); shown for the launch only, never saved.
+            shoot_layout "$DEVICE" small "$P-6-small"
+            shoot_layout "$DEVICE" large "$P-7-large"
+            shoot_layout "$DEVICE" extraLarge "$P-8-xl"
+          }
+          shoot_layout() {   # $1 = device, $2 = layout id, $3 = file name (no .png)
+            # --format dd: the -3-mgrs shot saved MGRS as the format; the layout itself is never saved.
+            xcrun simctl launch "$1" $ID --sample --format dd --layout "$2"; sleep 6
+            xcrun simctl io "$1" screenshot "$OUT/$3.png"; xcrun simctl terminate "$1" $ID || true
           }
           PHONE=$(pick iPhone)
           run_on "$PHONE" iphone
@@ -72,6 +82,8 @@ jobs:
           xcrun simctl ui "$PHONE" content_size extra-extra-large || true
           xcrun simctl launch "$PHONE" $ID --sample; sleep 6
           xcrun simctl io "$PHONE" screenshot "$OUT/iphone-5-large-text.png"; xcrun simctl terminate "$PHONE" $ID || true
+          # The same Text Size at Extra Large: the planner gives things up, the dial stays at 40% or more.
+          shoot_layout "$PHONE" extraLarge iphone-9-xl-large-text
           xcrun simctl ui "$PHONE" content_size large || true
           # The self-test, with a real location fix and network.
           DOCS="$(xcrun simctl get_app_container "$PHONE" $ID data)/Documents"; mkdir -p "$DOCS"; rm -f "$DOCS/report.txt"
@@ -84,6 +96,23 @@ jobs:
           xcrun simctl shutdown "$PHONE" || true
           IPAD=$(pick iPad)
           run_on "$IPAD" ipad
+          # iPad in landscape (two panes), if the Simulator window can be rotated here. Best effort:
+          # simctl has no rotate command, so this goes through the Simulator app's Device menu.
+          open -a Simulator --args -CurrentDeviceUDID "$IPAD" || true; sleep 8
+          rotate() {   # $1 = Left or Right; gives up after 20 s (a permissions prompt can't block the job)
+            osascript -e "tell application \"System Events\" to tell process \"Simulator\" to click menu item \"Rotate $1\" of menu \"Device\" of menu bar 1" >/dev/null 2>&1 &
+            local PID=$!; ( sleep 20; kill $PID ) >/dev/null 2>&1 & local WATCH=$!
+            local RC=0; wait $PID || RC=$?; kill $WATCH 2>/dev/null || true; return $RC
+          }
+          if rotate Left; then
+            sleep 3
+            xcrun simctl launch "$IPAD" $ID --sample --format dd; sleep 6
+            xcrun simctl io "$IPAD" screenshot "$OUT/ipad-9-landscape.png"; xcrun simctl terminate "$IPAD" $ID || true
+            rotate Right || true
+          else
+            echo "::notice::The Simulator couldn't be rotated here; no ipad-9-landscape.png"
+          fi
+          killall Simulator 2>/dev/null || true   # not an Apple Event: that could wait on a permissions prompt
           cat "$OUT/report.txt"
       - name: Publish to ci-shots-ios branch
         if: always() && github.event_name != 'pull_request'
