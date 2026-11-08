@@ -3,6 +3,21 @@
 On a Mac, Bearings shows a banner when a new version is out. Every version is on
 [Releases](https://github.com/bradleycowdrey/bearings/releases).
 
+## [2.3.0] - 2026-11-08
+
+A new instrument panel, compass widgets and a cleaner icon.
+
+- **The instrument panel**: a slim location bar at the top, then the big compass, its reading and
+  status, then one **Targets** card for your locked bearing and marked spot, and labelled tiles below.
+- **Four layouts**, each its own: Small (compass and a big map), Medium (the standard: compass and a
+  2 × 2 of position, elevation, sun and map), Large (six compact tiles) and Extra Large (the biggest
+  compass with one summary row). The compass is always at least 40% of the screen.
+- **No compass?** It says "No heading" plainly, and position, sun and map still work.
+- **Widgets that look like the app**, with a north-up compass showing where the sun, the moon, your
+  marked spot and your locked bearing lie. On the Lock Screen: elevation, place and coordinates.
+- **A cleaner icon** without the top band.
+- Large text, iPad, Mac windows and night mode all follow the new layout. Android map labels fixed.
+
 ## [2.2.0] - 2026-11-07
 
 The compass comes first.
