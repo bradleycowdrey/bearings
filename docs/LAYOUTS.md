@@ -1,8 +1,8 @@
 # Bearings: layouts (Concept A, the "Instrument panel")
 
 Status: the layout spec for Apple (SwiftUI, iOS 17 / macOS 14) and Android (Compose). The exact build spec,
-with every size, is [REFINE.md](REFINE.md) "Concept A (chosen, Option 1)", which wins wherever the two
-differ. Colours, type and tokens are in [LOOK.md](LOOK.md); features and wording in [DESIGN.md](DESIGN.md).
+with every size, is [REFINE.md](REFINE.md) "Concept A (chosen, Option 1)" with its "Owner mod: location
+card back at top, slim 40 pt", which win wherever the two differ. Colours, type and tokens are in [LOOK.md](LOOK.md); features and wording in [DESIGN.md](DESIGN.md).
 **The dial drawing, the readout "228° SW" and the status line do not change.**
 
 The owner's brief: the compass is the hero (**≥ 40% of the screen height** in portrait, one column, every
@@ -14,18 +14,21 @@ layout); each fact once; nothing cut off or left empty; four layouts, each visib
 
 One fixed screen (only accessibility text sizes scroll), top to bottom:
 
-**dial → readout → status line → location card → Targets card → the layout's tiles / map.**
+**location bar → dial → readout → status line → Targets card → the layout's tiles / map.**
 
-- **Nothing is pinned to the status bar.** The dial's top is **safe top + 18** (iPhone 16 Pro: 80; Android:
-  status inset + 18 dp; Mac: 46). The stack ends at the safe bottom (home-indicator inset; else 16; Android
-  nav inset + 8).
-- The **location card** (the blue sky card: place, date and time, Sample pill, sun glyph, the map button in
-  Large and Extra Large, and **⋯**) sits 12 under the status line. It is 48 pt / 56 dp high, radius 14.
-- The **Targets card** appears only when a bearing is locked or a spot is marked, 8 under the location card,
+- The **location bar** (the owner's mod: the blue sky card back at the top, slim) is first, at **safe top +
+  8** (iPhone 16 Pro: 70; Android: status inset + 8 dp; Mac: 28 + 8 = 36). It is **40 pt / 40 dp** high
+  (× text size), radius 12: the place (15 semibold) over the date · time (12, white 75%) with the Sample pill
+  (10) inline, left-aligned 12 in; trailing the sun/moon glyph (16), the map button in Large and Extra Large,
+  and **⋯**, both 28 circles with 44 × 44 pt / 48 dp hit areas that reach past the bar.
+- The **dial's top is 12 under the bar** (iPhone 16 Pro: 122). The stack ends at the safe bottom
+  (home-indicator inset; else 16; Android nav inset + 8).
+- The **Targets card** appears only when a bearing is locked or a spot is marked, 12 under the status line,
   and shows only the rows that exist: the lock row on the maroon tint (`#3D2128`, border `#5A2C38`),
   "Locked 240°" … "turn 12° right" ✕; a hairline; the spot row "Marked spot" … "9.2 mi · 46° NE" ✕. Rows 44
   pt / 48 dp (Extra Large and iPad 52 / 64 dp).
-- Frozen gaps: dial → readout 12, readout → status 6, status → card 12, card → Targets 8, → tiles 8, rows 8.
+- Frozen gaps: safe top → bar 8, bar → dial 12, dial → readout 12, readout → status 6, status → Targets 12,
+  → tiles 8, rows 8.
   Margins 16; iPad column min(W − 48, 720); Mac 24.
 - **No compass:** the words **"No heading"** (34 semibold, white 55%) take the readout's slot; the status
   line says "Position, sun and map still work".
@@ -38,7 +41,8 @@ One fixed screen (only accessibility text sizes scroll), top to bottom:
 |---|---|---|---|---|
 | Below the Targets card | one big **map card** with speed chip and map buttons; a frosted **band** along its bottom: POSITION · DD \| ELEVATION \| SUN · ◐ 53% | **2 × 2**: POSITION · DD \| ELEVATION (ft; m · inHg), SUN · ◐ 53% (↑ rise, ↓ set) \| **MAP** tile | **3 × 2** compact tiles: LATITUDE \| LONGITUDE \| ELEVATION, SUNRISE (↑ 6:36 AM, "Sets 5:08 PM") \| MOON (53%, Last quarter) \| **PRESSURE** (still) or **SPEED** (moving) | taller Targets rows and **one summary strip**: POSITION \| ELEVATION \| SUN |
 | Map | card | tile | header button | header button |
-| Dial (16 Pro) | 352 | 352 | ≈ 365 (cap 0.42 H) | 386 (width cap) |
+| Dial (16 Pro) | 352 | 352 | 368 (cap 0.42 H) | 386 (width cap) |
+| Below (16 Pro) | map card 180 | tiles ≈ 86 | tiles ≈ 78 | strip ≈ 120 |
 | Readout | 1.0 | 1.0 | 1.0 | 1.25 |
 
 With no lock and no spot the Targets card is absent and its space goes to the map card or tile growth (no
@@ -52,13 +56,13 @@ surface (a golden test).
 `Sources/Bearings/Views/LayoutPlan.swift` and `android/.../ui/LayoutPlan.kt`: one pure function each, the
 same constants and steps. The screens read every frame from the plan.
 
-1. Dial top = safe top + 18; place the fixed blocks with the frozen gaps.
+1. Bar top = safe top + 8, bar 40 × k, dial top 12 under it; place the fixed blocks with the frozen gaps.
 2. Dial = min(layout cap, what is left). Caps: Small and Medium round8(0.40 H), Large round8(0.42 H), Extra
    Large the width cap (W − 16; W − 32 for Small and Medium). Floor **ceil(0.40 H)** everywhere.
 3. Spare goes to: the layout's growth (Small map card; Medium rows 72 → 88; Large rows → 104; XL strip →
    120), then the dial up to its width cap, then at most 24 at the bottom.
 4. **Short of height**, give way in this order before the dial goes under 0.40 H: tile growth → spare gaps
-   (top 18 → 12, status → card 12 → 8) → Targets rows to compact height (36 pt / 40 dp) → grid density
+   (bar → dial 12 → 8, status → Targets 12 → 8) → Targets rows to compact height (36 pt / 40 dp) → grid density
    (Large 3 × 2 → 2 × 2 compact) → map card → header button (three tiles in one compact row) → scrolling
    list.
 
@@ -69,22 +73,22 @@ same constants and steps. The screens read every frame from the plan.
 - **k ≥ 1.3:** every three-column compact row becomes two rows: Position full width, then Elevation | Sun.
   No half-width chips; times never break (non-breaking spaces, 0.85 minimum scale); the last row ends above
   the safe bottom.
-- **Accessibility sizes (AX1+ / fontScale ≥ 1.5):** one scrolling list: dial (≥ 0.40 H), readout, status,
-  location card (wraps), two-line Targets rows, one tile per row (caption left, value right), Map tile.
+- **Accessibility sizes (AX1+ / fontScale ≥ 1.5):** one scrolling list: the location bar (wraps, never under
+  40), dial (≥ 0.40 H), readout, status, two-line Targets rows, one tile per row (caption left, value right), Map tile.
 
 ---
 
 ## 5. iPad, Mac and landscape
 
-- **Regular-width ramp:** location card 56 (20 / 15), Targets rows 52 at 19, tiles 96, captions 13, values
+- **Regular-width ramp:** the same 40 location bar as on a phone, Targets rows 52 at 19, tiles 96, captions 13, values
   22, secondary 15, column ≤ 720.
-- **iPad portrait:** one column, dial 0.40 H (480 on 11"), then location card, Targets, Position | Elevation,
-  Sun | Moon and a map card (Medium).
-- **Two panes** (iPad landscape, Mac wide, a phone on its side): **no full-width header**. Left: dial,
-  readout, status, top-aligned at the same top spacing. Right, top-aligned with the dial: the **location
-  card**, the Targets card, the grid, and a map card to the bottom (≥ 240). Right-pane spare ≤ 24.
-- **Mac:** no live compass ("No heading"), hidden title bar, 24 margins; update banner under the location
-  card.
+- **iPad portrait:** one column, the location bar, dial 0.40 H (488 on 11"), then Targets, Position |
+  Elevation, Sun | Moon and a map card (Medium).
+- **Two panes** (iPad landscape, Mac wide, a phone on its side): the **location bar full width** at the top
+  (as in portrait), then 12 under it, level: left the dial, readout, status; right the Targets card, the
+  grid, and a map card to the bottom (≥ 240). Right-pane spare ≤ 24.
+- **Mac:** no live compass ("No heading"), hidden title bar (the bar sits under its 28 band), 24 margins;
+  update banner 12 under the status line, above the Targets card.
 
 ---
 
@@ -112,8 +116,9 @@ is still (Large shows Pressure).
 ## 8. Tests
 
 Golden table (`LayoutPlan.tableFailures()`, both ports, run by self-tests and unit tests) over the existing
-devices × layouts × states × k. It fails if: a portrait dial is under 0.40 H; the dial top is not safe top
-+ 18 (12 after give-way); the location card is not under the status line; any gap is off its token; an
+devices × layouts × states × k. It fails if: a portrait dial is under 0.40 H; the location bar is not first
+(safe top + 8, 40 × k, full width in two panes) or the dial not 12 under it (8 after give-way); the Targets
+card is not under the status line; any gap is off its token; an
 empty band exceeds 24; row widths plus gutters differ from C; the four layouts are not distinct on iPhone
 16 / 16 Pro / Pixel 7 in the sample; any value ellipsizes; at k ≥ 1.3 a three-column compact row remains or a
 time splits. Also: Large's sixth tile is Pressure when still and Speed when moving; "No heading" is checked
@@ -138,11 +143,14 @@ true`, `--ez night true`.
 
 ## 9. Platform notes
 
-- **Apple:** `MainView.swift` reads `LayoutPlan.plan(...)` from the root `GeometryReader`. `\.flatDetails`
+- **Apple:** `MainView.swift` reads `LayoutPlan.plan(...)` from the root `GeometryReader`. The Map tile's
+  snapshot is drawn 24 taller at each end and cropped, so Apple's baked-in logo never sits under "MAP" (the
+  caption band keeps the Apple-logo "Maps" attribution). `\.flatDetails`
   (set by `Mac/SelfTest.swift`) draws plain stacks, which ImageRenderer can draw. `PhoneLaunch`
   (`BearingsPhoneApp.swift`) and `BearingsMacApp.swift` read the launch arguments.
 - **Android:** `MainScreen.kt` uses `BoxWithConstraints` and `LayoutPlan.plan(...)`; `MainActivity.kt` reads
-  the extras without saving them. Map labels: `#C9D3D6` regular (not italic), 11–12 sp, a 1.5 dp `#0F3B3A`
+  the extras without saving them. Map labels: `#C9D3D6` regular (not italic), "Noto Sans Regular" (served by OpenFreeMap's glyphs;
+  if its first range can't be fetched, `MapDark.probeGlyphs()` hides the symbol layers instead of drawing blocks), 11–12 sp, a 1.5 dp `#0F3B3A`
   halo, 70% in the tile; POI labels hidden under 160 dp of map height, road shields under 200 dp of width.
   Night: the map red-tinted at 35% luminance; the Sample pill a red outline with red text on black.
 - **Web** (`docs/app.html`) follows later with the same table and order.

@@ -13,8 +13,8 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * The layout planner's golden table (docs/REFINE.md "Concept A (chosen)", A.11): dial → readout → status line →
- * location card → Targets card → tiles or map; the dial's top at safe top + 18; the frozen gaps; at most 24 empty
+ * The layout planner's golden table (docs/REFINE.md "Concept A (chosen)", A.11, and the owner's mod): location bar
+ * (40, at safe top + 8) → dial (12 under it) → readout → status line → Targets card → tiles or map; the frozen gaps; at most 24 empty
  * at the bottom; every dial at least 0.40 H in one portrait column (every layout, state and text size, the list
  * included); rows that add up to the column; four distinct layouts; and text that never ends in "…". The same
  * table runs in the emulator self-test (SelfTest.kt) and, on Apple, in Tests/BearingsTests/LayoutPlanTests.swift.
@@ -53,10 +53,11 @@ class LayoutPlanTest {
         assertEquals(listOf(181f, 181f), two[1].widths)
     }
 
-    /** A.1: the dial's top is safe top + 18 (12 given way), and the other gaps are the frozen tokens. */
+    /** A.1: the dial's top is the bar's 8 + the bar + 12 (8 given way), and the other gaps are the frozen tokens. */
     @Test fun frozenGaps() {
         val off = everyPlan().mapNotNull { (name, _, p) ->
-            val top = p.dialTop == 18f || (p.dialTop == 12f && LayoutPlan.Step.GAPS in p.given)
+            val barGap = p.barGap == 12f || (p.barGap == 8f && LayoutPlan.Step.GAPS in p.given)
+            val top = barGap && abs(p.dialTop - (8f + p.location + p.barGap)) < 0.01f
             val card = p.cardGap == 12f || (p.cardGap == 8f && LayoutPlan.Step.GAPS in p.given)
             val ok = top && card && p.dialGap == 12f && abs(p.statusGap - 6f * p.k) < 0.01f && p.targetsGap == 8f &&
                 p.gridGap == 8f && p.rowGap == 8f
@@ -76,16 +77,23 @@ class LayoutPlanTest {
         assertEquals(emptyList<String>(), under)
     }
 
-    /** Option 1: in every portrait plan the location card is the status line's bottom + 12 (8 given way), and nothing sits above the dial. */
-    @Test fun locationCardBelowStatus() {
+    /**
+     * The owner's mod: in every plan (two panes and the list too) the location bar is first, at safe top + 8, 40 tall
+     * at text size 1 (8 + 32 × k at larger text, a line more when wrapped), and the dial's top is 12 (8 given way)
+     * under it; in one column the Targets card (or the grid) is the status line's bottom + 12 (8 given way).
+     */
+    @Test fun locationBarFirst() {
         val off = everyPlan().mapNotNull { (name, d, p) ->
-            if (d.w > d.h || p.twoPane || p.list) return@mapNotNull null
-            val gap = p.locationTop - (p.statusTop + p.status)
-            val ok = (abs(gap - 12f) < 0.01f || (abs(gap - 8f) < 0.01f && LayoutPlan.Step.GAPS in p.given)) &&
-                p.dialTop >= 12f && p.locationTop > p.dialTop + p.dial
-            if (ok) null else "$name: card at ${p.locationTop}, status ends ${p.statusTop + p.status}"
+            val bar = abs(p.locationTop - 8f) < 0.01f && p.location >= 40f - 0.01f &&
+                (p.k > 1f || p.list || abs(p.location - 40f) < 0.01f) && p.dialTop >= p.locationTop + p.location + 8f - 0.01f
+            val gap = p.belowTop - (p.statusTop + p.status)
+            val below = p.twoPane || p.list || abs(gap - 12f) < 0.01f || (abs(gap - 8f) < 0.01f && LayoutPlan.Step.GAPS in p.given)
+            if (bar && below && (d.w > d.h || p.twoPane || p.belowTop > p.dialTop + p.dial)) null
+            else "$name: bar at ${p.locationTop} ${p.location} tall, dial at ${p.dialTop}, below at ${p.belowTop}"
         }
         assertEquals(emptyList<String>(), off)
+        assertEquals(40f, LayoutPlan.locationHeight(1f), 0.01f)
+        assertEquals(8f + 32f * 1.3f, LayoutPlan.locationHeight(1.3f), 0.01f)
     }
 
     /** The Targets card: 0, 1 or 2 rows by state, 48 (64 Extra Large, 56 tablet; 40 / 48 compact). */
@@ -159,19 +167,20 @@ class LayoutPlanTest {
         fun plan(name: String, l: Layout, st: LayoutPlan.State = LayoutPlan.State.SAMPLE) = LayoutPlan.planFor(device(name), l, 1f, st)
         // Pixel 7, sample: everything kept.
         for (l in Layout.entries) assertTrue(l.id, plan("Pixel 7", l).given.isEmpty())
-        // iPhone 16 (Android type), sample: the gaps and the rows give way; the grids stay.
+        // iPhone 16 (Android type), sample: the gaps give way (bar → dial 8); the grids and the Targets rows stay.
         plan("iPhone 16", Layout.MEDIUM).let {
-            assertTrue(it.resultLine, it.grid == GridMode.QUAD && it.given == setOf(LayoutPlan.Step.GAPS, LayoutPlan.Step.ROWS) && it.dial >= 340.8f)
+            assertTrue(it.resultLine, it.grid == GridMode.QUAD && it.given == setOf(LayoutPlan.Step.GAPS) && it.dial >= 340.8f)
+            assertEquals(8f + 40f + 8f, it.dialTop, 0.01f)
         }
         // iPhone SE, sample: Medium's map goes to the button with one compact row, and the gaps and rows come back.
         plan("iPhone SE", Layout.MEDIUM).let {
             assertTrue(it.resultLine, it.grid == GridMode.ROW && it.map == MapMode.BUTTON && it.given == setOf(LayoutPlan.Step.BUTTON))
-            assertEquals(18f, it.dialTop, 0f)
+            assertEquals(60f, it.dialTop, 0f)
             assertTrue(it.resultLine, it.dial >= 0.40f * 667f)
         }
-        // iPhone SE, no compass: Large keeps a 2 × 2 compact grid (density) before the button.
-        plan("iPhone SE", Layout.LARGE, LayoutPlan.State.NO_COMPASS).let {
-            assertTrue(it.resultLine, it.grid == GridMode.QUAD_COMPACT && LayoutPlan.Step.DENSITY in it.given)
+        // iPhone SE, sample: Large gives up its density (2 × 2 compact) before the button.
+        plan("iPhone SE", Layout.LARGE).let {
+            assertTrue(it.resultLine, LayoutPlan.Step.DENSITY in it.given && LayoutPlan.Step.BUTTON in it.given)
         }
         // 360 × 640, sample: nothing fits at 0.40 H: the list, its dial still 0.40 H.
         plan("Small Android", Layout.EXTRA_LARGE).let { assertTrue(it.resultLine, it.list && it.dial >= 256f) }
@@ -204,23 +213,30 @@ class LayoutPlanTest {
     @Test fun workedNumbersPixel7() {
         val d = device("Pixel 7")
         val (s, m, l, xl) = Layout.entries.map { LayoutPlan.planFor(d, it) }
-        assertEquals(368f, s.dial, 0.5f); assertTrue(s.resultLine, s.map == MapMode.CARD && s.mapHeight >= 140f)
-        assertEquals(368f, m.dial, 0.5f); assertEquals(88f, m.tile, 0.5f); assertEquals(88f, m.tile2, 0.5f)
-        assertEquals(392f, l.dial, 0.5f); assertEquals(GridMode.SIX, l.grid)
-        assertEquals(396f, xl.dial, 0.5f); assertEquals(120f, xl.tile, 0.5f)
-        // Dial top = status inset + 18; the card 12 under the status line; the stack ends 8 over the navigation bar.
-        assertEquals(18f, m.dialTop, 0f)
-        assertEquals(m.statusTop + m.status + 12f, m.locationTop, 0.01f)
-        assertEquals(56f, m.location, 0.01f)
+        // The 40 bar frees 22 dp: Small's map card and Medium's dial (to its W − 32 cap) and tiles take it.
+        assertEquals(368f, s.dial, 0.5f); assertTrue(s.resultLine, s.map == MapMode.CARD && s.mapHeight >= 220f)
+        assertEquals(380f, m.dial, 0.5f); assertTrue("${m.tile}", m.tile >= 88f && abs(m.tile - m.tile2) < 0.01f)
+        assertEquals(392f, l.dial, 0.5f); assertEquals(GridMode.SIX, l.grid); assertEquals(96f, l.tile, 0.5f)
+        assertEquals(396f, xl.dial, 0.5f); assertTrue("${xl.tile}", xl.tile >= 120f)
+        // The bar at safe top + 8, 40 tall; the dial 12 under it (60); the Targets card 12 under the status line;
+        // the stack ends 8 over the navigation bar.
+        assertEquals(8f, m.locationTop, 0f)
+        assertEquals(40f, m.location, 0.01f)
+        assertEquals(60f, m.dialTop, 0f)
+        assertEquals(m.statusTop + m.status + 12f, m.targetsTop, 0.01f)
         assertEquals(d.s - 8f - m.bottomSpare, m.gridTop + m.gridHeight, 0.5f)
     }
 
-    /** A.8: two panes have no full-width header: the location card is top-aligned with the dial, a map card ≥ 240 on a tablet. */
+    /** A.8 with the owner's mod: the location bar full width at the top, the trailing pane top-aligned with the dial, a map card ≥ 240 on a tablet. */
     @Test fun twoPanes() {
         for (name in listOf("iPad 11 landscape", "iPad 13 landscape", "Android tablet landscape", "Mac 1200x800")) for (l in Layout.entries) {
-            val p = LayoutPlan.planFor(device(name), l)
+            val d = device(name)
+            val p = LayoutPlan.planFor(d, l)
             assertTrue("$name ${l.id}", p.twoPane)
-            assertEquals("$name ${l.id}", p.dialTop, p.locationTop, 0.01f)
+            assertEquals("$name ${l.id}", 8f, p.locationTop, 0.01f)
+            assertEquals("$name ${l.id}", d.w - 48f, p.barWidth, 0.01f)
+            assertEquals("$name ${l.id}", p.locationTop + p.location + 12f, p.dialTop, 0.01f)
+            assertEquals("$name ${l.id}", p.dialTop, p.belowTop, 0.01f)
             assertTrue("$name ${l.id}: ${p.resultLine}", p.map == MapMode.CARD && p.mapHeight >= 240f && p.bottomSpare <= 24.5f)
             assertTrue("$name ${l.id}: trailing ${p.trailingWidth}", p.trailingWidth in 360f..560f)
         }
@@ -251,12 +267,13 @@ class LayoutPlanTest {
         assertEquals(listOf(TileKind.SUN, TileKind.MOON), p.rows[1].tiles)
     }
 
-    /** A.7: accessibility text is one scrolling list, the location card after the status line, the dial still 0.40 H. */
+    /** A.7: accessibility text is one scrolling list, the location bar first (wrapping, ≥ 40), the dial still 0.40 H. */
     @Test fun accessibilityTextScrollsAsOneList() {
         val d = device("Pixel 7")
         val p = LayoutPlan.planFor(d, Layout.MEDIUM, 2f)
         assertTrue(p.list)
-        assertTrue(p.locationTop > p.statusTop)
+        assertTrue(p.locationTop < p.dialTop && p.location >= 40f)
+        assertTrue(p.belowTop > p.statusTop)
         assertTrue(p.dial >= 0.40f * d.h)
         assertEquals(listOf(TileKind.POSITION, TileKind.ELEVATION, TileKind.SUN, TileKind.MOON), p.rows.map { it.tiles.single() })
     }

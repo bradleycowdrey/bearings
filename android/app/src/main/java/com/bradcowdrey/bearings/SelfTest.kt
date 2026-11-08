@@ -22,8 +22,8 @@ import kotlin.math.abs
  * fix (CI places the emulator at Maroon Bells, Colorado), the live ground elevation and place name for it,
  * the compass state, the widget's saved data, and the layout planner of Concept A (docs/REFINE.md "Concept A
  * (chosen)", A.11): the golden table (devices × layouts × sample, live, no compass, locked, marked × text sizes,
- * portrait and landscape) must keep the dial's top at safe top + 18 (12 given way) with nothing above it, the location
- * card under the status line, every gap at its token, at most 24 dp at the bottom, the Targets card's rows, every
+ * portrait and landscape) must keep the slim location bar first (safe top + 8, 40 dp at text size 1) with the dial's
+ * top 12 (8 given way) under it, the Targets card under the status line, every gap at its token, at most 24 dp at the bottom, the Targets card's rows, every
  * dial at 40% of H or more in one portrait column (the owner's rule, the list included), and four distinct layouts
  * (band / quad / six / strip with card / tile / button / button on the golden phones), as must the plan for this
  * screen; every tile row's widths, gaps and insets add up to its column; the location card's time and the Sun times
@@ -90,7 +90,7 @@ object SelfTest {
         } else {
             val f = { v: Float -> "%.0f".format(java.util.Locale.US, v) }
             val what = "layout ${plan.layout.id}: ${plan.resultLine} (floor ${f(plan.floor)}), tiles ${f(plan.tile)} / ${f(plan.tile2)}, " +
-                "dial top ${f(plan.dialTop)}, location card at ${f(plan.locationTop)}, bottom ${f(plan.bottomSpare)} dp, H ${f(h)} dp" +
+                "location bar at ${f(plan.locationTop)} (${f(plan.location)} tall), dial top ${f(plan.dialTop)}, bottom ${f(plan.bottomSpare)} dp, H ${f(h)} dp" +
                 (if (plan.given.isEmpty()) "" else ", gave way: ${plan.given.joinToString { it.name.lowercase() }}") +
                 (if (plan.twoPane) ", two panes" else "") + (if (plan.list) ", one scrolling list" else "")
             val ok = plan.list || plan.twoPane ||
@@ -103,13 +103,17 @@ object SelfTest {
                 check(plan.dial + 0.5f >= owner,
                     "Owner's rule: dial ≥ 40% of H on this screen (dial ${f(plan.dial)} = ${"%.1f".format(java.util.Locale.US, 100 * plan.dial / h)}% of H ${f(h)}, floor ${f(owner)})")
             }
-            // The frozen gaps (A.1): the dial 18 under the status bar (12 given way), nothing above it; then 12, 6 × k,
-            // 12 (8) to the location card under the status line, 8, 8, 8.
+            // The frozen gaps (A.1, owner's mod): the location bar first, 8 under the status bar, 40 tall at text size 1;
+            // the dial 12 (8 given way) under it; then 12, 6 × k, 12 (8) to the Targets card under the status line, 8, 8.
             val k = plan.k
-            val topOk = plan.dialTop == LayoutPlan.DIAL_TOP || (plan.dialTop == LayoutPlan.DIAL_TOP_TIGHT && LayoutPlan.Step.GAPS in plan.given)
-            val cardOk = plan.twoPane || abs(plan.locationTop - (plan.statusTop + plan.status + plan.cardGap)) < 0.01f
+            val barOk = abs(plan.locationTop - LayoutPlan.BAR_TOP) < 0.01f && plan.location + 0.01f >= LayoutPlan.LOCATION &&
+                (k > 1f || plan.list || abs(plan.location - LayoutPlan.LOCATION) < 0.01f)
+            val gapOk = plan.barGap == LayoutPlan.BAR_GAP || (plan.barGap == LayoutPlan.BAR_GAP_TIGHT && LayoutPlan.Step.GAPS in plan.given)
+            val topOk = gapOk && abs(plan.dialTop - (plan.locationTop + plan.location + plan.barGap)) < 0.01f
+            val cardOk = plan.twoPane || abs(plan.belowTop - (plan.statusTop + plan.status + plan.cardGap)) < 0.01f
             val tokens = plan.dialGap == 12f && abs(plan.statusGap - 6f * k) < 0.01f && plan.targetsGap == 8f && plan.gridGap == 8f && plan.rowGap == 8f
-            check(topOk && cardOk && tokens, "Dial at safe top + ${f(plan.dialTop)}, location card under the status line, gaps 12 / 6 × k / ${f(plan.cardGap)} / 8 / 8 / 8")
+            check(barOk && topOk && cardOk && tokens, "Location bar first at safe top + ${f(plan.locationTop)}, ${f(plan.location)} tall; dial ${f(plan.barGap)} under it at " +
+                "${f(plan.dialTop)}; Targets under the status line; gaps 12 / 6 × k / ${f(plan.cardGap)} / 8 / 8")
             // The four layouts on this screen (A.4): neighbours differ in grid, map surface or dial.
             val w = LayoutPlan.lastWidth
             val here = Layout.entries.map {
@@ -162,14 +166,15 @@ object SelfTest {
         for (d in LayoutPlan.devices) for (l in Layout.entries) for (k in ks) {
             val p = LayoutPlan.planFor(d, l, k, LayoutPlan.State.SAMPLE)
             val name = "${d.name} ${l.id} k$k"
-            // Location card line 2: the card less its 16 inset, the sky glyph's 32 slot, 8, ⋯'s 48, 4, the map
-            // button's slot and the Sample pill (12 semibold, 8 each side, 6 before it), which trails line 2 except in the list.
-            val pill = if (p.list) 0f else 6f + width("Sample", 12f * k, semibold) + 16f
-            val room = p.column - 16f - 8f - 32f - 48f - 4f - (if (p.mapButtonSlot) 48f else 0f) - pill
+            // Location bar line 2: the bar (full width in two panes) less its 12 inset, 8, the sky glyph's 24 slot, ⋯'s 48
+            // slot, 2, the map button's slot and the Sample pill (10 semibold, 6 each side, 6 before it), which trails
+            // line 2 except in the list.
+            val pill = if (p.list) 0f else 6f + width("Sample", 10f * k, semibold) + 12f
+            val room = p.barWidth - 12f - 8f - 24f - 48f - 2f - (if (p.mapButtonSlot) 48f else 0f) - pill
             for ((long, short, time) in dates) {
-                val lines = TextFit.headerLines(long, short, time) { width(it, 13f * k, regular) <= room }
+                val lines = TextFit.headerLines(long, short, time) { width(it, 12f * k, regular) <= room }
                 if (lines.size > 1) wrapped++
-                if (lines.any { '…' in it || width(it, 13f * k, regular) > room }) cutText += "$name location card $lines in ${room.toInt()}"
+                if (lines.any { '…' in it || width(it, 12f * k, regular) > room }) cutText += "$name location bar $lines in ${room.toInt()}"
             }
             // Every Sun time as drawn: the band (13 semibold), the strip (15 medium), Large's Sunrise (16), the tablet
             // and list ramps (22), otherwise 15 (semibold in the compact row).
@@ -198,7 +203,7 @@ object SelfTest {
                 }
             }
         }
-        check(cutText.isEmpty(), "No … in the location card's time or the Sun times at 1.0, 1.3 and 2.0, times whole (" +
+        check(cutText.isEmpty(), "No … in the location bar's time or the Sun times at 1.0, 1.3 and 2.0, times whole (" +
             (cutText.firstOrNull() ?: "all devices and layouts; $wrapped shorten or drop AM to 11 instead") + ")")
         // "No heading" (A.2), rendered: the words drawn as the screen draws them (Inter semibold 34 at white 55%, centred
         // in the column, the line box trimmed to the cap height so the ink starts at the readout slot's top, 12 under

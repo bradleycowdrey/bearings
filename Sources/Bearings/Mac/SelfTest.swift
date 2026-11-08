@@ -46,21 +46,24 @@ enum SelfTest {
         check(Updater.isNewer("0.2.0", than: "0.1.9") && !Updater.isNewer("0.1.0", than: "0.1.0") && !Updater.isNewer("1.0", than: "dev"), "Update version comparison")
 
         // The layout planner (docs/REFINE.md "Concept A (chosen)", the same steps as Android): every device ×
-        // layout × state × compass × text size keeps every gap at its token, the dial 18 under the safe top
-        // (12 after giving way) with nothing above it, the location card under the status line, the Targets
-        // card's rows, no more than 24 empty at the bottom (unless the stack is centred), nothing cut, every
+        // layout × state × compass × text size keeps every gap at its token, the slim location bar first (the
+        // title band + 8, 40 × k) with the dial 12 under it (8 after giving way), the Targets card under the
+        // status line, the Targets card's rows, no more than 24 empty at the bottom (unless the stack is centred), nothing cut, every
         // dial at the owner's 0.40 H or more, rows whose widths add up to C, the dials in order and
         // neighbouring layouts never the same plan; the golden phones keep band / quad / six / strip.
         let planFailures = LayoutPlan.tableFailures()
-        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, nothing above the dial, location card under the status line, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, the 40 pt location bar first, the dial 12 under it, Targets under the status line, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
         let mac = LayoutPlan.plan(w: 420, h: 840, s: 840, hasSpot: true, locked: true, mac: true)
         let macLarge = LayoutPlan.plan(w: 420, h: 840, s: 840, layout: .large, hasSpot: true, locked: true, mac: true)
         check(abs(mac.dial - 336) < 1 && mac.layout == .medium && mac.grid == .quad && mac.map == .tile && mac.bottomSpare <= LayoutPlan.maxSpare,
               "Medium at 420 × 840 with the sample: dial \(Int(mac.dial.rounded())) pt, 2 × 2 with the Map tile, \(Int(mac.bottomSpare.rounded())) pt spare")
         check(macLarge.grid == .six && macLarge.map == .button && macLarge.dial >= mac.dial - 0.5,
               "Large at 420 × 840 with the sample: 3 × 2, the map in the location card, dial \(Int(macLarge.dial.rounded())) pt (at least Medium's)")
-        check(mac.margin == LayoutPlan.macInset && abs(mac.dialTop - LayoutPlan.macTitleBand - LayoutPlan.topGap) < 0.5 && mac.bottomInset == LayoutPlan.macInset,
-              "Mac window: sides \(Int(mac.margin)), dial top \(Int(mac.dialTop)) (28 + 18), bottom \(Int(mac.bottomInset)) pt")
+        let macBarTop: CGFloat = LayoutPlan.macTitleBand + LayoutPlan.topGap
+        let macDialTop: CGFloat = macBarTop + LayoutPlan.card + LayoutPlan.cardToDial
+        let macTops: Bool = abs(mac.locationTop - macBarTop) < 0.5 && abs(mac.dialTop - mac.topExtra - macDialTop) < 0.5
+        check(mac.margin == LayoutPlan.macInset && macTops && mac.bottomInset == LayoutPlan.macInset,
+              "Mac window: sides \(Int(mac.margin)), location bar at \(Int(mac.locationTop)) (28 + 8), dial top \(Int(mac.dialTop)) (+ 40 + 12), bottom \(Int(mac.bottomInset)) pt")
         // The owner's hard rule: the compass takes up at least 40% of the window. At 420 × 840 and the smallest
         // window, at Text Size 1.0 and 1.3, every layout's dial is at least min(0.40 H, its width cap) with the
         // sample (locked and marked) and live; a dial under it fails.
@@ -97,7 +100,8 @@ enum SelfTest {
         }
         // What is drawn: "No heading" in words where the readout goes (it replaces the drawn dash), both
         // Position lines at one size, and the whole screen against its plan in every layout and state: the
-        // location card where planned, the grid each layout plans, and no more empty at the bottom than planned.
+        // location bar where planned (first, 40 high), the grid each layout plans, and no more empty at the
+        // bottom than planned.
         let noHeading = MainView.noHeadingFailures()
         check(noHeading.isEmpty, "No heading in words (\(noHeading.isEmpty ? "centred, 12 under the dial, 34 semibold, white 55%" : noHeading.prefix(2).joined(separator: "; ")))")
         let position = MainView.positionSizeFailures()
@@ -105,7 +109,7 @@ enum SelfTest {
         let drawNav = Navigator(defaults: UserDefaults(suiteName: "bearings.selftest.drawing") ?? .standard)
         for (w, h) in [(CGFloat(420), CGFloat(840)), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
             let drawn = MainView.drawingFailures(nav: drawNav, width: w, height: h)
-            check(drawn.failures.isEmpty, "Window drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "location card where planned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
+            check(drawn.failures.isEmpty, "Window drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "location bar at the top and 40 high as planned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
             lines += drawn.info.map { "INFO \($0)" }
         }
         // Night secondary text: at least 4.5:1 on black (§4.3).
