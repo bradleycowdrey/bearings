@@ -13,6 +13,10 @@ import com.bradcowdrey.bearings.ui.TextFit
 import com.bradcowdrey.bearings.ui.TileKind
 import com.bradcowdrey.bearings.widget.Snapshot
 import com.bradcowdrey.bearings.widget.WidgetData
+import com.bradcowdrey.bearings.widget.WidgetDial
+import com.bradcowdrey.bearings.widget.WidgetLayout
+import com.bradcowdrey.bearings.widget.widgetDialSize
+import com.bradcowdrey.bearings.widget.widgetLayout
 import kotlinx.coroutines.delay
 import java.io.File
 import kotlin.math.abs
@@ -20,7 +24,7 @@ import kotlin.math.abs
 /**
  * `--ez selftest true` in the emulator (CI): the core formats, sun, moon and distances, a real location
  * fix (CI places the emulator at Maroon Bells, Colorado), the live ground elevation and place name for it,
- * the compass state, the widget's saved data, and the layout planner of Concept A (docs/REFINE.md "Concept A
+ * the compass state, the widget's saved data and its north-up dials (drawn to files/widget-*.png), and the layout planner of Concept A (docs/REFINE.md "Concept A
  * (chosen)", A.11): the golden table (devices × layouts × sample, live, no compass, locked, marked × text sizes,
  * portrait and landscape) must keep the slim location bar first (safe top + 8, 40 dp at text size 1) with the dial's
  * top 12 (8 given way) under it, the Targets card under the status line, every gap at its token, at most 24 dp at the bottom, the Targets card's rows, every
@@ -56,6 +60,7 @@ object SelfTest {
         WidgetData.restore(context, before)
         check(back == snapshot && entry.place == "Maroon Bells, Colorado" && entry.sunrise != null && entry.moonLine.endsWith("Last quarter"),
             "Widget data saved and read back (${entry.place}, ${entry.elevationMain}, ${entry.moonLine})")
+        widgetChecks(context, snapshot, ::check)
         nav.refreshAccess(asked = true)
         nav.start()
         var waited = 0
@@ -278,8 +283,9 @@ object SelfTest {
         check(lockCut.isEmpty(), "Lock row: label and cue never split or cut (${lockCut.firstOrNull() ?: "all plans"})")
         // The map's labels (C3.4 #8): one colour, upright regular, never italic or the style's cyan.
         val font = MapDark.labelFont
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { MapDark.probeAlphaTextures() }
         check(MapDark.labelColor == "#C9D3D6" && font.isNotEmpty() && font.none { "Italic" in it || "Bold" in it },
-            "Map labels ${MapDark.labelColor} in $font")
+            "Map labels ${MapDark.labelColor} in $font; ${MapDark.labelState}")
         // Coordinates are never cut short with "…" (the tiles shrink them to 0.85 and then wrap).
         val points = listOf(39.09898 to -106.94117, -33.86882 to 151.20929, 0.0 to -179.99999, -89.5 to 179.5)
         val cut = Geo.Format.entries.flatMap { fmt ->
@@ -294,5 +300,92 @@ object SelfTest {
 
         val head = if (failed == 0) "ALL PASSED (${lines.size} checks)" else "FAILED $failed of ${lines.size} checks"
         File(context.filesDir, "report.txt").writeText((listOf(head) + lines).joinToString("\n") + "\n")
+    }
+
+    /**
+     * The widget (docs/DESIGN.md, Widgets): the sample's entry (Maroon Bells at 9:41 with the spot near Aspen and
+     * 240° locked) carries the true bearings the north-up dial needs; the size breakpoints and dial sizes match the
+     * mock (Small 124 dp half dial at 170 × 170, Medium 120 at 364 × 170, Large 212 at 364 × 382); and every dial is
+     * drawn (files/widget-*.png, which CI keeps as android-widget-*.png) with its marks where they belong: the spot's
+     * pin on the rim at 46°, the sun on the disc, the lock's notch at 240°, and on Small's half dial the sun (144°)
+     * and moon below the arc as edge marks past its ends with nothing drawn under the arc between them.
+     */
+    private fun widgetChecks(context: Context, snapshot: Snapshot, check: (Boolean, String) -> Unit) {
+        val spot = 39.1911 to -106.8175
+        val entry = WidgetData.entry(context, snapshot, spot, 240.0, Navigator.SAMPLE_TIME)
+        val sun = entry.sunAzimuth ?: -1.0; val moon = entry.moonAzimuth ?: -1.0
+        check(entry.markPoint == "46° NE" && (entry.markDistance == "9.2 mi" || entry.markDistance == "14.8 km") && entry.lock == 240.0 &&
+            sun in 135.0..155.0 && moon in 180.0..300.0,
+            "Widget entry: spot ${entry.markDistance} · ${entry.markPoint}, lock ${entry.lock}, sun ${Math.round(sun)}°, moon ${Math.round(moon)}° " +
+                "(${entry.moonPercent} ${entry.moonName}), header \"${entry.shortPlace}\" / \"${entry.asOfLong}\"")
+        val layouts = listOf(widgetLayout(172f, 172f), widgetLayout(360f, 172f), widgetLayout(360f, 382f), widgetLayout(250f, 299f), widgetLayout(249f, 400f))
+        val sizes = listOf(
+            widgetDialSize(WidgetLayout.SMALL, 170f, 170f, true, false),
+            widgetDialSize(WidgetLayout.MEDIUM, 364f, 170f, true, false),
+            widgetDialSize(WidgetLayout.LARGE, 364f, 382f, true, true),
+        )
+        check(layouts == listOf(WidgetLayout.SMALL, WidgetLayout.MEDIUM, WidgetLayout.LARGE, WidgetLayout.MEDIUM, WidgetLayout.SMALL) &&
+            sizes == listOf(124f, 120f, 212f) && WidgetDial.density(212f) == WidgetDial.Density.BIG &&
+            WidgetDial.density(124f) == WidgetDial.Density.MID && WidgetDial.density(80f) == WidgetDial.Density.SMALL,
+            "Widget layouts by size (${layouts.joinToString { it.name.lowercase() }}) and dials ${sizes.joinToString(" / ") { "%.0f".format(java.util.Locale.US, it) }} dp")
+
+        val scale = 2f
+        fun marks(label: Boolean, lock: Boolean, withSpot: Boolean = true) = WidgetDial.Marks(
+            sun = entry.sunAzimuth, sunUp = entry.sunUp, moon = entry.moonAzimuth, moonUp = entry.moonUp, moonPhase = entry.moonPhase,
+            spot = if (withSpot) entry.markBearing else null, spotLabel = if (label && withSpot) entry.markDistance else null,
+            lock = if (lock) entry.lock else null,
+        )
+        // Colour within 28 per channel (the bitmaps are RGB 565) somewhere in a box [half] dp around (x, y) dp.
+        fun has(bitmap: android.graphics.Bitmap, x: Float, y: Float, half: Float, color: Int): Boolean {
+            val x0 = ((x - half) * scale).toInt().coerceAtLeast(0); val x1 = ((x + half) * scale).toInt().coerceAtMost(bitmap.width - 1)
+            val y0 = ((y - half) * scale).toInt().coerceAtLeast(0); val y1 = ((y + half) * scale).toInt().coerceAtMost(bitmap.height - 1)
+            for (py in y0..y1) for (px in x0..x1) {
+                val c = bitmap.getPixel(px, py)
+                if (abs(android.graphics.Color.red(c) - android.graphics.Color.red(color)) < 28 &&
+                    abs(android.graphics.Color.green(c) - android.graphics.Color.green(color)) < 28 &&
+                    abs(android.graphics.Color.blue(c) - android.graphics.Color.blue(color)) < 28) return true
+            }
+            return false
+        }
+        fun at(cx: Float, cy: Float, deg: Double, r: Float) =
+            (cx + (kotlin.math.sin(Math.toRadians(deg)) * r).toFloat()) to (cy - (kotlin.math.cos(Math.toRadians(deg)) * r).toFloat())
+        fun save(name: String, dial: WidgetDial.Dial) = runCatching {
+            File(context.filesDir, "$name.png").outputStream().use { dial.bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        val problems = mutableListOf<String>()
+        val b = entry.markBearing ?: 46.0
+        // Large: 212, the full scale; R = 101 (5 for the notch), centre 106.
+        val large = WidgetDial.draw(212f, half = false, marks = marks(label = true, lock = true), scale = scale)
+        save("widget-large", large)
+        at(106f, 106f, b, 91f).let { (x, y) -> if (!has(large.bitmap, x, y, 4f, WidgetDial.PINK)) problems += "large: no pin at ${Math.round(b)}°" }
+        at(106f, 106f, sun, 50.5f).let { (x, y) -> if (!has(large.bitmap, x, y, 3f, WidgetDial.AMBER)) problems += "large: no sun at ${Math.round(sun)}°" }
+        at(106f, 106f, 240.0, 101f).let { (x, y) -> if (!has(large.bitmap, x, y, 3f, WidgetDial.PINK)) problems += "large: no lock at 240°" }
+        at(106f, 106f, 0.0, 101f - 2.5f - 11f - 3f - 9f).let { (x, y) -> if (!has(large.bitmap, x, y, 4f, WidgetDial.PINK)) problems += "large: no pink N" }
+        // Large with no spot and no lock (R = 104): no pin.
+        val bare = WidgetDial.draw(212f, half = false, marks = marks(label = false, lock = false, withSpot = false), scale = scale)
+        save("widget-large-nospot", bare)
+        at(106f, 106f, b, 94f).let { (x, y) -> if (has(bare.bitmap, x, y, 3f, WidgetDial.PINK)) problems += "large without a spot still has a pin" }
+        // Medium: 120 with the notch (R = 55, centre 60).
+        val medium = WidgetDial.draw(120f, half = false, marks = marks(label = false, lock = true), scale = scale)
+        save("widget-medium", medium)
+        at(60f, 60f, 240.0, 55f).let { (x, y) -> if (!has(medium.bitmap, x, y, 3f, WidgetDial.PINK)) problems += "medium: no lock at 240°" }
+        at(60f, 60f, b, 52.5f - 6.1f).let { (x, y) -> if (!has(medium.bitmap, x, y, 3f, WidgetDial.PINK)) problems += "medium: no pin" }
+        // Small: the half dial, 124 (R = 60), 20 each side: centre (82, 62).
+        val small = WidgetDial.draw(124f, half = true, marks = marks(label = true, lock = false), scale = scale)
+        save("widget-small", small)
+        at(82f, 62f, b, 51.4f).let { (x, y) -> if (!has(small.bitmap, x, y, 3f, WidgetDial.PINK)) problems += "small: no pin on the arc" }
+        val sunSide = if (sun < 180) 82f + 60f + 7f else 82f - 60f - 7f
+        if (sun in 90.0..270.0 && !has(small.bitmap, sunSide, 64f, 3.5f, WidgetDial.AMBER)) problems += "small: no sun edge mark"
+        if (moon in 90.0..270.0) {
+            val moonSide = if (moon < 180) 82f + 60f + 7f else 82f - 60f - 7f
+            if (!has(small.bitmap, moonSide, 64f, 5f, WidgetDial.CREAM) && !has(small.bitmap, moonSide, 50f, 5f, WidgetDial.CREAM)) problems += "small: no moon edge mark"
+        }
+        // Nothing under the arc between its ends (marks never move onto the dial's hidden half).
+        var under = 0
+        for (py in ((62f + 4f) * scale).toInt() until small.bitmap.height) for (px in ((82f - 50f) * scale).toInt()..((82f + 50f) * scale).toInt()) {
+            if ((small.bitmap.getPixel(px, py) and 0xFFFFFF) != 0) under++
+        }
+        if (under > 0) problems += "small: $under px drawn under the arc"
+        check(problems.isEmpty(), "Widget dials drawn north-up (${problems.firstOrNull() ?: "large ${large.bitmap.width} px, medium, small half dial with edge marks"})")
     }
 }

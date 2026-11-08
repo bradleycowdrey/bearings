@@ -2,9 +2,10 @@ import CoreLocation
 import SwiftUI
 import WidgetKit
 
-// Mac desktop and Notification Center, iPhone and iPad Home Screen and Lock Screen: where you are, the
-// elevation in feet and metres, and the sky. The app shares its last fix through the App Group
-// (SharedStore); the widget asks for a fresher location itself where the system allows it.
+// Mac desktop and Notification Center, iPhone and iPad Home Screen: where you are, the elevation in feet
+// and metres, and a north-up compass with the sun, the moon, the marked spot and the locked bearing. The
+// iPhone Lock Screen keeps the W1 elevation design, without a compass (docs/DESIGN.md, Widgets). The app shares its last fix, spot and lock through the App
+// Group (SharedStore); the widget asks for a fresher location itself where the system allows it.
 
 @main
 struct BearingsWidgets: WidgetBundle {
@@ -19,8 +20,10 @@ struct BearingsWidget: Widget {
             BearingsWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Bearings")
-        .description("Where you are, your elevation in feet and metres, and the sun and moon.")
+        .description("Where you are, your elevation, and a north-up compass with the sun, the moon and your marked spot.")
         .supportedFamilies(Self.families)
+        // The views lay out their own 8 pt inset (the header and tiles sit 8 from the edge, as in the app).
+        .contentMarginsDisabled()
     }
 
     #if os(iOS)
@@ -31,9 +34,8 @@ struct BearingsWidget: Widget {
     #endif
 }
 
-/// The widget with its container background: Two Degrees' warm near-black with the crimson rule on the
-/// Home Screen and desktop (the system's content margins keep the face clear of it), nothing behind the
-/// Lock Screen's, which the system tints (the circular one draws its own AccessoryWidgetBackground).
+/// The widget with its container background: the app's black on the Home Screen and desktop, nothing
+/// behind the Lock Screen's, which the system tints (the circular one draws its own AccessoryWidgetBackground).
 struct BearingsWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     let entry: BearingsEntry
@@ -70,20 +72,16 @@ struct Provider: TimelineProvider {
             completion(BearingsEntry(date: Date(), snapshot: SharedStore.load() ?? .sample))
             return
         }
-        let large = context.family == .systemLarge
         Task {
             let snapshot = await WidgetSource.current()
-            let map = large ? await WidgetSource.map(for: snapshot) : nil
-            completion(BearingsEntry(date: Date(), snapshot: snapshot, map: map))
+            completion(BearingsEntry(date: Date(), snapshot: snapshot))
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<BearingsEntry>) -> Void) {
-        let large = context.family == .systemLarge
         Task {
             let snapshot = await WidgetSource.current()
-            let map = large ? await WidgetSource.map(for: snapshot) : nil
-            let entries = WidgetTimeline.entries(snapshot: snapshot, map: map)
+            let entries = WidgetTimeline.entries(snapshot: snapshot)
             completion(Timeline(entries: entries, policy: .after(Date().addingTimeInterval(WidgetTimeline.refresh))))
         }
     }
@@ -100,7 +98,7 @@ enum WidgetSource {
                                                 elevation: nil, elevationFromGPS: false, place: nil, time: here.time,
                                                 feet: Geo.prefersFeet(region: Locale.current.region?.identifier),
                                                 format: Geo.Format.dd.rawValue, spotLatitude: nil, spotLongitude: nil)
-        // An older fix than the app's isn't news.
+        // An older fix than the app's isn't news. (The spot and the lock always come from the app.)
         if let saved, here.time <= saved.time { return saved }
         let moved = saved.map { Geo.distance(lat1: $0.latitude, lon1: $0.longitude, lat2: here.latitude, lon2: here.longitude) } ?? .infinity
         snapshot.latitude = here.latitude
@@ -122,11 +120,6 @@ enum WidgetSource {
             }
         }
         return snapshot
-    }
-
-    static func map(for snapshot: WidgetSnapshot?) async -> PlatformImage? {
-        guard let snapshot else { return nil }
-        return await MapSnapshot.make(latitude: snapshot.latitude, longitude: snapshot.longitude, size: WidgetTimeline.mapSize)
     }
 }
 

@@ -75,6 +75,20 @@ enum Palette {
         static let noHeading = 0.55
     }
 
+    // MARK: The widgets (docs/DESIGN.md, Widgets; mock W2)
+
+    /// The widgets' north-up dial: a dark disc (#151515) with a 1 pt edge of white at 16%.
+    static let widgetDisc = rgb(0x151515)
+    static let widgetDiscStroke = Color.white.opacity(0.16)
+    /// The marked spot's pin and the locked bearing's notch on the widgets' dial (the app's pink).
+    static let widgetPink = accent
+    /// The header and tiles sit this far inside a Home Screen or desktop widget; their corners are the
+    /// widget's 22 less this (14), so they stay concentric.
+    static let widgetInset: CGFloat = 8
+    static let widgetInnerRadius: CGFloat = 14
+    /// The slim location header inside a widget: 40 high, place 15 semibold, time 12 at 75%.
+    static let widgetHeaderHeight: CGFloat = 40
+
     // MARK: The lock row (docs/REFINE.md C3.4 #7, the same on both ports)
 
     /// The lock row's fill, #3D2128 (night mode's red tint takes it to a dark red of about 15% luminance).

@@ -35,7 +35,11 @@ data class Snapshot(
     val time: Long,
 )
 
-/** Everything one widget shows, worked out for the moment it's drawn. Null [snapshot] is the empty state. */
+/**
+ * Everything one widget shows, worked out for the moment it's drawn. Null [snapshot] is the empty state.
+ * Every bearing here is TRUE (from true north): the widget's ring is fixed north-up, since a widget can't read
+ * the compass, so it only shows directions that hold wherever the phone points.
+ */
 class WidgetEntry(
     val snapshot: Snapshot?,
     val place: String,
@@ -52,15 +56,41 @@ class WidgetEntry(
     val moonLine: String,
     val moonPhase: Double,
     val markLine: String?,
+    /** The short place ("Maroon Bells" of "Maroon Bells, Colorado") for the Small header. */
+    val shortPlace: String = place,
+    /** "Sun, Nov 1 · 9:41 AM": the day and time of the reading, for the Medium and Large headers. */
+    val asOfLong: String = asOf,
+    /** The sun's altitude in degrees (the header's sky follows it, as the app's location bar does). */
+    val sunAltitude: Double? = null,
+    val moonAzimuth: Double? = null,
+    val moonUp: Boolean = false,
+    /** The moon lit, 0 to 1 ("53%"), and the phase's name ("Last quarter"). */
+    val moonPercent: String = "",
+    val moonName: String = "",
+    /** The marked spot's true bearing from the reading, its distance ("9.2 mi") and "46° NE". */
+    val markBearing: Double? = null,
+    val markDistance: String? = null,
+    val markPoint: String? = null,
+    /** The bearing locked in the app, as a true bearing, while one is set. */
+    val lock: Double? = null,
 )
 
 object WidgetData {
     private const val KEY = "widget.snapshot"
+    /** The bearing locked in the app (true degrees), written by Navigator whenever the lock changes. */
+    private const val LOCK = "widget.lock"
     private fun prefs(context: Context) = context.getSharedPreferences("bearings", Context.MODE_PRIVATE)
 
     fun save(context: Context, s: Snapshot) = prefs(context).edit { putString(KEY, encode(s).toString()) }
 
     fun read(context: Context): Snapshot? = prefs(context).getString(KEY, null)?.let { runCatching { decode(JSONObject(it)) }.getOrNull() }
+
+    /** The locked bearing for the widget (true degrees), or null to clear it. */
+    fun saveLock(context: Context, trueBearing: Double?) = prefs(context).edit {
+        if (trueBearing == null) remove(LOCK) else putString(LOCK, Geo.normalize(trueBearing).toString())
+    }
+
+    fun readLock(context: Context): Double? = prefs(context).getString(LOCK, null)?.toDoubleOrNull()
 
     /** For the self-test, which puts back whatever was saved before. */
     fun raw(context: Context): String? = prefs(context).getString(KEY, null)
@@ -113,15 +143,23 @@ object WidgetData {
     private fun feet(context: Context) = prefs(context).getBoolean("feet", Geo.prefersFeet(Locale.getDefault().country))
 
     /** What the widget shows now: the saved fix in the app's units and coordinate format, and the sky right now. */
-    fun entry(context: Context, now: Long = System.currentTimeMillis()): WidgetEntry {
+    fun entry(context: Context, now: Long = System.currentTimeMillis()): WidgetEntry =
+        entry(context, read(context), Navigator.savedMark(prefs(context)), readLock(context), now)
+
+    /**
+     * The entry for a given fix, marked spot and locked bearing (true degrees): the sun and moon worked out for
+     * [now] at the fix. The self-test draws the sample through this without touching what the app saved.
+     */
+    fun entry(context: Context, s: Snapshot?, mark: Pair<Double, Double>?, lock: Double?, now: Long): WidgetEntry {
         val prefs = prefs(context)
-        val s = read(context)
         val feet = feet(context)
         val clockFormat = android.text.format.DateFormat.getTimeFormat(context)
         val clock = { ms: Long -> clockFormat.format(Date(ms)) }
         val phase = Sky.moonPhase(now.toDouble())
+        val percent = "${Geo.jsRound(phase.fraction * 100)}%"
         if (s == null) {
-            return WidgetEntry(null, "Bearings", null, null, emptyList(), "", null, null, null, null, false, Sky.moonWords(phase), phase.phase, null)
+            return WidgetEntry(null, "Bearings", null, null, emptyList(), "", null, null, null, null, false, Sky.moonWords(phase), phase.phase, null,
+                moonPercent = percent, moonName = Sky.phaseName(phase))
         }
         val (ft, m) = s.elevation?.let { Geo.elevation(it) } ?: (null to null)
         val coordinates = when (val f = Geo.format(Geo.Format.of(prefs.getString("format", null)), s.latitude, s.longitude)) {
@@ -130,14 +168,16 @@ object WidgetData {
         }
         val times = Sky.sunTimes(now.toDouble(), s.latitude, s.longitude)
         val sun = Sky.sunPosition(now.toDouble(), s.latitude, s.longitude)
-        val mark = Navigator.savedMark(prefs)
-        val markLine = mark?.let { (lat, lon) ->
-            val b = Geo.bearing(s.latitude, s.longitude, lat, lon)
-            "Marked spot · ${Geo.distanceText(Geo.distance(s.latitude, s.longitude, lat, lon), feet)} · ${Geo.jsRound(b) % 360}° ${Geo.point(b)}"
-        }
+        val moon = Sky.moonPosition(now.toDouble(), s.latitude, s.longitude)
+        val markBearing = mark?.let { (lat, lon) -> Geo.bearing(s.latitude, s.longitude, lat, lon) }
+        val markDistance = mark?.let { (lat, lon) -> Geo.distanceText(Geo.distance(s.latitude, s.longitude, lat, lon), feet) }
+        val markPoint = markBearing?.let { "${Geo.jsRound(it) % 360}° ${Geo.point(it)}" }
+        val markLine = if (markDistance != null && markPoint != null) "Marked spot · $markDistance · $markPoint" else null
+        val place = s.place ?: "Far from any town"
+        val day = java.text.SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEMMMd"), Locale.getDefault())
         return WidgetEntry(
             snapshot = s,
-            place = s.place ?: "Far from any town",
+            place = place,
             elevationMain = if (feet) ft else m,
             elevationOther = if (feet) m else ft,
             coordinates = coordinates,
@@ -150,6 +190,17 @@ object WidgetData {
             moonLine = Sky.moonWords(phase),
             moonPhase = phase.phase,
             markLine = markLine,
+            shortPlace = place.substringBefore(',').trim().ifEmpty { place },
+            asOfLong = "${day.format(Date(s.time))} · ${clock(s.time)}",
+            sunAltitude = sun.altitude,
+            moonAzimuth = moon.azimuth,
+            moonUp = moon.altitude > 0,
+            moonPercent = percent,
+            moonName = Sky.phaseName(phase),
+            markBearing = markBearing,
+            markDistance = markDistance,
+            markPoint = markPoint,
+            lock = lock,
         )
     }
 }

@@ -116,17 +116,45 @@ enum PhoneSelfTest {
         try? await Task.sleep(for: .seconds(4.5))
         check(nav.compass == .unavailable || nav.heading != nil, "Compass state (\(nav.compass))")
 
-        // The widgets, from the app's own last fix as the widget reads it, with the large one's map.
+        // The Lock Screen's W1 elevation design (no dial): the rectangular widget's one coordinate line to 4
+        // places, and the circular gauge's 0–14,000 ft fill (clamped, the same in metres) and "9.6k" / "2.9k".
+        let lockSample = WidgetReadings(snapshot: .sample, date: Date())
+        var lockMetres = WidgetSnapshot.sample
+        lockMetres.feet = false
+        let lockMetresReadings = WidgetReadings(snapshot: lockMetres, date: Date())
+        var lockHigh = WidgetSnapshot.sample, lockLow = WidgetSnapshot.sample, lockNone = WidgetSnapshot.sample
+        lockHigh.elevation = 5000
+        lockLow.elevation = -400
+        lockNone.elevation = nil
+        let gauge = lockSample.gaugeFraction ?? -1
+        let gaugeOK = abs(gauge - 2922 / Geo.foot / 14000) < 0.0001 && lockMetresReadings.gaugeFraction == lockSample.gaugeFraction
+            && WidgetReadings(snapshot: lockHigh, date: Date()).gaugeFraction == 1
+            && WidgetReadings(snapshot: lockLow, date: Date()).gaugeFraction == 0
+            && WidgetReadings(snapshot: lockNone, date: Date()).gaugeFraction == nil
+        check(gaugeOK, String(format: "Lock Screen circular gauge fills 0–14,000 ft, clamped, the same in metres (%.3f)", gauge))
+        let compactFeet = lockSample.compactElevation, compactMetres = lockMetresReadings.compactElevation
+        check(compactFeet?.number == "9.6k" && compactFeet?.unit == "ft" && compactMetres?.number == "2.9k" && compactMetres?.unit == "m",
+              "Lock Screen circular reads 9.6k ft / 2.9k m (\(compactFeet?.number ?? "—") \(compactFeet?.unit ?? ""), \(compactMetres?.number ?? "—") \(compactMetres?.unit ?? ""))")
+        check(lockSample.lockCoordinates == "39.0990° N  106.9412° W",
+              "Lock Screen rectangular coordinates on one line to 4 places (\(lockSample.lockCoordinates))")
+        check(lockSample.shortPlace == "Maroon Bells", "Lock Screen short place (\(lockSample.shortPlace))")
+
+        // The widgets, from the app's own last fix as the widget reads it, with the sample's marked spot and
+        // locked bearing on the Home Screen's north-up dial; the Lock Screen sizes in the W1 elevation design.
         if let fix = nav.fix {
             var snapshot = WidgetSnapshot.sample
             snapshot.latitude = fix.latitude
             snapshot.longitude = fix.longitude
+            // The sample's spot moved with the fix (about 9 mi NE), so the pin and pill read as in the mock
+            // wherever the simulator is.
+            let spotDLat: Double = 39.1911 - WidgetSnapshot.sample.latitude
+            let spotDLon: Double = -106.8175 - WidgetSnapshot.sample.longitude
+            snapshot.spotLatitude = fix.latitude + spotDLat
+            snapshot.spotLongitude = fix.longitude + spotDLon
             snapshot.place = nav.place
             snapshot.time = fix.time
             if case let .value(metres, fromGPS, _) = nav.elevation { snapshot.elevation = metres; snapshot.elevationFromGPS = fromGPS }
-            let map = await MapSnapshot.make(latitude: fix.latitude, longitude: fix.longitude, size: WidgetTimeline.mapSize)
-            check(map != nil, "Map picture for the large widget")
-            let entry = WidgetTimeline.entries(snapshot: snapshot, map: map)[0]
+            let entry = WidgetTimeline.entries(snapshot: snapshot)[0]
             let empty = BearingsEntry(date: Date(), snapshot: nil)
             for (family, size, name) in sizes {
                 check(render(widget(entry, family, size), to: docs.appendingPathComponent("widget-\(name).png")), "\(name) widget draws")
@@ -152,8 +180,8 @@ enum PhoneSelfTest {
     /// white on a wallpaper-dark backdrop (the Lock Screen tints them).
     private static func widget(_ entry: BearingsEntry, _ family: WidgetFamily, _ size: CGSize) -> some View {
         let home = ([.systemSmall, .systemMedium, .systemLarge] as [WidgetFamily]).contains(family)
+        // No padding: the widget has no system content margins; its views keep their own 8 pt inset.
         return WidgetView(entry: entry, family: family)
-            .padding(home ? 16 : 0)
             .frame(width: size.width, height: size.height)
             .foregroundStyle(.white)
             .background { if home { WidgetBackground() } else { Color(white: 0.12) } }

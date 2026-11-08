@@ -1,14 +1,9 @@
 package com.bradcowdrey.bearings.widget
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.RectF
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -16,6 +11,7 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
@@ -28,6 +24,7 @@ import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.RowScope
 import androidx.glance.layout.Spacer
@@ -45,29 +42,39 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.bradcowdrey.bearings.Geo
 import com.bradcowdrey.bearings.MainActivity
-import com.bradcowdrey.bearings.Sky
-import com.bradcowdrey.bearings.ui.Look
 import com.bradcowdrey.bearings.ui.Op
 import com.bradcowdrey.bearings.ui.Palette
+import com.bradcowdrey.bearings.ui.SkyTone
 import com.bradcowdrey.bearings.ui.white
-import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
- * The Home Screen widget, one that resizes, in Two Degrees' layout: small (the place, the elevation, the
- * coordinates), medium (plus the sun's direction on a small rose, sunrise and sunset in three columns, and
- * the moon) and large (a captioned grid, with the marked spot). Tapping it opens Bearings.
+ * The Home Screen widget (docs/DESIGN.md, Widgets; mock W2), one that resizes through three layouts, each on black
+ * with the app's slim sky header (the place and the time of the reading) and its frosted tiles with captions in
+ * capitals, and each carrying a NORTH-UP compass in the app's dial style ([WidgetDial]) that shows only true
+ * directions: the sun, the moon, the marked spot and the locked bearing. Never a live or "last" heading.
+ *
+ * - Small (under 250 dp wide, 2 × 2): the header, the dial's top half (W → N → E, up to 124 dp) with the spot's
+ *   pin and distance pill, the sun and moon below the arc as edge marks; the elevation at 30 sp under it.
+ * - Medium (250 dp wide and up, under 300 tall, 4 × 2): a full dial (up to 120 dp) in the left column with the sun,
+ *   moon, spot (pin and dashed line) and lock notch, "9.2 mi · 46° NE" under it; the header over the right column,
+ *   then ELEVATION and SUN (the moon's % in its caption, ↑ rise ↓ set).
+ * - Large (250 × 300 dp and up): the header; the full-scale dial (up to 212 dp) with ELEVATION, SUN and MOON stacked
+ *   beside it; POSITION and the Marked spot row (the lock and the spot's distance and bearing) full width below.
+ *   Without a spot or lock that row and those marks drop out and the dial takes the room.
+ *
+ * Corners 24 dp outside, 16 inside. [SizeMode.Exact], so each layout sizes its dial to the widget it is in.
+ * Tapping it opens Bearings.
  */
 class BearingsWidget : GlanceAppWidget() {
     companion object {
-        val SMALL = DpSize(110.dp, 110.dp)
-        val MEDIUM = DpSize(250.dp, 110.dp)
-        val LARGE = DpSize(250.dp, 250.dp)
+        /** From this width, the full dial and tiles; from this height too, Large. */
+        const val WIDE = 250f
+        const val TALL = 300f
+        const val OUTER = 24
+        const val INNER = 16
     }
 
-    override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, LARGE))
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val entry = WidgetData.entry(context)
@@ -82,270 +89,272 @@ class BearingsWidgetReceiver : GlanceAppWidgetReceiver() {
 private fun style(size: TextUnit, weight: FontWeight = FontWeight.Normal, color: Color = Color.White, align: TextAlign = TextAlign.Start) =
     TextStyle(color = ColorProvider(color), fontSize = size, fontWeight = weight, textAlign = align)
 
-/**
- * Two Degrees' widget look, on Bearings' warm near-black with its 3 dp crimson rule across the top
- * (docs/LOOK.md): white type with the warm greys, 1 dp dividers, captions in capitals.
- */
+/** Which layout a widget of this size shows (the self-test checks the breakpoints). */
+enum class WidgetLayout { SMALL, MEDIUM, LARGE }
+
+fun widgetLayout(widthDp: Float, heightDp: Float): WidgetLayout = when {
+    widthDp >= BearingsWidget.WIDE && heightDp >= BearingsWidget.TALL -> WidgetLayout.LARGE
+    widthDp >= BearingsWidget.WIDE -> WidgetLayout.MEDIUM
+    else -> WidgetLayout.SMALL
+}
+
+/** The dial each layout draws at a widget size (dp): Small's half dial, Medium's and Large's full dial. 0 for none. */
+fun widgetDialSize(layout: WidgetLayout, w: Float, h: Float, hasSpot: Boolean, hasRow: Boolean): Float = when (layout) {
+    // 124 at most; the arc and its edge marks within the width; the arc between the header and the elevation (its
+    // edge-mark room may run behind the number's sides).
+    WidgetLayout.SMALL -> minOf(124f, w - 2 * WidgetDial.SIDE - 4f, 2f * (h - 106f)).let { if (it < 60f) 0f else it }
+    WidgetLayout.MEDIUM -> minOf(mediumColumn(w, h), h - 16f - (if (hasSpot) 34f else 8f), 180f)
+    // The row height under the header, less the rows below; the width less 128 for the tiles.
+    WidgetLayout.LARGE -> minOf(w - 16f - 8f - 128f, h - 16f - 48f - 52f - (if (hasRow) 50f else 0f))
+}
+
+/** Medium's left column: 128 wide, more on a taller widget, never over 42% of the width. */
+private fun mediumColumn(w: Float, h: Float) = minOf(maxOf(128f, h - 50f), w * 0.42f)
+
+/** The marks on a widget's dial, from the entry (all true bearings). */
+private fun marks(entry: WidgetEntry, spotLabel: Boolean, lock: Boolean) = WidgetDial.Marks(
+    sun = entry.sunAzimuth, sunUp = entry.sunUp,
+    moon = entry.moonAzimuth, moonUp = entry.moonUp, moonPhase = entry.moonPhase,
+    spot = entry.markBearing, spotLabel = if (spotLabel) entry.markDistance else null,
+    lock = if (lock) entry.lock else null,
+)
+
+/** What the dial says to TalkBack. */
+private fun dialDescription(entry: WidgetEntry, lock: Boolean): String {
+    val parts = mutableListOf("Compass, north up")
+    entry.sunAzimuth?.let { parts += "sun ${Geo.jsRound(it) % 360}° ${Geo.point(it)}" }
+    entry.moonAzimuth?.let { parts += "moon ${Geo.jsRound(it) % 360}° ${Geo.point(it)}" }
+    if (entry.markPoint != null && entry.markDistance != null) parts += "marked spot ${entry.markPoint}, ${entry.markDistance}"
+    if (lock) entry.lock?.let { parts += "locked ${Geo.jsRound(it) % 360}°" }
+    return parts.joinToString(", ")
+}
+
 @Composable
 fun WidgetContent(entry: WidgetEntry) {
     val size = LocalSize.current
-    Column(
-        GlanceModifier.fillMaxSize().cornerRadius(22.dp).background(Palette.bg)
+    val w = size.width.value; val h = size.height.value
+    // Bitmaps at no more than 2 px per dp: sharp enough at widget sizes, and a widget update carries every bitmap.
+    val scale = minOf(LocalContext.current.resources.displayMetrics.density, 2f)
+    Box(
+        GlanceModifier.fillMaxSize().cornerRadius(BearingsWidget.OUTER.dp).background(Color.Black)
             .clickable(actionStartActivity<MainActivity>()),
     ) {
-        Box(GlanceModifier.fillMaxWidth().height(3.dp).background(Palette.crimson)) {}
-        Box(GlanceModifier.fillMaxWidth().defaultWeight().padding(14.dp)) {
-            when {
-                entry.snapshot == null -> Empty()
-                size.height >= BearingsWidget.LARGE.height -> Large(entry)
-                size.width >= BearingsWidget.MEDIUM.width -> Medium(entry)
-                else -> Small(entry)
-            }
+        if (entry.snapshot == null) Empty()
+        else when (widgetLayout(w, h)) {
+            WidgetLayout.SMALL -> Small(entry, w, h, scale)
+            WidgetLayout.MEDIUM -> Medium(entry, w, h, scale)
+            WidgetLayout.LARGE -> Large(entry, w, h, scale)
         }
     }
-}
-
-/** A 1 dp line across (Glance has no half-dp line). */
-@Composable
-private fun Rule() {
-    Box(GlanceModifier.fillMaxWidth().height(1.dp).background(Palette.widgetRule)) {}
-}
-
-/** A 1 dp line down. */
-@Composable
-private fun RuleDown() {
-    Box(GlanceModifier.width(1.dp).fillMaxHeight().background(Palette.widgetRule)) {}
 }
 
 @Composable
 private fun Empty() {
-    Column(GlanceModifier.fillMaxSize()) {
-        Text("Bearings", style = style(15.sp, FontWeight.Medium), maxLines = 1)
+    Column(GlanceModifier.fillMaxSize().padding(8.dp)) {
+        Header("Bearings", "No reading yet", null)
         Spacer(GlanceModifier.defaultWeight())
-        Text("Open Bearings to find where you are.", style = style(13.sp, color = Palette.textSecondary), maxLines = 3)
+        Text("Open Bearings to find where you are.", style = style(13.sp, color = white(Op.CAPTION)), maxLines = 3,
+            modifier = GlanceModifier.padding(horizontal = 4.dp, vertical = 4.dp))
     }
 }
 
-/** Two Degrees' reading block: the place, the elevation large, the other unit and the time, and the coordinates at the foot. */
+/**
+ * The app's slim location bar: 40 dp, the sky for the sun's altitude (as the app's header), rounded 16; the place
+ * at 15 sp and the time of the reading at 12 sp, white at 75%.
+ */
 @Composable
-private fun Small(entry: WidgetEntry) {
-    Column(GlanceModifier.fillMaxSize()) {
-        Text(entry.place, style = style(13.sp, FontWeight.Medium), maxLines = 2)
-        Text(entry.elevationMain ?: "—", style = style(30.sp, FontWeight.Medium), maxLines = 1)
-        Text(listOfNotNull(entry.elevationOther, entry.asOf).joinToString(" · "), style = style(12.sp, color = Palette.textMuted), maxLines = 1)
-        Spacer(GlanceModifier.defaultWeight())
-        entry.coordinates.forEach { Text(it, style = style(11.sp, FontWeight.Medium, Palette.textSecondary), maxLines = 1) }
+private fun Header(place: String, time: String, sunAltitude: Double?) {
+    val (top, bottom) = SkyTone.colors(sunAltitude)
+    Box(GlanceModifier.fillMaxWidth().height(40.dp).cornerRadius(BearingsWidget.INNER.dp)) {
+        Image(ImageProvider(WidgetDial.sky(top.toArgb(), bottom.toArgb())), null, GlanceModifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+        Column(GlanceModifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(place, style = style(15.sp, FontWeight.Medium), maxLines = 1)
+            Text(time, style = style(12.sp, color = white(0.75f)), maxLines = 1)
+        }
     }
 }
 
-/** The reading block | the sun's direction, sunrise and sunset in three columns, with the moon under them. */
+/** A caption in capitals, 11 sp, white at 60%. */
 @Composable
-private fun Medium(entry: WidgetEntry) {
-    Row(GlanceModifier.fillMaxSize()) {
-        Box(GlanceModifier.width(124.dp).fillMaxHeight()) { Small(entry) }
-        Spacer(GlanceModifier.width(8.dp))
-        RuleDown()
+private fun Caption(text: String) {
+    Text(text.uppercase(), style = style(11.sp, FontWeight.Medium, white(Op.CAPTION)), maxLines = 1)
+}
+
+/** A frosted tile: white at 8%, rounded 16, the caption at the top and [content] at the foot. */
+@Composable
+private fun Tile(modifier: GlanceModifier, caption: @Composable () -> Unit, content: @Composable () -> Unit) {
+    Column(modifier.fillMaxWidth().cornerRadius(BearingsWidget.INNER.dp).background(Palette.tileFill).padding(horizontal = 12.dp, vertical = 6.dp)) {
+        caption()
+        Spacer(GlanceModifier.defaultWeight())
+        content()
+    }
+}
+
+/** "9,587 ft" → "9,587" and "ft". */
+private fun splitUnit(text: String?): Pair<String, String> {
+    val t = text ?: return "—" to ""
+    val i = t.lastIndexOf(' ')
+    return if (i > 0) t.substring(0, i) to t.substring(i + 1) else t to ""
+}
+
+/** ↑ 6:36 AM, the arrow in the sun's amber. */
+@Composable
+private fun SunTime(up: Boolean, time: String?, size: TextUnit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(if (up) "↑" else "↓", style = style(size, FontWeight.Medium, Palette.sun), maxLines = 1)
+        Text(" ${time ?: "—"}", style = style(size, FontWeight.Medium), maxLines = 1)
+    }
+}
+
+/** Small: the header, the half dial with the spot's pin and pill and the sun and moon as edge marks, the elevation under it. */
+@Composable
+private fun Small(entry: WidgetEntry, w: Float, h: Float, scale: Float) {
+    val d = widgetDialSize(WidgetLayout.SMALL, w, h, entry.markBearing != null, false)
+    Box(GlanceModifier.fillMaxSize().padding(8.dp)) { Header(entry.shortPlace, entry.asOf, entry.sunAltitude) }
+    if (d > 0f) {
+        val dial = WidgetDial.draw(d, half = true, marks = marks(entry, spotLabel = true, lock = false), scale = scale)
+        Box(GlanceModifier.fillMaxSize().padding(top = 56.dp), contentAlignment = Alignment.TopCenter) {
+            Image(ImageProvider(dial.bitmap), dialDescription(entry, lock = false), GlanceModifier.size(dial.widthDp.dp, dial.heightDp.dp))
+        }
+    }
+    val (number, unit) = splitUnit(entry.elevationMain)
+    Box(GlanceModifier.fillMaxSize().padding(bottom = 8.dp), contentAlignment = if (d > 0f) Alignment.BottomCenter else Alignment.Center) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(number, style = style(30.sp, FontWeight.Medium), maxLines = 1)
+            if (unit.isNotEmpty()) Text(" $unit", style = style(15.sp, FontWeight.Medium, white(Op.SUB)), maxLines = 1,
+                modifier = GlanceModifier.padding(bottom = 4.dp))
+        }
+    }
+}
+
+/** Medium: the full dial in the left column with the spot's readout under it; the header, ELEVATION and SUN on the right. */
+@Composable
+private fun Medium(entry: WidgetEntry, w: Float, h: Float, scale: Float) {
+    val hasSpot = entry.markBearing != null && entry.markDistance != null
+    val column = mediumColumn(w, h)
+    val d = widgetDialSize(WidgetLayout.MEDIUM, w, h, hasSpot, false)
+    val dial = WidgetDial.draw(d, half = false, marks = marks(entry, spotLabel = false, lock = true), scale = scale)
+    Row(GlanceModifier.fillMaxSize().padding(8.dp)) {
+        Column(GlanceModifier.width(column.dp).fillMaxHeight(), verticalAlignment = Alignment.CenterVertically,
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(ImageProvider(dial.bitmap), dialDescription(entry, lock = true), GlanceModifier.size(dial.widthDp.dp, dial.heightDp.dp))
+            if (hasSpot) {
+                Spacer(GlanceModifier.height(5.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Image(ImageProvider(WidgetDial.pinIcon(11f, scale)), null, GlanceModifier.size(11.dp))
+                    Spacer(GlanceModifier.width(5.dp))
+                    Text("${entry.markDistance} · ${entry.markPoint}", style = style(12.sp, FontWeight.Medium, white(Op.STRONG)), maxLines = 1)
+                }
+            }
+        }
         Spacer(GlanceModifier.width(8.dp))
         Column(GlanceModifier.defaultWeight().fillMaxHeight()) {
-            SunColumns(entry)
-            Spacer(GlanceModifier.defaultWeight())
-            MoonRow(entry)
-        }
-    }
-}
-
-/** Sun (the rose, its direction, up or below), Sunrise and Sunset, as Two Degrees' hours; one wide column in polar day or night. */
-@Composable
-private fun SunColumns(entry: WidgetEntry) {
-    Row(GlanceModifier.fillMaxWidth()) {
-        val az = entry.sunAzimuth
-        val altitude = entry.snapshot?.let { Sky.sunPosition(System.currentTimeMillis().toDouble(), it.latitude, it.longitude).altitude }
-        SunColumn("SUN", Palette.cream, az?.let { "${Geo.jsRound(it) % 360}° ${Geo.point(it)}" } ?: "—",
-            if (altitude == null || altitude <= 0) "Below" else "${Geo.jsRound(altitude)}° up") { Rose(entry, 34) }
-        val allDay = entry.sunAllDay
-        if (allDay != null) {
-            Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Spacer(GlanceModifier.height(14.dp))
-                Box(GlanceModifier.height(34.dp), contentAlignment = Alignment.Center) {
-                    Image(ImageProvider(horizonBitmap(allDay.contains("up"), 54)), null, GlanceModifier.size(18.dp))
-                }
-                Text(allDay, style = style(13.sp, FontWeight.Medium, align = TextAlign.Center), maxLines = 2)
-            }
-        } else {
-            val (riseTime, riseSub) = splitClock(entry.sunrise)
-            val (setTime, setSub) = splitClock(entry.sunset)
-            SunColumn("↑ RISE", Palette.textMuted, riseTime, riseSub) {
-                Image(ImageProvider(horizonBitmap(true, 54)), null, GlanceModifier.size(18.dp))
-            }
-            SunColumn("↓ SET", Palette.textMuted, setTime, setSub) {
-                Image(ImageProvider(horizonBitmap(false, 54)), null, GlanceModifier.size(18.dp))
-            }
-        }
-    }
-}
-
-/** "6:42 AM" → "6:42" and "AM"; "06:42" → "06:42" and nothing. */
-private fun splitClock(clock: String?): Pair<String, String> {
-    val c = clock?.replace('\u202F', ' ')?.replace('\u00A0', ' ')?.trim() ?: return "—" to ""
-    val i = c.lastIndexOf(' ')
-    return if (i > 0) c.substring(0, i) to c.substring(i + 1) else c to ""
-}
-
-/** One column: a label in the app's caption language (SUN, ↑ RISE, ↓ SET; C3.4 #19), a picture in a 34 dp band, the value and a line under it. */
-@Composable
-private fun RowScope.SunColumn(label: String, labelColor: Color, value: String, sub: String, picture: @Composable () -> Unit) {
-    Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = style(Look.WIDGET_CAPTION.sp, FontWeight.Medium, labelColor, TextAlign.Center), maxLines = 1)
-        Box(GlanceModifier.height(34.dp), contentAlignment = Alignment.Center) { picture() }
-        Text(value, style = style(13.sp, FontWeight.Medium, align = TextAlign.Center), maxLines = 1)
-        Text(sub, style = style(10.sp, color = Palette.textMuted, align = TextAlign.Center), maxLines = 1)
-    }
-}
-
-@Composable
-private fun MoonRow(entry: WidgetEntry) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Image(ImageProvider(moonBitmap(entry.moonPhase, 42)), null, GlanceModifier.size(14.dp))
-        Spacer(GlanceModifier.width(6.dp))
-        Text(entry.moonLine, style = style(11.sp, color = Palette.textMuted), maxLines = 1)
-    }
-}
-
-@Composable
-private fun Rose(entry: WidgetEntry, sizeDp: Int) {
-    val description = entry.sunAzimuth?.let { "Sun ${Math.round(it) % 360} degrees" }
-    Image(ImageProvider(roseBitmap(entry.sunAzimuth, entry.sunUp, sizeDp * 3)), description, GlanceModifier.size(sizeDp.dp))
-}
-
-/** The top row as the large Apple widget, then the info grid with captions, then the marked spot and the time. */
-@Composable
-private fun Large(entry: WidgetEntry) {
-    Column(GlanceModifier.fillMaxSize()) {
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(GlanceModifier.defaultWeight()) {
-                Text(entry.place, style = style(13.sp, FontWeight.Medium), maxLines = 2)
+            Header(entry.place, entry.asOfLong, entry.sunAltitude)
+            Spacer(GlanceModifier.height(8.dp))
+            Tile(GlanceModifier.defaultWeight(), { Caption("Elevation") }) {
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(entry.elevationMain ?: "—", style = style(34.sp, FontWeight.Medium), maxLines = 1)
+                    Text(entry.elevationMain ?: "—", style = style(22.sp, FontWeight.Medium), maxLines = 1)
                     entry.elevationOther?.let {
-                        Text("  $it", style = style(14.sp, FontWeight.Medium, Palette.textMuted), maxLines = 1,
-                            modifier = GlanceModifier.padding(bottom = 6.dp))
+                        Text("  $it", style = style(13.sp, color = white(Op.CAPTION)), maxLines = 1, modifier = GlanceModifier.padding(bottom = 2.dp))
                     }
                 }
             }
-            Rose(entry, 56)
-        }
-        Spacer(GlanceModifier.height(8.dp))
-        Rule()
-        Spacer(GlanceModifier.height(8.dp))
-        // The grid in a column of its own: Glance keeps at most 10 children in a Column and drops the rest.
-        Column(GlanceModifier.fillMaxWidth()) {
-            val coords = entry.coordinates
-            if (coords.size == 2) {
-                GridRow("Latitude", coords[0], "Longitude", coords[1])
-            } else {
-                GridRow("Coordinates", coords.firstOrNull() ?: "—", null, null)
+            Spacer(GlanceModifier.height(8.dp))
+            Tile(GlanceModifier.defaultWeight(), {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Caption("Sun · ")
+                    Image(ImageProvider(WidgetDial.moonIcon(11f, scale, entry.moonPhase)), null, GlanceModifier.size(11.dp))
+                    Caption(" ${entry.moonPercent}")
+                }
+            }) {
+                val allDay = entry.sunAllDay
+                if (allDay != null) Text(allDay, style = style(15.sp, FontWeight.Medium), maxLines = 1)
+                else Row(verticalAlignment = Alignment.CenterVertically) {
+                    SunTime(true, entry.sunrise, 15.sp)
+                    Spacer(GlanceModifier.width(12.dp))
+                    SunTime(false, entry.sunset, 15.sp)
+                }
             }
-            val allDay = entry.sunAllDay
-            if (allDay != null) GridRow("Sun", allDay, "Moon", entry.moonLine)
-            else GridRow("↑ Rise", entry.sunrise ?: "—", "↓ Set", entry.sunset ?: "—")
-            if (allDay == null) GridRow("Moon", entry.moonLine, null, null)
-        }
-        Spacer(GlanceModifier.defaultWeight())
-        Rule()
-        Spacer(GlanceModifier.height(8.dp))
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(entry.markLine ?: "", style = style(12.sp, FontWeight.Medium), maxLines = 1, modifier = GlanceModifier.defaultWeight())
-            Text(entry.asOf, style = style(11.sp, color = Palette.textMuted, align = TextAlign.End), maxLines = 1)
         }
     }
 }
 
-/** Two captioned values side by side (or one across), as in the app's tiles: the caption in capitals, white at 60%. */
+/** Large: the header; the big dial with ELEVATION, SUN and MOON beside it; POSITION and the marked spot (and lock) below. */
 @Composable
-private fun GridRow(title1: String, value1: String, title2: String?, value2: String?) {
-    Row(GlanceModifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        Column(GlanceModifier.defaultWeight()) {
-            Text(title1.uppercase(), style = style(Look.WIDGET_CAPTION.sp, FontWeight.Medium, white(Op.CAPTION)), maxLines = 1)
-            Text(value1, style = style(13.sp, FontWeight.Medium), maxLines = 1)
-        }
-        if (title2 != null && value2 != null) {
+private fun Large(entry: WidgetEntry, w: Float, h: Float, scale: Float) {
+    val hasSpot = entry.markBearing != null && entry.markDistance != null
+    val lock = entry.lock
+    val hasRow = hasSpot || lock != null
+    val d = widgetDialSize(WidgetLayout.LARGE, w, h, hasSpot, hasRow)
+    val dial = WidgetDial.draw(d, half = false, marks = marks(entry, spotLabel = true, lock = true), scale = scale)
+    Column(GlanceModifier.fillMaxSize().padding(8.dp)) {
+        Header(entry.place, entry.asOfLong, entry.sunAltitude)
+        Spacer(GlanceModifier.height(8.dp))
+        Row(GlanceModifier.fillMaxWidth().defaultWeight()) {
+            Box(GlanceModifier.width(d.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                Image(ImageProvider(dial.bitmap), dialDescription(entry, lock = true), GlanceModifier.size(dial.widthDp.dp, dial.heightDp.dp))
+            }
             Spacer(GlanceModifier.width(8.dp))
-            Column(GlanceModifier.defaultWeight()) {
-                Text(title2.uppercase(), style = style(Look.WIDGET_CAPTION.sp, FontWeight.Medium, white(Op.CAPTION)), maxLines = 1)
-                Text(value2, style = style(13.sp, FontWeight.Medium), maxLines = 1)
+            Column(GlanceModifier.defaultWeight().fillMaxHeight()) {
+                // Tile contents go straight into the tile's column (RemoteViews limit how deep views nest).
+                Tile(GlanceModifier.defaultWeight(), { Caption("Elevation") }) {
+                    Text(entry.elevationMain ?: "—", style = style(20.sp, FontWeight.Medium), maxLines = 1)
+                    entry.elevationOther?.let { Text(it, style = style(13.sp, color = white(Op.CAPTION)), maxLines = 1) }
+                }
+                Spacer(GlanceModifier.height(8.dp))
+                val sunCaption = entry.sunAzimuth?.let { "Sun · ${Geo.jsRound(it) % 360}° ${Geo.point(it)}" } ?: "Sun"
+                Tile(GlanceModifier.defaultWeight(), { Caption(sunCaption) }) {
+                    val allDay = entry.sunAllDay
+                    if (allDay != null) Text(allDay, style = style(15.sp, FontWeight.Medium), maxLines = 2)
+                    else {
+                        SunTime(true, entry.sunrise, 15.sp)
+                        SunTime(false, entry.sunset, 15.sp)
+                    }
+                }
+                Spacer(GlanceModifier.height(8.dp))
+                Tile(GlanceModifier.defaultWeight(), { Caption("Moon") }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(ImageProvider(WidgetDial.moonIcon(15f, scale, entry.moonPhase)), null, GlanceModifier.size(15.dp))
+                        Spacer(GlanceModifier.width(6.dp))
+                        Text(entry.moonPercent, style = style(17.sp, FontWeight.Medium), maxLines = 1)
+                    }
+                    Text(entry.moonName, style = style(13.sp, color = white(Op.CAPTION)), maxLines = 1)
+                }
+            }
+        }
+        Spacer(GlanceModifier.height(8.dp))
+        WideRow(44) {
+            Caption("Position")
+            Spacer(GlanceModifier.defaultWeight())
+            Text(entry.coordinates.joinToString("  "), style = style(15.sp, FontWeight.Medium), maxLines = 1)
+        }
+        if (hasRow) {
+            Spacer(GlanceModifier.height(8.dp))
+            WideRow(42) {
+                Image(ImageProvider(if (hasSpot) WidgetDial.pinIcon(14f, scale) else WidgetDial.lockIcon(14f, scale)), null, GlanceModifier.size(14.dp))
+                Spacer(GlanceModifier.width(8.dp))
+                Text(if (hasSpot) "Marked spot" else "Locked bearing", style = style(15.sp), maxLines = 1)
+                Spacer(GlanceModifier.defaultWeight())
+                val lockText = lock?.let { "${Geo.jsRound(it) % 360}°" }
+                if (hasSpot) {
+                    if (lockText != null) {
+                        Image(ImageProvider(WidgetDial.lockIcon(14f, scale)), null, GlanceModifier.size(14.dp))
+                        Spacer(GlanceModifier.width(4.dp))
+                        Text(lockText, style = style(13.sp, color = white(Op.SUB)), maxLines = 1)
+                        Spacer(GlanceModifier.width(8.dp))
+                    }
+                    Text("${entry.markDistance} · ${entry.markPoint}", style = style(15.sp, FontWeight.Bold), maxLines = 1)
+                } else if (lockText != null) {
+                    Text(lockText, style = style(15.sp, FontWeight.Bold), maxLines = 1)
+                }
             }
         }
     }
 }
 
-// ---------- Small pictures (Glance draws bitmaps, not canvases) ----------
-
-/** The moon drawn for its phase (lit side on the right while waxing), as on the dial. */
-internal fun moonBitmap(phase: Double, px: Int): Bitmap {
-    val bitmap = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bitmap)
-    val r = px / 2f - 1f; val cx = px / 2f; val cy = px / 2f
-    canvas.drawCircle(cx, cy, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Palette.tickMinor.toArgb() })
-    val waxing = phase < 0.5
-    val k = cos(2 * PI * phase).toFloat()
-    val rx = maxOf(abs(k) * r, 0.01f)
-    val bulgeRight = if (waxing) k > 0 else k < 0
-    val lit = Path().apply {
-        moveTo(cx, cy - r)
-        arcTo(RectF(cx - r, cy - r, cx + r, cy + r), -90f, if (waxing) 180f else -180f, false)
-        arcTo(RectF(cx - rx, cy - r, cx + rx, cy + r), 90f, if (bulgeRight) -180f else 180f, false)
-        close()
-    }
-    canvas.drawPath(lit, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Palette.cream.toArgb() })
-    return bitmap
-}
-
-/** A small compass rose, north up, with the sun's direction (faint when it's below the horizon). */
-private fun roseBitmap(sunAzimuth: Double?, sunUp: Boolean, px: Int): Bitmap {
-    val bitmap = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bitmap)
-    val c = px / 2f; val r = px / 2f - px * 0.04f
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    paint.color = Palette.dial.toArgb(); canvas.drawCircle(c, c, r, paint)
-    paint.style = Paint.Style.STROKE; paint.strokeWidth = px * 0.02f; paint.color = Palette.border.toArgb()
-    canvas.drawCircle(c, c, r, paint)
-    paint.strokeCap = Paint.Cap.ROUND
-    for (i in 0 until 8) {
-        val a = i * PI / 4
-        val len = if (i % 2 == 0) 0.16f else 0.08f
-        paint.color = (if (i == 0) Palette.north else Palette.textMuted).toArgb()
-        paint.strokeWidth = px * (if (i % 2 == 0) 0.035f else 0.02f)
-        canvas.drawLine(c + (sin(a) * r * 0.94f).toFloat(), c - (cos(a) * r * 0.94f).toFloat(),
-            c + (sin(a) * r * (0.94f - len)).toFloat(), c - (cos(a) * r * (0.94f - len)).toFloat(), paint)
-    }
-    if (sunAzimuth != null) {
-        val a = Math.toRadians(sunAzimuth)
-        val sun = Palette.sun.copy(alpha = if (sunUp) 1f else 0.35f).toArgb()
-        paint.color = sun; paint.strokeWidth = px * 0.03f
-        canvas.drawLine(c, c, c + (sin(a) * r * 0.5f).toFloat(), c - (cos(a) * r * 0.5f).toFloat(), paint)
-        paint.style = Paint.Style.FILL
-        canvas.drawCircle(c + (sin(a) * r * 0.6f).toFloat(), c - (cos(a) * r * 0.6f).toFloat(), px * 0.08f, paint)
-    }
-    return bitmap
-}
-
-/** The sun half over the horizon with a small arrow, up for sunrise and down for sunset (and for polar day and night). */
-private fun horizonBitmap(rising: Boolean, px: Int): Bitmap {
-    val bitmap = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bitmap)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Palette.sun.toArgb() }
-    val horizon = px * 0.72f
-    val c = px / 2f; val r = px * 0.22f
-    canvas.drawArc(RectF(c - r, horizon - r, c + r, horizon + r), 180f, 180f, true, paint)
-    paint.style = Paint.Style.STROKE; paint.strokeWidth = px * 0.07f; paint.strokeCap = Paint.Cap.ROUND
-    canvas.drawLine(px * 0.08f, horizon, px * 0.92f, horizon, paint)
-    // The arrow above the sun.
-    val tip = if (rising) px * 0.06f else px * 0.30f
-    val base = if (rising) px * 0.30f else px * 0.06f
-    canvas.drawLine(c, base, c, tip, paint)
-    val wing = px * 0.10f
-    val back = if (rising) tip + wing else tip - wing
-    canvas.drawLine(c, tip, c - wing, back, paint)
-    canvas.drawLine(c, tip, c + wing, back, paint)
-    return bitmap
+/** A full-width frosted row, [height] dp, 12 in each side. */
+@Composable
+private fun WideRow(height: Int, content: @Composable RowScope.() -> Unit) {
+    Row(GlanceModifier.fillMaxWidth().height(height.dp).cornerRadius(BearingsWidget.INNER.dp).background(Palette.tileFill).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically) { content() }
 }

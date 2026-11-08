@@ -148,28 +148,71 @@ Asked again after moving 500 m.
 
 ## Widgets
 
-Widgets can't run the compass, so they show where you are, and the sky. The app saves its last fix
-(latitude, longitude, accuracy, elevation and its source, the place name, the time) to shared storage
-(an App Group on Apple; the app's preferences on Android); widgets refresh every 30 minutes, ask for a
-fresh location themselves where the system allows it (Apple's `NSWidgetWantsLocation`; Android's last
-known location with the permission), look up the elevation if needed, and work out the sun and moon for
-the time of each entry.
+Widgets can't read the compass, and a widget may be minutes old, so every Home Screen and desktop widget's
+compass is **fixed north-up** and shows only bearings that are true wherever the phone points: the sun's azimuth, the moon's,
+the marked spot and the locked bearing. There is no live heading and no "last heading". The app saves its
+last fix (latitude, longitude, accuracy, elevation and its source, the place name, the time), the marked
+spot and the locked bearing (as a true bearing: a magnetic lock has the declination added back) to shared
+storage whenever they change (an App Group on Apple, `WidgetSnapshot.lockBearing`; the app's preferences on
+Android). Widgets refresh every 30 minutes, ask for a fresh location themselves where the system allows it
+(Apple's `NSWidgetWantsLocation`; Android's last known location with the permission), look up the elevation
+if needed, and work out the sun and moon (azimuth, altitude, phase) for the time of each entry.
 
-They follow Two Degrees' widgets: warm near-black with the crimson rule along the top, white type and
-the warm greys, and thin dividers. Captions use the app's style (11 semibold caps, tracking 0.6): SUN, RISE
-and SET with ↑ / ↓, as in the app's Sun tile. The place stays on one line (scaling to 0.8), with 16 of inset
-on all four edges.
+**Look** (mock W2, after W1): black, with the app's slim location header (40 high, the sky gradient for
+the sun's altitude, the place at 15 semibold and the time of the reading at 12, 75% white) and the app's
+frosted tiles (white 8% with a 12% edge, captions 11 semibold caps, tracking 0.6, 60% white). No crimson
+rule. Header and tiles sit 8 inside the widget with 14 corners (the widget's 22 less 8; Android 24 dp
+outer, 16 dp inner); Apple widgets turn off the system content margins to get this.
 
-- **Small**: the place (two lines at most) with a sun or moon symbol, the elevation large ("9,587 ft")
-  with metres under it, the coordinates small.
-- **Medium**: the small widget on the left. On the right are three columns, as Two Degrees' hours: the
-  sun's direction on a small compass rose, sunrise, and sunset. The moon's phase is under them.
-- **Large**: a map of where you are (Apple: a MapKit snapshot; Android: the info grid instead) with all
-  of the above, and the marked spot's distance and direction if there is one.
-- **Lock Screen (iPhone)**: inline "⛰ 9,587 ft · Aspen", rectangular (place, elevation, coordinates),
-  circular (elevation, "9.6k ft").
-- Every widget says when its data is from ("9:41 AM"), opens the app when tapped, and follows the app's
-  units and coordinate format. Before the app has a location: "Open Bearings to find where you are."
+**The dial**: the app's dial language (dark #151515 disc with a 16% edge, white ticks, pink N), drawn as
+vectors. Tick density follows its size:
+
+| Dial | Ticks | Labels |
+|---|---|---|
+| 180 pt and more | 2° / 10° / 30° | N E S W and numbers every 30° |
+| 100–180 pt | 10° / 30° | N E S W |
+| under 100 pt | 10° / 30° | N only |
+
+Marks: the **sun** an amber rayed disc at its azimuth, the **moon** a cream disc lit for its phase (both
+faint below the horizon, as in the app); the **marked spot** a pink teardrop on the rim, point inward, with
+a dashed line from you and its distance in a pill; the **locked bearing** a pink notch outside the rim and a
+14° arc on it, only when a lock is set. On a half dial, a mark below the arc never moves onto it: it becomes
+a small glyph just past the nearer end of the arc (east for 90–180°, west for 180–270°) with a chevron
+pointing its true way.
+
+- **Small** (170 × 170): the header (short place, time); the top half of the dial, W → N → E, 124 wide,
+  with the spot's pin and its "9.2 mi" pill; the sun and moon as edge arrows when below the arc; the
+  elevation at 30 pt under it. No locked bearing at this size.
+- **Medium** (364 × 170): a 120 pt full dial on the left with the sun, moon, pin and dashed line and the
+  lock notch, the pin and "9.2 mi · 46° NE" under it; the header over the right column; ELEVATION (9,587 ft 2,922 m)
+  and SUN (moon % in the caption, ↑ rise ↓ set) tiles.
+- **Large** (364 × 382): the header; a 212 pt dial with the full scale and every mark on the left;
+  ELEVATION, SUN (azimuth in the caption, rise and set) and MOON (% and phase) stacked on the right; a
+  POSITION row and the Marked spot row (lock "240°" and "9.2 mi · 46° NE") full width below. No map.
+  Without a spot or lock, that row and those marks drop out and the dial's row takes the room.
+- **Lock Screen (iPhone)**: the **W1 elevation design**, no compass (a dial doesn't read at these sizes
+  in one tint). iOS draws them in one tint (vibrant), so hierarchy is weight and opacity only (100 / 75 /
+  65%), with no gradient, tiles, pink or amber.
+  - *Inline*: the mountain glyph, "9,587 ft · Maroon Bells" (the short place); the place truncates first,
+    never the number.
+  - *Rectangular* (172 × 76): the short place with the mountain glyph, 15 semibold; "9,587 ft" 20 bold with
+    "2,922 m" 15 at 65% beside it; the coordinates on one line, 12 at 75%, decimal degrees to 4 places
+    (≈ 11 m) so both fit ("39.0990° N  106.9412° W"; the other formats as the app writes them).
+  - *Circular* (76 × 76): a 270° gauge ring (6 wide, open at the bottom; the track at 28%, the fill in full,
+    a dot at its end) on the accessory backdrop, filled 0 → 14,000 ft, clamped (metres fill the same);
+    "9.6k" 20 bold in the middle and "ft" (or "2.9k" and "m" when metres come first) 11 semibold at 75% in
+    the ring's gap.
+  - Before a fix: inline "Open Bearings", circular the location glyph, rectangular "Open Bearings to find
+    where you are."
+- **Tinted, clear and desktop-in-background** (`widgetRenderingMode` not full colour; StandBy): one colour
+  in steps of opacity, the header and tiles at 14% / 8%, pink and amber in the system's tint.
+- **Mac**: the same Small, Medium and Large views on the desktop and in Notification Center; macOS
+  desaturates them when an app is in front.
+- **Android** (Jetpack Glance, one resizable widget): the same three layouts by size, under 250 × 180 dp
+  the half dial, 250 dp wide and more the full dial and tiles, 250 × 300 dp and more Large. Glance can't
+  draw vectors live, so the dial is drawn to a Bitmap (Canvas) for an ImageProvider.
+- Every widget says when its data is from (the header's time), opens the app when tapped, and follows the
+  app's units and coordinate format. Before the app has a location: "Open Bearings to find where you are."
 
 Mac: small, medium and large desktop and Notification Center widgets. iPhone and iPad: Home Screen
 small, medium, large; Lock Screen inline, rectangular, circular. Android: one widget that resizes (2×2,

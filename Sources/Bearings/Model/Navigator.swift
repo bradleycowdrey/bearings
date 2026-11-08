@@ -56,7 +56,8 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var tilt: CGVector?
     @Published private(set) var ground: Ground?
     @Published private(set) var groundState: GroundState = .idle
-    @Published var lock: Double?
+    /// The locked bearing, on the card's north (true or magnetic). Shared with the widgets when it changes.
+    @Published var lock: Double? { didSet { if lock != oldValue { shareWithWidgets(force: true) } } }
     @Published private(set) var sample = false
     /// "Aspen, Colorado", or nil until it's known.
     @Published private(set) var place: String?
@@ -346,7 +347,8 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
         var snapshot = WidgetSnapshot(latitude: fix.latitude, longitude: fix.longitude, accuracy: fix.accuracy,
                                       elevation: nil, elevationFromGPS: false, place: place, time: fix.time,
                                       feet: feet, format: format.rawValue,
-                                      spotLatitude: spot?.latitude, spotLongitude: spot?.longitude)
+                                      spotLatitude: spot?.latitude, spotLongitude: spot?.longitude,
+                                      lockBearing: lockTrueBearing)
         if case let .value(metres, fromGPS, _) = elevation {
             snapshot.elevation = metres
             snapshot.elevationFromGPS = fromGPS
@@ -357,6 +359,14 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
         lastShared = snapshot
         lastSharedAt = Date()
         if meaningful { WidgetCenter.shared.reloadAllTimelines() }
+    }
+
+    /// The lock as a true bearing for the widgets' north-up dial: the card is on magnetic north when true
+    /// north isn't in use, so the declination is added back when it's known.
+    private var lockTrueBearing: Double? {
+        guard let lock else { return nil }
+        if !usingTrueNorth, let d = declination { return Geo.normalize(lock + d) }
+        return lock
     }
 
     // MARK: What the screen shows

@@ -158,17 +158,30 @@ enum SelfTest {
         }
         nav.showLayout(chosen.rawValue)
 
-        // The widgets, drawn from the sample with the sun and moon for its time, and before any fix.
+        // The widgets, drawn from the sample (marked spot 9.2 mi at 46° NE, lock 240°) with the sun and moon
+        // for its time; again with no spot or lock (those rows and marks drop out); and before any fix.
         var snapshot = WidgetSnapshot.sample
         snapshot.time = Navigator.sampleTime
-        let map = await MapSnapshot.make(latitude: snapshot.latitude, longitude: snapshot.longitude, size: WidgetTimeline.mapSize)
-        check(map != nil, "Map picture for the large widget")
-        let entries = WidgetTimeline.entries(snapshot: snapshot, map: map, start: Navigator.sampleTime)
+        let entries = WidgetTimeline.entries(snapshot: snapshot, start: Navigator.sampleTime)
         let span = entries.last.map { $0.date.timeIntervalSince(Navigator.sampleTime) } ?? 0
         check(entries.count == 9 && span == 2 * 3600, "Widget timeline: every 15 minutes for 2 hours")
+        let readings = WidgetReadings(snapshot: snapshot, date: Navigator.sampleTime)
+        check(readings.spotText == "9.2 mi · 46° NE" && readings.lockText == "240°",
+              "Widget dial marks: spot \(readings.spotText ?? "none"), lock \(readings.lockText ?? "none")")
+        check(WidgetDial.Density.of(212) == .full && WidgetDial.Density.of(180) == .full && WidgetDial.Density.of(124) == .medium
+              && WidgetDial.Density.of(120) == .medium && WidgetDial.Density.of(80) == .small && WidgetDial.tickStep(212) == 2 && WidgetDial.tickStep(120) == 10,
+              "Widget dial tick density (2° from 180 pt, 10° below)")
+        check(WidgetDial.inUpperHalf(46) && WidgetDial.inUpperHalf(270) && !WidgetDial.inUpperHalf(144) && !WidgetDial.inUpperHalf(258),
+              "Half dial keeps W → N → E; the sun at 144° and the moon at 258° become edge arrows")
+        var plain = snapshot
+        plain.spotLatitude = nil
+        plain.spotLongitude = nil
+        plain.lockBearing = nil
+        let plainEntry = BearingsEntry(date: Navigator.sampleTime, snapshot: plain)
         let empty = BearingsEntry(date: Date(), snapshot: nil)
         for (family, size, name) in widgetSizes {
             check(render(widget(entries[0], family, size), to: folder.appendingPathComponent("widget-\(name).png")), "\(name) widget draws")
+            check(render(widget(plainEntry, family, size), to: folder.appendingPathComponent("widget-\(name)-nospot.png")), "\(name) widget draws without a spot or lock")
             check(render(widget(empty, family, size), to: folder.appendingPathComponent("widget-\(name)-empty.png")), "\(name) widget draws before a fix")
         }
 
@@ -204,10 +217,10 @@ enum SelfTest {
         (.systemLarge, CGSize(width: 364, height: 382), "large"),
     ]
 
-    /// A widget as the desktop shows it: padded, on the widget background, rounded.
+    /// A widget as the desktop shows it: on the widget background, rounded. The widget has no system
+    /// content margins (contentMarginsDisabled); its views keep their own 8 pt inset.
     static func widget(_ entry: BearingsEntry, _ family: WidgetFamily, _ size: CGSize) -> some View {
         WidgetView(entry: entry, family: family)
-            .padding(16)
             .frame(width: size.width, height: size.height)
             .background(WidgetBackground())
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))

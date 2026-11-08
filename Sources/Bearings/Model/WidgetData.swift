@@ -13,7 +13,8 @@ typealias PlatformImage = NSImage
 // path is the same code the app checks.
 
 /// The app's last fix and settings, as the widgets read them: where you were, the place's name, the
-/// elevation and where it came from, when, and the units, coordinate format and marked spot to show.
+/// elevation and where it came from, when, and the units, coordinate format, marked spot and locked
+/// bearing to show on the widgets' north-up dial.
 struct WidgetSnapshot: Codable, Equatable {
     var latitude: Double
     var longitude: Double
@@ -30,6 +31,9 @@ struct WidgetSnapshot: Codable, Equatable {
     var format: String
     var spotLatitude: Double?
     var spotLongitude: Double?
+    /// The locked bearing as a true bearing (degrees from true north), so the widgets' north-up dial can
+    /// draw it; nil when nothing is locked. Older saved snapshots have no such key and decode as nil.
+    var lockBearing: Double? = nil
 
     var coordinateFormat: Geo.Format { Geo.Format(rawValue: format) ?? .dd }
 
@@ -38,6 +42,7 @@ struct WidgetSnapshot: Codable, Equatable {
         if Geo.distance(lat1: latitude, lon1: longitude, lat2: old.latitude, lon2: old.longitude) >= 100 { return true }
         if place != old.place || feet != old.feet || format != old.format { return true }
         if spotLatitude != old.spotLatitude || spotLongitude != old.spotLongitude { return true }
+        if lockBearing != old.lockBearing { return true }
         switch (elevation, old.elevation) {
         case (nil, nil): return false
         case let (a?, b?): return abs(a - b) >= 10
@@ -48,7 +53,7 @@ struct WidgetSnapshot: Codable, Equatable {
     /// Maroon Bells, Colorado: the widget gallery's preview and the self-tests' drawings.
     static let sample = WidgetSnapshot(latitude: 39.09898, longitude: -106.94117, accuracy: 5, elevation: 2922, elevationFromGPS: false,
                                        place: "Maroon Bells, Colorado", time: Date(), feet: true, format: Geo.Format.dd.rawValue,
-                                       spotLatitude: 39.1911, spotLongitude: -106.8175)
+                                       spotLatitude: 39.1911, spotLongitude: -106.8175, lockBearing: 240)
 }
 
 /// The App Group the app writes and the widgets read. On the Mac, the team ID prefix lets a Developer ID

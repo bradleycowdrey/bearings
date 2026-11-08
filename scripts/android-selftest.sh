@@ -7,7 +7,7 @@
 # extraLarge; never saved, so the other shots stay on the Medium default), the map sheet (the "mapSheet"
 # extra), the no-compass state (the "noCompass" extra) in Medium and Extra Large, the sample with nothing
 # locked or marked (the "lock" and "spot" extras, false) and an accessibility font size (1.5, the
-# scrolling list); docs/LAYOUTS.md §8.
+# scrolling list); docs/LAYOUTS.md §8. The self-test also draws the widget's dials (android-widget-*.png).
 # Usage: scripts/android-selftest.sh <apk> <output folder>
 set -uo pipefail
 APK="$1"; OUT="$2"; mkdir -p "$OUT"
@@ -41,6 +41,11 @@ launch --ez selftest true
 for i in $(seq 1 100); do adb shell run-as $ID ls files/report.txt >/dev/null 2>&1 && break; adb emu geo fix -106.94117 39.09898 2925 >/dev/null 2>&1; sleep 1; done
 sleep 3; shot android-2-live
 adb shell run-as $ID cat files/report.txt > "$OUT/report.txt" || echo "FAILED (no report)" > "$OUT/report.txt"
+# The widget's north-up dials as the self-test drew them (Small's half dial, Medium, Large, Large with no spot).
+for w in widget-small widget-medium widget-large widget-large-nospot; do
+  adb exec-out run-as $ID cat files/$w.png > "$OUT/android-$w.png" 2>/dev/null || rm -f "$OUT/android-$w.png"
+  [ -s "$OUT/android-$w.png" ] || rm -f "$OUT/android-$w.png"
+done
 stop
 
 # 3. The sample place: decimal degrees, then MGRS, then night mode (not saved, so later runs start in day mode).

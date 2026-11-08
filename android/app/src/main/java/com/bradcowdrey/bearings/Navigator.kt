@@ -102,7 +102,20 @@ class Navigator(private val context: Context, private val displayRotation: () ->
     var tilt by mutableStateOf<Pair<Float, Float>?>(null); private set
     var ground by mutableStateOf<Ground?>(null); private set
     var groundState by mutableStateOf(GroundState.IDLE); private set
-    var lock by mutableStateOf<Double?>(null)
+    private var lockValue by mutableStateOf<Double?>(null)
+    /**
+     * The locked bearing, on the card (magnetic when magnetic north is chosen). Every change is also written for
+     * the widget as a true bearing (never in the sample), so its north-up ring can show the lock's notch.
+     */
+    var lock: Double?
+        get() = lockValue
+        set(value) {
+            lockValue = value
+            if (!sample) {
+                WidgetData.saveLock(context, value?.let { if (usingTrueNorth) it else Geo.normalize(it + (declination ?: 0.0)) })
+                WidgetUpdates.redraw(context)
+            }
+        }
     var sample by mutableStateOf(false); private set
 
     /** The place's name; null once [placeKnown] means nowhere within 200 km. */
@@ -158,6 +171,8 @@ class Navigator(private val context: Context, private val displayRotation: () ->
     val hasCompass get() = rotationSensor != null || (accelSensor != null && magSensor != null)
 
     init {
+        // A lock lives as long as this screen (it starts unset), so the widget drops one left from before.
+        if (WidgetData.readLock(context) != null) { WidgetData.saveLock(context, null); WidgetUpdates.redraw(context) }
         // The clock, on the minute.
         scope.launch {
             while (true) {

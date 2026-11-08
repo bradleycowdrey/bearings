@@ -88,7 +88,8 @@ import kotlin.math.pow
  * (docs/REFINE.md C2.3 #9), centred on you, north up or turned with your heading. The dot, accuracy circle and
  * heading cone are drawn over its centre. With [controls] (the map card and the map sheet) one vertical stack
  * of 36 dp circles in 48 dp targets sits 12 in from the top-trailing corner (+, −, follow heading, open in your
- * map app; a card under 192 tall shows +, − and ⋯ with the other two in its menu), the speed chip 12 in from
+ * map app; under 192 of free height +, − and ⋯ with the other two in its menu; under 140, as on Small's card over
+ * its band, one row across the top instead, so no button is ever cut), the speed chip 12 in from
  * the top-leading corner, and "© OpenStreetMap" with an (i) for the sources bottom-leading. Without them (the
  * Map tile) it is a north-up thumbnail with gestures off and "© OSM" bottom-trailing. [trueHeading] is from true
  * north, as the map is. [topInset] and [bottomInset] keep the controls and the attribution clear of a bar over
@@ -126,19 +127,33 @@ fun MapSnippet(
             // then tints red.
             if (night) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 1f - MapDark.NIGHT_BRIGHTNESS)))
             if (controls) {
-                // One vertical stack everywhere: 36 dp circles 8 apart, 12 in from the top-trailing corner (each
-                // sits in a 44 dp cell, its 48 dp target reaching 2 past it). All four need 192 of height.
-                val all = maxHeight - topInset >= 192.dp
-                Column(Modifier.align(Alignment.TopEnd).padding(top = 8.dp + topInset, end = 8.dp)) {
-                    MapButton(Icons.Filled.Add, "Zoom in") { zoom = (zoom + 1).coerceAtMost(19.0) }
-                    MapButton(Icons.Filled.Remove, "Zoom out") { zoom = (zoom - 1).coerceAtLeast(3.0) }
-                    if (all) {
+                // The control stack, fitted to the map left between any bar over it (topInset) and Small's band under it
+                // (bottomInset): 36 dp circles in 44 dp cells, 8 in from the top-trailing corner. All four in a column
+                // need 192 of height; +, − and ⋯ (the other two in its menu) need 140; shorter than that they go in one
+                // row across the top, as on Apple: all four from 300 dp wide, else +, − and ⋯.
+                val room = maxHeight - topInset - bottomInset
+                val stack = when {
+                    room >= 192.dp -> MapStack.COLUMN_ALL
+                    room >= 140.dp -> MapStack.COLUMN_SHORT
+                    maxWidth >= 300.dp -> MapStack.ROW_ALL
+                    else -> MapStack.ROW_SHORT
+                }
+                val zoomIn: @Composable () -> Unit = { MapButton(Icons.Filled.Add, "Zoom in") { zoom = (zoom + 1).coerceAtMost(19.0) } }
+                val zoomOut: @Composable () -> Unit = { MapButton(Icons.Filled.Remove, "Zoom out") { zoom = (zoom - 1).coerceAtLeast(3.0) } }
+                val rest: @Composable () -> Unit = {
+                    if (stack == MapStack.COLUMN_ALL || stack == MapStack.ROW_ALL) {
                         MapButton(if (follow) Icons.Filled.Navigation else Icons.Outlined.Navigation,
                             if (follow) "Map follows your heading. Switch to north up" else "Map is north up. Switch to follow your heading", on = follow, onClick = onToggleFollow)
                         MapButton(Icons.AutoMirrored.Filled.OpenInNew, "Open in your map app") { onOpen(fix) }
                     } else {
                         MapOverflow(follow, night, onToggleFollow) { onOpen(fix) }
                     }
+                }
+                val place = Modifier.align(Alignment.TopEnd).padding(top = 8.dp + topInset, end = 8.dp)
+                if (stack == MapStack.COLUMN_ALL || stack == MapStack.COLUMN_SHORT) {
+                    Column(place) { zoomIn(); zoomOut(); rest() }
+                } else {
+                    Row(place) { zoomIn(); zoomOut(); rest() }
                 }
                 if (speed != null) {
                     Text(speed, style = text(13f, FontWeight.SemiBold, Color.White),
@@ -152,6 +167,9 @@ fun MapSnippet(
         if (edge) Box(Modifier.matchParentSize().border(Look.stroke, Palette.tileStroke, shape))
     }
 }
+
+/** How the map's controls are laid out for the room they have. */
+private enum class MapStack { COLUMN_ALL, COLUMN_SHORT, ROW_ALL, ROW_SHORT }
 
 /** ⋯ on a short card: Follow Heading (or North Up) and Open in Maps. */
 @Composable
@@ -224,10 +242,17 @@ private val SOURCES = listOf(
  * tile), on a 1.5 dp #0F3B3A halo, at 70% in the tile. POI labels are hidden on a map under 160 dp tall and
  * road shields on one under 200 dp wide. The self-test checks these values ([labelColor], [labelFont]).
  *
- * Labels never draw as solid blocks: every symbol layer is set to [FONT], a stack OpenFreeMap's glyph server
- * serves (the Liberty style's own regular), and once per run [probeGlyphs] fetches that stack's first range; if it
- * can't be loaded (no network to the glyph host, an error page), every symbol layer is hidden rather than drawn
- * without its glyphs.
+ * Labels never draw as solid blocks. The blocks in CI's screenshots were not a font problem: each one is a word's
+ * glyph quads filled solid, so the glyphs did load (the block widths follow the letters) but their signed-distance
+ * texture read back as fully opaque. MapLibre keeps the glyph atlas in a one-channel GL_ALPHA texture and its text
+ * shader reads that texture's alpha; a GPU stack that can't sample GL_ALPHA (the emulator's GL translation stores it
+ * without the alpha swizzle, or leaves it incomplete, and both read alpha 1) turns every glyph into a box, whatever
+ * the font. Icons (RGBA sprites) are unaffected, which is why only the labels broke. So once per run
+ * [probeAlphaTextures] uploads a small GL_ALPHA texture at 25% in an off-screen GL ES 3 (else 2) context, draws
+ * it and reads the pixel back; if the GPU returns anything but about 25%, every label's text is hidden (text
+ * opacity 0; icons stay) rather than drawn as blocks. Separately every symbol layer is set to [FONT], a stack OpenFreeMap's glyph server
+ * serves (the Liberty style's own regular), and [probeGlyphs] fetches that stack's first range; if it can't be loaded
+ * (no network to the glyph host, an error page), every symbol layer is hidden.
  */
 object MapDark {
     const val LAND = "#0F3B3A"
@@ -267,6 +292,130 @@ object MapDark {
         glyphsOk = ok
         return ok
     }
+    /**
+     * Whether this GPU samples MapLibre's one-channel glyph texture correctly: null until [probeAlphaTextures] has
+     * run, then the answer for the rest of the run. False hides the labels' text.
+     */
+    @Volatile var alphaTexturesOk: Boolean? = null
+    /** What the probe read back (0–255; 64 is right), or null when it couldn't run; for the self-test's report. */
+    @Volatile var alphaProbeValue: Int? = null
+
+    /** Runs the GL_ALPHA probe once (off the main thread). A probe that can't run (no EGL) leaves the labels on. */
+    fun probeAlphaTextures(): Boolean {
+        alphaTexturesOk?.let { return it }
+        val value = runCatching { sampleAlphaTexture(3) ?: sampleAlphaTexture(2) }.getOrNull()
+        alphaProbeValue = value
+        val ok = value == null || value in 40..90
+        alphaTexturesOk = ok
+        return ok
+    }
+
+    /** The probe's result in words, for the self-test. */
+    val labelState: String
+        get() = when (alphaTexturesOk) {
+            null -> "GPU text check not run"
+            true -> "GPU draws glyph textures" + (alphaProbeValue?.let { " (alpha $it of 64)" } ?: " (check couldn't run)")
+            false -> "GPU reads glyph textures as ${alphaProbeValue ?: "?"} of 64: label text hidden, never blocks"
+        }
+
+    /**
+     * Uploads a 6 × 3 GL_ALPHA texture at 64 (25%; not a power of two, linear, clamped, like a glyph atlas), draws
+     * it over a 4 × 4 off-screen surface with a shader that writes the texture's alpha to red (as MapLibre's text
+     * shader reads it), and returns the red read back. Null when no OpenGL ES [version] context can be made here.
+     */
+    private fun sampleAlphaTexture(version: Int): Int? {
+        val display = android.opengl.EGL14.eglGetDisplay(android.opengl.EGL14.EGL_DEFAULT_DISPLAY)
+        if (display == android.opengl.EGL14.EGL_NO_DISPLAY) return null
+        val v = IntArray(2)
+        if (!android.opengl.EGL14.eglInitialize(display, v, 0, v, 1)) return null
+        val renderable = if (version >= 3) 0x40 /* EGL_OPENGL_ES3_BIT_KHR */ else android.opengl.EGL14.EGL_OPENGL_ES2_BIT
+        val attribs = intArrayOf(
+            android.opengl.EGL14.EGL_RENDERABLE_TYPE, renderable,
+            android.opengl.EGL14.EGL_SURFACE_TYPE, android.opengl.EGL14.EGL_PBUFFER_BIT,
+            android.opengl.EGL14.EGL_RED_SIZE, 8, android.opengl.EGL14.EGL_GREEN_SIZE, 8,
+            android.opengl.EGL14.EGL_BLUE_SIZE, 8, android.opengl.EGL14.EGL_ALPHA_SIZE, 8,
+            android.opengl.EGL14.EGL_NONE,
+        )
+        val configs = arrayOfNulls<android.opengl.EGLConfig>(1)
+        val count = IntArray(1)
+        if (!android.opengl.EGL14.eglChooseConfig(display, attribs, 0, configs, 0, 1, count, 0) || count[0] == 0) return null
+        val config = configs[0] ?: return null
+        val context = android.opengl.EGL14.eglCreateContext(display, config, android.opengl.EGL14.EGL_NO_CONTEXT,
+            intArrayOf(android.opengl.EGL14.EGL_CONTEXT_CLIENT_VERSION, version, android.opengl.EGL14.EGL_NONE), 0)
+        if (context == null || context == android.opengl.EGL14.EGL_NO_CONTEXT) return null
+        val surface = android.opengl.EGL14.eglCreatePbufferSurface(display, config,
+            intArrayOf(android.opengl.EGL14.EGL_WIDTH, 4, android.opengl.EGL14.EGL_HEIGHT, 4, android.opengl.EGL14.EGL_NONE), 0)
+        try {
+            if (surface == null || surface == android.opengl.EGL14.EGL_NO_SURFACE) return null
+            if (!android.opengl.EGL14.eglMakeCurrent(display, surface, surface, context)) return null
+            return drawAlphaTexture()
+        } finally {
+            android.opengl.EGL14.eglMakeCurrent(display, android.opengl.EGL14.EGL_NO_SURFACE, android.opengl.EGL14.EGL_NO_SURFACE,
+                android.opengl.EGL14.EGL_NO_CONTEXT)
+            if (surface != null && surface != android.opengl.EGL14.EGL_NO_SURFACE) android.opengl.EGL14.eglDestroySurface(display, surface)
+            android.opengl.EGL14.eglDestroyContext(display, context)
+        }
+    }
+
+    /** The GL half of the probe, in the current context. */
+    private fun drawAlphaTexture(): Int? {
+        fun shader(type: Int, source: String): Int {
+            val id = android.opengl.GLES20.glCreateShader(type)
+            android.opengl.GLES20.glShaderSource(id, source)
+            android.opengl.GLES20.glCompileShader(id)
+            return id
+        }
+        val program = android.opengl.GLES20.glCreateProgram()
+        val vs = shader(android.opengl.GLES20.GL_VERTEX_SHADER, "attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }")
+        val fs = shader(android.opengl.GLES20.GL_FRAGMENT_SHADER,
+            "precision mediump float; uniform sampler2D t; void main() { gl_FragColor = vec4(texture2D(t, vec2(0.5, 0.5)).a, 0.0, 0.0, 1.0); }")
+        android.opengl.GLES20.glAttachShader(program, vs)
+        android.opengl.GLES20.glAttachShader(program, fs)
+        android.opengl.GLES20.glBindAttribLocation(program, 0, "p")
+        android.opengl.GLES20.glLinkProgram(program)
+        val linked = IntArray(1)
+        android.opengl.GLES20.glGetProgramiv(program, android.opengl.GLES20.GL_LINK_STATUS, linked, 0)
+        val textures = IntArray(1)
+        try {
+            if (linked[0] == 0) return null
+            android.opengl.GLES20.glUseProgram(program)
+            android.opengl.GLES20.glGenTextures(1, textures, 0)
+            android.opengl.GLES20.glActiveTexture(android.opengl.GLES20.GL_TEXTURE0)
+            android.opengl.GLES20.glBindTexture(android.opengl.GLES20.GL_TEXTURE_2D, textures[0])
+            android.opengl.GLES20.glPixelStorei(android.opengl.GLES20.GL_UNPACK_ALIGNMENT, 1)
+            // 6 × 3: not a power of two, filtered linearly and clamped, as a glyph atlas is.
+            val pixels = java.nio.ByteBuffer.allocateDirect(18)
+            repeat(18) { pixels.put(64.toByte()) }
+            pixels.position(0)
+            android.opengl.GLES20.glTexImage2D(android.opengl.GLES20.GL_TEXTURE_2D, 0, android.opengl.GLES20.GL_ALPHA, 6, 3, 0,
+                android.opengl.GLES20.GL_ALPHA, android.opengl.GLES20.GL_UNSIGNED_BYTE, pixels)
+            for ((name, value) in listOf(
+                android.opengl.GLES20.GL_TEXTURE_MIN_FILTER to android.opengl.GLES20.GL_LINEAR,
+                android.opengl.GLES20.GL_TEXTURE_MAG_FILTER to android.opengl.GLES20.GL_LINEAR,
+                android.opengl.GLES20.GL_TEXTURE_WRAP_S to android.opengl.GLES20.GL_CLAMP_TO_EDGE,
+                android.opengl.GLES20.GL_TEXTURE_WRAP_T to android.opengl.GLES20.GL_CLAMP_TO_EDGE,
+            )) android.opengl.GLES20.glTexParameteri(android.opengl.GLES20.GL_TEXTURE_2D, name, value)
+            android.opengl.GLES20.glUniform1i(android.opengl.GLES20.glGetUniformLocation(program, "t"), 0)
+            val quad = java.nio.ByteBuffer.allocateDirect(8 * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+            quad.put(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)).position(0)
+            android.opengl.GLES20.glEnableVertexAttribArray(0)
+            android.opengl.GLES20.glVertexAttribPointer(0, 2, android.opengl.GLES20.GL_FLOAT, false, 0, quad)
+            android.opengl.GLES20.glViewport(0, 0, 4, 4)
+            android.opengl.GLES20.glClearColor(0f, 0f, 0f, 1f)
+            android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
+            android.opengl.GLES20.glDrawArrays(android.opengl.GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            val out = java.nio.ByteBuffer.allocateDirect(4).order(java.nio.ByteOrder.nativeOrder())
+            android.opengl.GLES20.glReadPixels(1, 1, 1, 1, android.opengl.GLES20.GL_RGBA, android.opengl.GLES20.GL_UNSIGNED_BYTE, out)
+            if (android.opengl.GLES20.glGetError() != android.opengl.GLES20.GL_NO_ERROR) return null
+            return out.get(0).toInt() and 0xFF
+        } finally {
+            if (textures[0] != 0) android.opengl.GLES20.glDeleteTextures(1, textures, 0)
+            android.opengl.GLES20.glDeleteShader(vs)
+            android.opengl.GLES20.glDeleteShader(fs)
+            android.opengl.GLES20.glDeleteProgram(program)
+        }
+    }
+
     const val POI_MIN_HEIGHT = 160
     const val SHIELD_MIN_WIDTH = 200
     /** Night: the map at 35% of its brightness, then the screen's red multiply. */
@@ -308,14 +457,17 @@ object MapDark {
                         val hidden = (poi && !labels.poi) || (shield && !labels.shields)
                         layer.setProperties(PropertyFactory.visibility(if (hidden) Property.NONE else Property.VISIBLE))
                     }
+                    // A GPU that reads the glyph texture as solid would draw every label as blocks: no text then (nor
+                    // for the few milliseconds before the check answers; a check that can't run counts as a yes).
+                    val textOn = alphaTexturesOk == true
                     layer.setProperties(
                         PropertyFactory.textColor(LABEL),
                         PropertyFactory.textHaloColor(HALO),
-                        PropertyFactory.textHaloWidth(HALO_WIDTH),
+                        PropertyFactory.textHaloWidth(if (textOn) HALO_WIDTH else 0f),
                         PropertyFactory.textHaloBlur(0f),
                         PropertyFactory.textFont(FONT),
                         PropertyFactory.textSize(if (labels.tile) LABEL_SIZE_TILE else LABEL_SIZE),
-                        PropertyFactory.textOpacity(if (labels.tile) TILE_OPACITY else 1f),
+                        PropertyFactory.textOpacity(if (!textOn) 0f else if (labels.tile) TILE_OPACITY else 1f),
                     )
                 }
                 else -> {}
@@ -365,12 +517,15 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) view.onResume()
             onDispose { lifecycle.removeObserver(observer); view.onPause(); view.onStop(); view.onDestroy() }
         }
-        // Whether the labels' glyphs load (once per run; until then the labels are drawn as the style asks).
+        // Whether the labels' glyphs load and whether this GPU can draw them (once per run each; until then the labels
+        // are drawn as the style asks).
         var glyphs by remember { mutableStateOf(MapDark.glyphsOk) }
+        var gpuText by remember { mutableStateOf(MapDark.alphaTexturesOk) }
         LaunchedEffect(Unit) { if (glyphs == null) glyphs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { MapDark.probeGlyphs() } }
-        // The dark colours and the label rules, again whenever the map's size changes which labels show or the glyph
-        // check answers.
-        LaunchedEffect(style, labels, glyphs) { style?.let { MapDark.apply(it, labels) } }
+        LaunchedEffect(Unit) { if (gpuText == null) gpuText = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { MapDark.probeAlphaTextures() } }
+        // The dark colours and the label rules, again whenever the map's size changes which labels show or a check
+        // answers.
+        LaunchedEffect(style, labels, glyphs, gpuText) { style?.let { MapDark.apply(it, labels) } }
         // One camera for position, zoom and bearing together, so no change cancels another halfway.
         LaunchedEffect(fix.latitude, fix.longitude, zoom, bearing, map) {
             val m = map ?: return@LaunchedEffect
