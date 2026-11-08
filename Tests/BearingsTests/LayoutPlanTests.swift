@@ -2,9 +2,9 @@ import CoreGraphics
 import XCTest
 @testable import Bearings
 
-/// The Concept A planner (docs/REFINE.md "Concept A (chosen)", Option 1; docs/LAYOUTS.md): the dial first,
-/// 18 under the safe top, then the readout, the status line, the location card, the Targets card and the
-/// layout's tiles or map; every gap a frozen token; spare spent in a fixed order; nothing cut; every row's
+/// The Concept A planner (docs/REFINE.md "Concept A (chosen)", Option 1 with the owner's mod; docs/LAYOUTS.md):
+/// the slim 40 pt location bar first, 8 under the safe top, then the dial 12 under it, the readout, the status
+/// line, the Targets card and the layout's tiles or map; every gap a frozen token; spare spent in a fixed order; nothing cut; every row's
 /// widths adding up to C; the four layouts different from each other; and the owner's hard rule: in
 /// portrait, one column, no dial under 0.40 H. The same golden table runs in the Mac and iPhone self-tests
 /// (which also check the drawing against the plan) and, ported, on Android.
@@ -40,9 +40,9 @@ final class LayoutPlanTests: XCTestCase {
         XCTAssertEqual(LayoutPlan.tableFailures(), [])
     }
 
-    /// A.1: the dial's top is the safe top + 18 (12 after giving way; a Mac window 28 + 18), and every gap
-    /// is its token: dial → readout 12, readout → status 6 × k, status → location card 12 (8), 8 between the
-    /// cards and the grid. The stack fills to its end, with 24 or less left at the bottom unless centred.
+    /// A.1 with the owner's mod: the location bar's top is the safe top + 8 (a Mac window 28 + 8), 40 × k
+    /// high, the dial 12 under it (8 after giving way), and every gap is its token: dial → readout 12,
+    /// readout → status 6 × k, status → Targets card 12 (8), 8 between the cards and the grid. The stack fills to its end, with 24 or less left at the bottom unless centred.
     func testFrozenRhythm() {
         for d in phones {
             for layout in Layout.allCases {
@@ -53,10 +53,12 @@ final class LayoutPlanTests: XCTestCase {
                         let name = "\(d.name) \(layout.rawValue) \(state.name) k\(k)"
                         let tight = p.steps.contains(.tight)
                         XCTAssertEqual(p.topBand, d.mac ? 28 : 0, name)
-                        XCTAssertEqual(p.gapTopDial, tight ? 12 : 18, name)
+                        XCTAssertEqual(p.gapTopCard, 8, name)
+                        XCTAssertEqual(p.gapCardDial, tight ? 8 : 12, name)
+                        XCTAssertEqual(p.cardHeight, 40 * p.k, accuracy: 0.01, name)
                         XCTAssertEqual(p.gapDialReadout, 12, name)
                         XCTAssertEqual(p.gapReadoutStatus, 6 * p.k, accuracy: 0.01, name)
-                        XCTAssertEqual(p.gapStatusCard, tight ? 8 : 12, name)
+                        XCTAssertEqual(p.gapStatusTargets, tight ? 8 : 12, name)
                         XCTAssertEqual(p.gap, 8, name)
                         if p.list {
                             XCTAssertEqual(p.grid, .list, name)
@@ -83,14 +85,18 @@ final class LayoutPlanTests: XCTestCase {
                 }
             }
         }
-        // A Mac window: 28 + 18 to the dial, 24 at the sides and the bottom.
-        let mac = LayoutPlan.plan(w: 420, h: 840, s: 840, mac: true)
-        XCTAssertEqual(mac.dialTop, 46, accuracy: 0.01)
+        // A Mac window: the bar at 28 + 8, the dial at 36 + 40 + 12 = 88; 24 at the sides and the bottom.
+        let mac = LayoutPlan.plan(w: 420, h: 840, s: 840, hasSpot: true, locked: true, mac: true)
+        XCTAssertEqual(mac.locationTop, 36, accuracy: 0.01)
+        XCTAssertEqual(mac.dialTop, 88, accuracy: 0.01)
         XCTAssertEqual(mac.margin, 24)
         XCTAssertEqual(mac.bottomInset, 24)
-        // iPhone 16 Pro: the dial at 62 + 18 = 80 on screen; the stack ends at 874 − 34 = 840.
+        // iPhone 16 Pro: the bar at 62 + 8 = 70 on screen (70–110), the dial at 122; the stack ends at
+        // 874 − 34 = 840.
         let pro = LayoutPlan.plan(w: 402, h: 874, s: 778, hasSpot: true, locked: true)
-        XCTAssertEqual(pro.dialTop + 62, 80, accuracy: 0.01)
+        XCTAssertEqual(pro.locationTop + 62, 70, accuracy: 0.01)
+        XCTAssertEqual(pro.cardHeight, 40, accuracy: 0.01)
+        XCTAssertEqual(pro.dialTop + 62, 122, accuracy: 0.01)
         XCTAssertEqual(pro.end + 62, 840, accuracy: 0.01)
     }
 
@@ -104,7 +110,7 @@ final class LayoutPlanTests: XCTestCase {
         XCTAssertEqual(small.grid, .band)
         XCTAssertEqual(small.map, .card)
         XCTAssertEqual(small.dial, 352, accuracy: 0.5)
-        XCTAssertEqual(small.mapHeight, 166, accuracy: 2)
+        XCTAssertEqual(small.mapHeight, 180, accuracy: 2)
         XCTAssertEqual(small.targetsRowHeight, 44, accuracy: 0.5)
 
         let medium = plan(.medium)
@@ -112,10 +118,12 @@ final class LayoutPlanTests: XCTestCase {
         XCTAssertEqual(medium.grid, .quad)
         XCTAssertEqual(medium.map, .tile)
         XCTAssertEqual(medium.dial, 352, accuracy: 0.5)
-        XCTAssertEqual(medium.locationTop + 62, 522, accuracy: 1)
+        XCTAssertEqual(medium.locationTop + 62, 70, accuracy: 0.5)
+        XCTAssertEqual(medium.dialTop + 62, 122, accuracy: 0.5)
+        XCTAssertEqual(medium.targetsTop + 62, 564.3, accuracy: 1)
         XCTAssertEqual(medium.targetsRows, 2)
         XCTAssertEqual(medium.targetsRowHeight, 44, accuracy: 0.5)
-        XCTAssertEqual(medium.tileHeight, 79, accuracy: 1)
+        XCTAssertEqual(medium.tileHeight, 85.8, accuracy: 1)
         XCTAssertEqual(medium.used + 62, 840, accuracy: 0.5)
         XCTAssertEqual(medium.cells.map(\.count), [2, 2])
         XCTAssertEqual(medium.cells.last?.last?.tile, LayoutPlan.Tile.map)
@@ -123,8 +131,8 @@ final class LayoutPlanTests: XCTestCase {
         let large = plan(.large)
         XCTAssertEqual(large.grid, .six)
         XCTAssertEqual(large.map, .button)
-        XCTAssertEqual(large.dial, 365.7, accuracy: 1)
-        XCTAssertEqual(large.tileHeight, LayoutPlan.tile, accuracy: 0.5)
+        XCTAssertEqual(large.dial, 368, accuracy: 0.5)
+        XCTAssertEqual(large.tileHeight, 77.8, accuracy: 1)
         XCTAssertEqual(large.sixth, .pressure)
         XCTAssertEqual(large.cells.map { $0.map(\.tile) }, [[.latitude, .longitude, .elevation], [.sunrise, .moon, .sixth]])
 
@@ -201,7 +209,8 @@ final class LayoutPlanTests: XCTestCase {
         XCTAssertEqual(se.grid, .row)
         XCTAssertEqual(se.map, .button)
         XCTAssertEqual(se.steps, [.button])
-        XCTAssertEqual(se.gapTopDial, 18)
+        XCTAssertEqual(se.gapCardDial, 12)
+        XCTAssertEqual(se.gapStatusTargets, 12)
         XCTAssertEqual(se.targetsRowHeight, 44, accuracy: 0.5)
         XCTAssertEqual(se.tileHeight, LayoutPlan.tileGrown, accuracy: 0.5)
         XCTAssertEqual(se.cells.map(\.count), [3])
@@ -289,9 +298,10 @@ final class LayoutPlanTests: XCTestCase {
         }
     }
 
-    /// A.11: in every portrait plan the location card's top is the status line's bottom + 12 (8 after giving
-    /// way), and nothing sits above the dial.
-    func testLocationCardBelowStatus() {
+    /// The owner's mod: in every portrait plan the location bar comes first, at the safe top + 8 (a Mac window
+    /// 28 + 8), 40 × k high and the column's width; the dial is 12 under it (8 after giving way, plus any
+    /// centring spare); the Targets card (or the grid) is 12 (8) under the status line.
+    func testLocationBarAtTop() {
         for d in phones {
             for layout in Layout.allCases {
                 for state in states {
@@ -299,9 +309,15 @@ final class LayoutPlanTests: XCTestCase {
                         let p = LayoutPlan.plan(w: d.w, h: d.h, s: d.s, layout: layout, k: k,
                                                 hasSpot: state.spot, locked: state.locked, mac: d.mac)
                         let name = "\(d.name) \(layout.rawValue) \(state.name) k\(k)"
-                        XCTAssertEqual(p.locationTop, p.statusBottom + (p.steps.contains(.tight) ? 8 : 12), accuracy: 0.01, name)
-                        XCTAssertGreaterThan(p.locationTop, p.dialTop + p.dial, name)
-                        XCTAssertEqual(p.dialTop, p.topBand + p.gapTopDial + p.topExtra, accuracy: 0.01, name)
+                        let tight: CGFloat = p.steps.contains(.tight) ? 8 : 12
+                        XCTAssertEqual(p.locationTop, p.topBand + 8, accuracy: 0.01, name)
+                        XCTAssertEqual(p.cardHeight, 40 * p.k, accuracy: 0.01, name)
+                        XCTAssertGreaterThanOrEqual(p.cardHeight, 40, name)
+                        XCTAssertEqual(p.dialTop, p.locationTop + p.cardHeight + tight + p.topExtra, accuracy: 0.01, name)
+                        if p.list { continue }
+                        XCTAssertEqual(p.cardWidth, p.columnWidth, accuracy: 0.01, name)
+                        XCTAssertEqual(p.lowerTop, p.statusBottom + tight, accuracy: 0.01, name)
+                        XCTAssertGreaterThan(p.targetsTop, p.statusBottom, name)
                     }
                 }
             }
@@ -388,7 +404,8 @@ final class LayoutPlanTests: XCTestCase {
             let p = LayoutPlan.plan(w: w, h: h, s: h, mac: true)
             XCTAssertEqual(p.margin, 24)
             XCTAssertEqual(p.bottomInset, 24)
-            XCTAssertEqual(p.dialTop, 46, accuracy: 0.01)
+            XCTAssertEqual(p.locationTop, 36, accuracy: 0.01)
+            XCTAssertEqual(p.dialTop - p.topExtra, 88, accuracy: 0.01)
         }
         for layout in Layout.allCases {
             let p = LayoutPlan.plan(w: LayoutPlan.macMinWidth, h: LayoutPlan.macMinHeight, s: LayoutPlan.macMinHeight,
@@ -398,14 +415,14 @@ final class LayoutPlanTests: XCTestCase {
     }
 
     /// A.8: iPad portrait: one column at most 720, the regular-width ramp (tiles 96, captions 13, values 22,
-    /// location card 56, Targets rows 52, readout 96), the dial at ceil8(0.40 H) in Medium with a map card under
+    /// the 40 pt location bar as on a phone, Targets rows 52, readout 96), the dial at ceil8(0.40 H) in Medium with a map card under
     /// the quad.
     func testIPad() {
         let ipad = LayoutPlan.plan(w: 834, h: 1210, s: 1166, hasSpot: true, locked: true)
         XCTAssertTrue(ipad.tablet)
         XCTAssertLessThanOrEqual(ipad.columnWidth, 720)
         XCTAssertEqual(ipad.headingSize, 96)
-        XCTAssertEqual(ipad.cardHeight, 56)
+        XCTAssertEqual(ipad.cardHeight, 40)
         XCTAssertEqual(ipad.targetsRowHeight, 52)
         XCTAssertEqual(ipad.tileHeight, 96)
         XCTAssertEqual(ipad.grid, .quad)
@@ -437,7 +454,7 @@ final class LayoutPlanTests: XCTestCase {
         XCTAssertEqual(Palette.Op.noHeading, 0.55)
     }
 
-    /// As drawn: the location card where planned, "No heading" under the dial, grids as each layout plans
+    /// As drawn: the location bar where planned (first, 40 high), "No heading" under the dial, grids as each layout plans
     /// (and different), and the bottom as the plan left it, in every layout and in the sample, no-compass and
     /// live states.
     @MainActor
@@ -500,8 +517,8 @@ final class LayoutPlanTests: XCTestCase {
         XCTAssertNil(Layout.extraLarge.larger)
     }
 
-    /// A.7: accessibility sizes scroll as one list: the dial (0.40 H), the readout, the status line, then
-    /// the location card, the Targets card, 96 rows and a 176 Map tile.
+    /// A.7: accessibility sizes scroll as one list: the location bar (wrapping, at least 40), the dial
+    /// (0.40 H), the readout, the status line, then the Targets card, 96 rows and a 176 Map tile.
     func testAccessibilityTextScrollsAsOneList() {
         for layout in Layout.allCases {
             let p = LayoutPlan.plan(w: 402, h: 874, s: 778, layout: layout, k: 1.3, accessibilityText: true,
@@ -512,14 +529,17 @@ final class LayoutPlanTests: XCTestCase {
             XCTAssertEqual(p.rowHeights, [96, 96, 96, 96], layout.rawValue)
             XCTAssertEqual(p.mapHeight, LayoutPlan.listMap, accuracy: 0.5, layout.rawValue)
             XCTAssertEqual(p.targetsRowHeight, LayoutPlan.listTargetsRow, accuracy: 0.5, layout.rawValue)
-            // The location card after the status line.
-            XCTAssertGreaterThan(p.locationTop, p.statusBottom, layout.rawValue)
+            // The location bar first; the Targets card after the status line.
+            XCTAssertLessThan(p.locationTop + p.cardHeight, p.dialTop, layout.rawValue)
+            XCTAssertGreaterThanOrEqual(p.cardHeight, 40, layout.rawValue)
+            XCTAssertGreaterThan(p.targetsTop, p.statusBottom, layout.rawValue)
             XCTAssertGreaterThan(p.gridTop, p.targetsTop, layout.rawValue)
         }
     }
 
-    /// A.8: two panes: no full-width header (the location card level with the dial's top in the right pane),
-    /// the right pane's spare 24 or less, and a map card of 240 or more; the four plans are four.
+    /// A.8 with the owner's mod: two panes: the location bar full width at the top (as in portrait), then the
+    /// dial and the right pane level 12 under it, the right pane's spare 24 or less, and a map card of 240 or
+    /// more; the four plans are four.
     func testTwoPanes() {
         let windows: [(w: CGFloat, h: CGFloat, s: CGFloat, mac: Bool)] = [(1210, 834, 790, false), (1376, 1032, 988, false), (1200, 800, 800, true)]
         for (w, h, s, mac) in windows {
@@ -528,7 +548,10 @@ final class LayoutPlanTests: XCTestCase {
                 let p = LayoutPlan.plan(w: w, h: h, s: s, layout: layout, hasSpot: true, locked: true, mac: mac)
                 let name = "\(Int(w))x\(Int(h)) \(layout.rawValue)"
                 XCTAssertTrue(p.twoPane, name)
-                XCTAssertEqual(p.locationTop, p.dialTop, accuracy: 0.01, name)
+                XCTAssertEqual(p.locationTop, p.topBand + 8, accuracy: 0.01, name)
+                XCTAssertEqual(p.dialTop, p.locationTop + 40 + 12, accuracy: 0.01, name)
+                XCTAssertEqual(p.targetsTop, p.dialTop, accuracy: 0.01, name)
+                XCTAssertEqual(p.cardWidth, w - 48, accuracy: 0.01, name)
                 XCTAssertGreaterThanOrEqual(p.trailingWidth, LayoutPlan.paneMin - 0.5, name)
                 XCTAssertLessThanOrEqual(p.trailingWidth, LayoutPlan.paneMax + 0.5, name)
                 XCTAssertEqual(p.map, .card, name)

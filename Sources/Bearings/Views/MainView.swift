@@ -11,16 +11,17 @@ fileprivate typealias PlatformFont = UIFont
 fileprivate typealias PlatformFont = NSFont
 #endif
 
-/// Bearings' one screen, Concept A "Instrument Panel (Targets + Grid)", Option 1 (docs/REFINE.md "Concept A
-/// (chosen)"): one fixed, non-scrolling screen that starts with the dial, 18 under the safe top, then the
-/// readout, the status line, the location card (the sky card with the place, the time, the map button
-/// where a layout has one, and ⋯), one Targets card (the lock and the marked spot, only those that exist)
-/// and the layout's tiles or map: Small a map card with a band, Medium a 2 × 2 with the Map tile, Large a
+/// Bearings' one screen, Concept A "Instrument Panel (Targets + Grid)", Option 1 with the owner's mod
+/// (docs/REFINE.md "Concept A (chosen)", "Owner mod"): one fixed, non-scrolling screen that starts with the
+/// slim 40 pt location bar 8 under the safe top (the sky bar with the place, the time, the map button where
+/// a layout has one, and ⋯), then the dial 12 under it, the readout, the status line, one Targets card (the
+/// lock and the marked spot, only those that exist) and the layout's tiles or map: Small a map card with a band, Medium a 2 × 2 with the Map tile, Large a
 /// 3 × 2, Extra Large one summary strip. Every frame comes from the planner (`LayoutPlan`), so what is
 /// drawn is what was planned (and the self-tests check the drawing against the plan). No value is ever
 /// ellipsized (it scales to 0.85, then the layout gives way); at accessibility text sizes the whole screen
-/// becomes one scrolling list. Wide windows and phones on their side get two panes: the dial on the left,
-/// the location card, Targets, the grid and a map card on the right. The same view on Mac, iPhone and iPad.
+/// becomes one scrolling list. Wide windows and phones on their side get two panes under the full-width
+/// location bar: the dial on the left, Targets, the grid and a map card on the right. The same view on Mac,
+/// iPhone and iPad.
 struct MainView: View {
     @EnvironmentObject private var nav: Navigator
     /// "Bearings 0.2.0 is available" on the Mac (nil elsewhere).
@@ -159,15 +160,18 @@ struct MainView: View {
 
     // MARK: The three arrangements
 
-    /// One column, C wide, centred: the dial at the plan's top, every block at its planned height and gap.
+    /// One column, C wide, centred: the location bar at the plan's top, then the dial 12 under it, every
+    /// block at its planned height and gap.
     private func singleColumn(_ plan: LayoutPlan) -> some View {
         VStack(spacing: 0) {
+            locationCard(plan)
+                .padding(.top, plan.locationTop)
             dial(side: plan.dial)
-                .padding(.top, plan.dialTop)
+                .padding(.top, plan.gapCardDial + plan.topExtra)
             readoutGroup(plan)
                 .padding(.top, plan.gapDialReadout)
             lowerStack(plan)
-                .padding(.top, plan.gapStatusCard)
+                .padding(.top, plan.gapStatusTargets)
             Spacer(minLength: 0)
         }
         .padding(.bottom, plan.bottomInset)
@@ -175,48 +179,55 @@ struct MainView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    /// Everything under the status line (one column), or the whole right pane (two panes): the location
-    /// card, the Mac's update banner, the Targets card, the grid, the map card, 8 apart.
+    /// Everything under the status line (one column), or the whole right pane (two panes): the Mac's update
+    /// banner, the Targets card, the grid, the map card, 8 apart (the first one with no gap of its own: the
+    /// caller puts it 12 under the status line, or level with the dial).
     private func lowerStack(_ plan: LayoutPlan) -> some View {
-        VStack(spacing: 0) {
-            locationCard(plan)
+        let afterBanner: Bool = update != nil
+        let afterTargets: Bool = afterBanner || plan.hasTargets
+        let afterGrid: Bool = afterTargets || plan.gridHeight > 0
+        return VStack(spacing: 0) {
             if let update {
                 updateBanner(update)
-                    .padding(.top, plan.gap)
             }
             if plan.hasTargets {
                 targetsCard(plan)
-                    .padding(.top, plan.gap)
+                    .padding(.top, afterBanner ? plan.gap : 0)
             }
             if plan.gridHeight > 0 {
                 tileGrid(plan)
-                    .padding(.top, plan.gap)
+                    .padding(.top, afterTargets ? plan.gap : 0)
             }
             if plan.map == .card {
                 mapCard(plan)
                     .frame(width: plan.columnWidth, height: plan.mapHeight)
-                    .padding(.top, plan.gap)
+                    .padding(.top, afterGrid ? plan.gap : 0)
             }
         }
         .frame(width: plan.columnWidth)
     }
 
-    /// Two panes (iPad landscape, wide Mac windows, a phone on its side): no full-width header. The dial,
-    /// readout and status line top-aligned on the left; the location card (level with the dial's top), the
-    /// Targets card, the grid and a map card to the bottom on the right.
+    /// Two panes (iPad landscape, wide Mac windows, a phone on its side): the location bar full width at the
+    /// top, as in one column; under it the dial, readout and status line top-aligned on the left, and the
+    /// Targets card, the grid and a map card to the bottom on the right (level with the dial's top).
     private func twoPanes(_ plan: LayoutPlan) -> some View {
-        HStack(alignment: .top, spacing: LayoutPlan.paneGap) {
-            VStack(spacing: 0) {
-                dial(side: plan.dial)
-                readoutGroup(plan)
-                    .padding(.top, plan.gapDialReadout)
+        VStack(spacing: 0) {
+            locationCard(plan)
+                .frame(width: plan.cardWidth)
+            HStack(alignment: .top, spacing: LayoutPlan.paneGap) {
+                VStack(spacing: 0) {
+                    dial(side: plan.dial)
+                    readoutGroup(plan)
+                        .padding(.top, plan.gapDialReadout)
+                }
+                .frame(width: plan.leftWidth)
+                trailingPane(plan)
+                    .frame(width: plan.columnWidth)
+                    .frame(maxHeight: .infinity, alignment: .top)
             }
-            .frame(width: plan.leftWidth)
-            trailingPane(plan)
-                .frame(width: plan.columnWidth)
-                .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.top, plan.gapCardDial)
         }
-        .padding(.top, plan.dialTop)
+        .padding(.top, plan.locationTop)
         .padding(.horizontal, plan.margin)
         .padding(.bottom, plan.bottomInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -236,9 +247,9 @@ struct MainView: View {
     }
 
     /// Accessibility text sizes, or nothing fits even with every step given up: one scrolling list in
-    /// which every block is complete: the dial (0.40 H), the readout, the status line, the location card
-    /// (wrapping), the Targets card (the cue on line 2), the tiles as 96 rows (caption leading, value
-    /// trailing) and a 176 Map tile. The indicator flashes on appear and a 24 pt fade at the bottom is the
+    /// which every block is complete: the location bar (wrapping, at least 40), the dial (0.40 H), the
+    /// readout, the status line, the Targets card (the cue on line 2), the tiles as 96 rows (caption leading,
+    /// value trailing) and a 176 Map tile. The indicator flashes on appear and a 24 pt fade at the bottom is the
     /// cue that it continues. For ImageRenderer, the same stack, clipped.
     @ViewBuilder
     private func listScreen(_ plan: LayoutPlan) -> some View {
@@ -262,23 +273,26 @@ struct MainView: View {
     }
 
     private func listContent(_ plan: LayoutPlan) -> some View {
-        VStack(spacing: 0) {
+        let afterBanner: Bool = update != nil
+        let afterTargets: Bool = afterBanner || plan.hasTargets
+        return VStack(spacing: 0) {
+            // The bar first, wrapping as tall as its text needs (never under 40).
+            locationCard(plan)
+                .padding(.top, plan.locationTop)
             dial(side: plan.dial)
-                .padding(.top, plan.dialTop)
+                .padding(.top, plan.gapCardDial)
             readoutGroup(plan)
                 .padding(.top, plan.gapDialReadout)
-            locationCard(plan)
-                .padding(.top, plan.gapStatusCard)
             if let update {
                 updateBanner(update)
-                    .padding(.top, plan.gap)
+                    .padding(.top, plan.gapStatusTargets)
             }
             if plan.hasTargets {
                 targetsCard(plan)
-                    .padding(.top, plan.gap)
+                    .padding(.top, afterBanner ? plan.gap : plan.gapStatusTargets)
             }
             listTiles(plan)
-                .padding(.top, plan.gap)
+                .padding(.top, afterTargets ? plan.gap : plan.gapStatusTargets)
             mapTile(plan, height: plan.mapHeight)
                 .frame(width: plan.columnWidth, height: plan.mapHeight)
                 .padding(.top, LayoutPlan.gapAboveListMap)
@@ -291,34 +305,50 @@ struct MainView: View {
 
     // MARK: The location card
 
-    /// The sky card (formerly the header), under the status line: 48 high (56 on iPad, × k), radius 14 (16
-    /// on iPad), on the sky for the sun's altitude here. The full place name over the date and time with the
-    /// Sample pill trailing line 2 (line 1 in the list), then the sky glyph in a 32 slot, the map button
-    /// (Large and Extra Large, and wherever the map gave way; hidden with its slot kept in two panes, where a
-    /// map card is on screen) and ⋯. Nothing in it is ever ellipsized: the date shortens first ("Nov 1"),
-    /// then goes; the place scales down rather than lose ", Colorado".
+    /// The location bar (the owner's mod: back at the top, slim): 40 × k high on every device, radius 12, on
+    /// the sky for the sun's altitude here. Two compact lines, left-aligned 12 in: the place, 15 semibold,
+    /// over the date and time, 12 at white 75%, with the Sample pill (10) inline; trailing, the sky glyph
+    /// (16), the map button (Large and Extra Large, and wherever the map gave way; hidden with its slot kept
+    /// in two panes, where a map card is on screen) and ⋯ as 28 circles whose 44 × 44 targets reach past the
+    /// bar (an overlay outside the bar's clip). In the list (accessibility sizes) the text wraps and the bar
+    /// grows from 40. Nothing in it is ever ellipsized: the date shortens first ("Nov 1"), then goes; the
+    /// place scales down rather than lose ", Colorado".
     private func locationCard(_ plan: LayoutPlan) -> some View {
         let k = plan.k
-        let ramp = Self.ramp(plan)
-        let titleSize: CGFloat = plan.list ? ramp.title : ramp.title * k
-        let dateSize: CGFloat = plan.list ? ramp.subtitle : ramp.subtitle * k
+        let titleSize: CGFloat = plan.list ? Ramp.list.title : LayoutPlan.cardPlace * k
+        let dateSize: CGFloat = plan.list ? Ramp.list.subtitle : LayoutPlan.cardDate * k
         let pillOnPlaceLine = nav.sample && plan.list
-        return HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) {
-                    placeLine(size: titleSize, wraps: plan.list)
-                    if pillOnPlaceLine { sampleBadge(plan) }
-                }
-                HStack(spacing: 6) {
-                    dateText(size: dateSize, wraps: plan.list, tablet: plan.tablet)
-                    if nav.sample && !pillOnPlaceLine { sampleBadge(plan) }
-                }
+        let trailing: CGFloat = LayoutPlan.cardTrailing(mapButton: plan.mapButtonSlot)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                placeLine(size: titleSize, wraps: plan.list)
+                if pillOnPlaceLine { sampleBadge(plan) }
             }
-            // One element: where and when, then the buttons after it.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(locationSpoken)
-            .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 4)
+            HStack(spacing: 6) {
+                dateText(size: dateSize, wraps: plan.list)
+                if nav.sample && !pillOnPlaceLine { sampleBadge(plan) }
+            }
+        }
+        // One element: where and when, then the buttons after it.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(locationSpoken)
+        .accessibilityAddTraits(.isHeader)
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, LayoutPlan.cardPaddingH)
+        .padding(.trailing, trailing)
+        // The two lines (≈ 32 at k 1.0) centre in the 40 bar, about 4 above and below; padding them by 4 as
+        // well would ask for 40.3 and squeeze the lines, so only the list (which grows) pads.
+        .padding(.vertical, plan.list ? 8 : 0)
+        .frame(minHeight: plan.cardHeight, maxHeight: plan.list ? nil : plan.cardHeight)
+        .skyCard(altitude: nav.sunPosition?.altitude, radius: LayoutPlan.cardRadius)
+        .overlay(alignment: .trailing) { cardButtons(plan) }
+    }
+
+    /// The bar's trailing cluster: the sky glyph in a 24 slot, the map button's 44 target (if any) and ⋯'s,
+    /// 4 from the edge. 44 high on a 40 bar: the targets reach 2 past its top and bottom (k 1.0).
+    private func cardButtons(_ plan: LayoutPlan) -> some View {
+        HStack(spacing: 0) {
             skySymbol
             if plan.mapButtonSlot {
                 mapButton(plan)
@@ -329,15 +359,10 @@ struct MainView: View {
             menu(plan)
         }
         .foregroundStyle(.white)
-        .padding(.leading, plan.tablet ? 16 : 14)
         .padding(.trailing, 4)
-        .padding(.vertical, plan.list ? 8 : 0)
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: plan.cardHeight, maxHeight: plan.list ? nil : plan.cardHeight)
-        .skyCard(altitude: nav.sunPosition?.altitude, radius: plan.tablet ? Look.radius : Look.headerRadius)
     }
 
-    /// "Maroon Bells, Colorado", 17 semibold (20 on iPad): the full name always, at 0.85 if it must, then
+    /// "Maroon Bells, Colorado", 15 semibold (the list: 24): the full name always, at 0.85 if it must, then
     /// scaled further rather than cut. In the list it may wrap to two lines.
     @ViewBuilder
     private func placeLine(size: CGFloat, wraps: Bool) -> some View {
@@ -358,9 +383,9 @@ struct MainView: View {
     }
 
     /// "Sun, Nov 1 · 9:41 AM", then "Nov 1 · 9:41 AM", then "9:41 AM": never an ellipsis in the time. White
-    /// at 75% (85% on iPad), tabular.
+    /// at 75%, tabular.
     @ViewBuilder
-    private func dateText(size: CGFloat, wraps: Bool, tablet: Bool) -> some View {
+    private func dateText(size: CGFloat, wraps: Bool) -> some View {
         let lines = Self.dateLines(nav.now)
         Group {
             if wraps {
@@ -375,7 +400,7 @@ struct MainView: View {
             }
         }
         .font(.system(size: size))
-        .foregroundStyle(Color.white.opacity(tablet ? Palette.Op.body : 0.75))
+        .foregroundStyle(Color.white.opacity(0.75))
         .monospacedDigit()
     }
 
@@ -394,41 +419,47 @@ struct MainView: View {
         return "\(nav.placeTitle), \(day), \(Look.timeText(nav.now))\(nav.sample ? ", sample data" : "")"
     }
 
-    /// The sun, sunrise or sunset, or moon symbol (decorative): 22 pt at white 85% in a 32 slot.
+    /// The sun, sunrise or sunset, or moon symbol (decorative): 16 pt at white 85% in a 24 slot.
     private var skySymbol: some View {
         Image(systemName: SkyTone.symbol(for: nav.sunPosition))
-            .font(.system(size: 22, weight: .medium))
+            .font(.system(size: LayoutPlan.cardGlyph, weight: .medium))
             .foregroundStyle(Color.white.opacity(Palette.Op.body))
-            .frame(width: 32)
+            .frame(width: LayoutPlan.cardGlyphSlot)
             .accessibilityHidden(true)
     }
 
-    /// The location card's map button (Large and Extra Large): a 24 glyph in a 44 target (48 on iPad).
+    /// A bar button's look: a 14 glyph in a 28 circle (white 12%) centred in a 44 × 44 target.
+    private func cardCircle(_ system: String) -> some View {
+        Image(systemName: system)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: LayoutPlan.cardButton, height: LayoutPlan.cardButton)
+            .background(Circle().fill(Palette.chipOff))
+            .frame(width: LayoutPlan.cardTarget, height: LayoutPlan.cardTarget)
+            .contentShape(Rectangle())
+    }
+
+    /// The location bar's map button (Large and Extra Large): a 28 circle in a 44 target.
     private func mapButton(_ plan: LayoutPlan) -> some View {
-        let target: CGFloat = plan.tablet ? 48 : 44
-        return Button { nav.mapSheet = true } label: {
-            Image(systemName: "map")
-                .font(.system(size: 24, weight: .regular))
-                .foregroundStyle(.white)
-                .frame(width: target, height: target)
-                .contentShape(Rectangle())
+        Button { nav.mapSheet = true } label: {
+            cardCircle("map")
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Map")
         .accessibilityHint("Opens the map")
     }
 
-    /// The Sample pill: 12 semibold, black on the notice amber, in a 17 capsule (13 in a 19 on iPad). At
+    /// The Sample pill: 10 semibold, black on the notice amber, in a 14 capsule (the list: 17 in a 26). At
     /// night an outline: black fill, a 1.5 white edge, white text.
     private func sampleBadge(_ plan: LayoutPlan) -> some View {
         let k = plan.list ? 1 : plan.k
-        let size: CGFloat = plan.list ? 17 : (plan.tablet ? 13 : 12)
-        let height: CGFloat = plan.list ? 26 : (plan.tablet ? 19 : 17)
+        let size: CGFloat = plan.list ? 17 : LayoutPlan.cardPill
+        let height: CGFloat = plan.list ? 26 : LayoutPlan.cardPillHeight
         let night = nav.nightMode
         return Text("Sample")
             .font(.system(size: size * k, weight: .semibold))
             .foregroundStyle(night ? Color.white : Color.black)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, plan.list ? 7 : 6)
             .frame(height: height * k)
             .background {
                 if night {
@@ -451,14 +482,9 @@ struct MainView: View {
         }
     }
 
-    /// `ellipsis.circle` 28 in a 44 target (48 on iPad).
+    /// ⋯: `ellipsis` in a 28 circle in a 44 target.
     private func menuSymbol(_ plan: LayoutPlan) -> some View {
-        let target: CGFloat = plan.tablet ? 48 : 44
-        return Image(systemName: "ellipsis.circle")
-            .font(.system(size: 28, weight: .regular))
-            .foregroundStyle(.white)
-            .frame(width: target, height: target)
-            .contentShape(Rectangle())
+        cardCircle("ellipsis")
     }
 
     private func settingsMenu(_ plan: LayoutPlan) -> some View {
@@ -544,7 +570,7 @@ struct MainView: View {
         .accessibilityLabel("Settings and more")
     }
 
-    /// The Mac's update banner: 44 high, in the tile style, between the location card and the Targets card.
+    /// The Mac's update banner: 44 high, in the tile style, 12 under the status line, above the Targets card.
     private func updateBanner(_ update: (version: String, url: URL)) -> some View {
         HStack {
             Text("Bearings \(update.version) is available.")
@@ -2035,7 +2061,7 @@ extension MainView {
 
         let dd = Geo.format(.dd, lat: lat, lon: lon)
         let longitude: String = { if case let .pair(_, b) = dd { return b }; return "106.94117° W" }()
-        let pill = textWidth("Sample", size: 12, weight: .semibold) + 14 + 6
+        let pill = textWidth("Sample", size: LayoutPlan.cardPill, weight: .semibold) + 12 + 6
         // Apple's devices only (an Android font is not this one).
         for d in LayoutPlan.devices where !d.name.hasPrefix("Android") && !d.name.hasPrefix("Pixel") {
             for k in [CGFloat(1), 1.3] {
@@ -2044,15 +2070,14 @@ extension MainView {
                     let name = "\(d.name) \(layout.rawValue) k\(k)"
                     let ramp = Self.ramp(p)
                     if !p.list {
-                        // The location card: the sky glyph (32), the map button's slot (44) and ⋯ (44) trail; line 2
-                        // holds at least the time and the Sample pill, and line 1 the full place at 0.85.
-                        let mapSlot: CGFloat = p.mapButtonSlot ? 44 : 0
-                        let trailing: CGFloat = mapSlot + 84
-                        let room = p.columnWidth - (p.tablet ? 16 : 14) - trailing
-                        if textWidth(dates.time, size: ramp.subtitle * k, weight: .regular) + pill * k > room + 0.5 {
-                            failures.append("\(name): the location card's time and Sample don't fit (\(Int(room)) pt)")
+                        // The location bar: the sky glyph (24), the map button's target (44) and ⋯ (44) trail, 4 in;
+                        // line 2 holds at least the time and the Sample pill, and line 1 the full place at 0.85.
+                        let trailing: CGFloat = LayoutPlan.cardTrailing(mapButton: p.mapButtonSlot)
+                        let room = p.cardWidth - LayoutPlan.cardPaddingH - trailing
+                        if textWidth(dates.time, size: LayoutPlan.cardDate * k, weight: .regular) + pill * k > room + 0.5 {
+                            failures.append("\(name): the location bar's time and Sample don't fit (\(Int(room)) pt)")
                         }
-                        if k == 1 && textWidth(place, size: ramp.title * Look.minScale, weight: .semibold) > room + 0.5 {
+                        if k == 1 && textWidth(place, size: LayoutPlan.cardPlace * Look.minScale, weight: .semibold) > room + 0.5 {
                             failures.append("\(name): \"\(place)\" doesn't fit at 0.85 (\(Int(room)) pt)")
                         }
                     }
@@ -2193,8 +2218,8 @@ extension MainView {
     }
 
     /// The whole screen as drawn, checked against its plan, in every layout and in the sample, no-compass and
-    /// live (nothing locked or marked) states: the location card starts where planned (under the status
-    /// line, nothing above the dial); "No heading" sits 12 under the dial with no compass; the Targets card
+    /// live (nothing locked or marked) states: the location bar starts where planned (first, at the top) and
+    /// is as high as planned; "No heading" sits 12 under the dial with no compass; the Targets card
     /// has a row where planned; each grid row has as many tiles as the plan's row; a map card is where
     /// planned; the empty band at the bottom is what the plan left (24 or less unless the plan centred the
     /// stack); and neighbouring layouts don't draw the same thing. `nav` is a navigator of its own (its
@@ -2239,11 +2264,15 @@ extension MainView {
                     continue
                 }
                 let x0 = (width - plan.columnWidth) / 2 - 4, x1 = (width + plan.columnWidth) / 2 + 4
-                // The location card: its sky starts where planned, under the status line (20 in, clear of
-                // its corner).
-                if let top = px.firstInk(x: (width - plan.columnWidth) / 2 + 20, from: plan.statusTop, threshold: 30),
-                   abs(top - plan.locationTop) > 1.5 {
-                    failures.append(String(format: "%@: the location card starts at %.1f, planned %.1f", name, top, plan.locationTop))
+                // The location bar: its sky starts where planned, first on screen (20 in, clear of its corner),
+                // and ends 40 × k lower, before the dial's gap.
+                let barX: CGFloat = (width - plan.columnWidth) / 2 + 20
+                if let top = px.firstInk(x: barX, threshold: 30), abs(top - plan.locationTop) > 1.5 {
+                    failures.append(String(format: "%@: the location bar starts at %.1f, planned %.1f", name, top, plan.locationTop))
+                }
+                if let bar = px.inkRows(x0: barX, x1: barX + 40, y0: 0, y1: plan.dialTop - 1, threshold: 30),
+                   abs(bar.bottom - bar.top - plan.cardHeight) > 1.5 {
+                    failures.append(String(format: "%@: the location bar is %.1f high, planned %.1f", name, bar.bottom - bar.top, plan.cardHeight))
                 }
                 // No compass: "No heading" 12 under the dial, centred.
                 if plan.noCompass {

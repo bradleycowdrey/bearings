@@ -223,6 +223,11 @@ private val SOURCES = listOf(
  * text) is #C9D3D6 in Noto Sans Regular (never italic or bold, never the style's own cyan), 12 sp (11 in the
  * tile), on a 1.5 dp #0F3B3A halo, at 70% in the tile. POI labels are hidden on a map under 160 dp tall and
  * road shields on one under 200 dp wide. The self-test checks these values ([labelColor], [labelFont]).
+ *
+ * Labels never draw as solid blocks: every symbol layer is set to [FONT], a stack OpenFreeMap's glyph server
+ * serves (the Liberty style's own regular), and once per run [probeGlyphs] fetches that stack's first range; if it
+ * can't be loaded (no network to the glyph host, an error page), every symbol layer is hidden rather than drawn
+ * without its glyphs.
  */
 object MapDark {
     const val LAND = "#0F3B3A"
@@ -238,8 +243,30 @@ object MapDark {
     const val LABEL_SIZE = 12f
     const val LABEL_SIZE_TILE = 11f
     const val TILE_OPACITY = 0.7f
-    /** The one font every label uses: OpenFreeMap's upright regular. */
+    /** The one font every label uses: OpenFreeMap's upright regular (in the Liberty style's glyphs). */
     val FONT = arrayOf("Noto Sans Regular")
+    /** [FONT]'s first glyph range on OpenFreeMap's glyph server (the Liberty style's `glyphs` URL). */
+    const val GLYPHS = "https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf"
+    /** Whether [GLYPHS] loaded: null until [probeGlyphs] has run, then the answer for the rest of the run. */
+    @Volatile var glyphsOk: Boolean? = null
+
+    /**
+     * Fetches [GLYPHS] once (blocking: call it off the main thread). A glyph range is a protobuf of some kilobytes;
+     * an error, an HTML page or an empty body means the labels have no glyphs, so they are hidden.
+     */
+    fun probeGlyphs(): Boolean {
+        glyphsOk?.let { return it }
+        val ok = runCatching {
+            val c = java.net.URL(GLYPHS).openConnection() as java.net.HttpURLConnection
+            c.connectTimeout = 8000; c.readTimeout = 8000
+            try {
+                val type = c.contentType.orEmpty()
+                c.responseCode == 200 && "html" !in type && c.inputStream.use { it.readBytes() }.let { b -> b.size > 256 && b[0] != '<'.code.toByte() }
+            } finally { c.disconnect() }
+        }.getOrDefault(false)
+        glyphsOk = ok
+        return ok
+    }
     const val POI_MIN_HEIGHT = 160
     const val SHIELD_MIN_WIDTH = 200
     /** Night: the map at 35% of its brightness, then the screen's red multiply. */
@@ -274,7 +301,10 @@ object MapDark {
                 is SymbolLayer -> {
                     // Only the kinds this rule hides are switched (back) on; the style's other choices stay.
                     val poi = "poi" in id; val shield = "shield" in id
-                    if (poi || shield) {
+                    if (glyphsOk == false) {
+                        // No glyphs for the font: hide the layer rather than draw its labels as blocks.
+                        layer.setProperties(PropertyFactory.visibility(Property.NONE))
+                    } else if (poi || shield) {
                         val hidden = (poi && !labels.poi) || (shield && !labels.shields)
                         layer.setProperties(PropertyFactory.visibility(if (hidden) Property.NONE else Property.VISIBLE))
                     }
@@ -335,8 +365,12 @@ private fun BoxScope.MapContent(fix: Fix, trueHeading: Double?, follow: Boolean,
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) view.onResume()
             onDispose { lifecycle.removeObserver(observer); view.onPause(); view.onStop(); view.onDestroy() }
         }
-        // The dark colours and the label rules, again whenever the map's size changes which labels show.
-        LaunchedEffect(style, labels) { style?.let { MapDark.apply(it, labels) } }
+        // Whether the labels' glyphs load (once per run; until then the labels are drawn as the style asks).
+        var glyphs by remember { mutableStateOf(MapDark.glyphsOk) }
+        LaunchedEffect(Unit) { if (glyphs == null) glyphs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { MapDark.probeGlyphs() } }
+        // The dark colours and the label rules, again whenever the map's size changes which labels show or the glyph
+        // check answers.
+        LaunchedEffect(style, labels, glyphs) { style?.let { MapDark.apply(it, labels) } }
         // One camera for position, zoom and bearing together, so no change cancels another halfway.
         LaunchedEffect(fix.latitude, fix.longitude, zoom, bearing, map) {
             val m = map ?: return@LaunchedEffect

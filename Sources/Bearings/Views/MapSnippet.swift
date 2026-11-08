@@ -9,7 +9,8 @@ import SwiftUI
 /// Apple Maps' logo and Legal link. In the map sheet (`bleed`) it runs edge to edge under the sheet's
 /// translucent bar (`topInset`). As a **thumbnail** (the Map tile, C3.4 #9) it is a still picture
 /// (MKMapSnapshotter) north up with your dot and heading cone, no controls and no gestures, on a 24 pt
-/// bottom scrim (clear to black at 65%) with "MAP" and an expand glyph leading and the Maps attribution trailing; the
+/// bottom scrim (clear to black at 65%) with "MAP" and an expand glyph leading and the Maps attribution trailing
+/// (the snapshot's own baked-in logo is cropped off, so it never sits under "MAP"); the
 /// live map's Legal link no longer lands in the middle of a 130 pt tile (the map sheet carries it). There
 /// is no fade over it. At night it is grey and at 15% brightness or less, so it is never the brightest
 /// thing on screen.
@@ -168,12 +169,18 @@ struct MapSnippet: View {
 
 /// The Map tile's picture (C3.4 #9): a dark MKMapSnapshotter image of where you are, north up, your dot
 /// and heading cone in the middle, and a 24 pt band with "MAP", the expand glyph and the Maps attribution.
+/// The snapshot bakes Apple's Maps logo into its bottom-left corner, where it sat under "MAP". So it is
+/// drawn `logoCrop` taller at each end and shown centred: its bottom 24 (the logo) and top 24 fall outside
+/// the tile and the dot stays in the middle. The attribution is still on screen, as Apple-logo "Maps" in the band.
 private struct MapThumbnail: View {
     var fix: Fix?
     var heading: Double?
     var dimmed: Bool
     @Environment(\.uiScale) private var k
     @State private var picture: PlatformImage?
+
+    /// Cut off the snapshot's bottom (its baked-in logo) and, to keep you centred, as much off its top.
+    static let logoCrop: CGFloat = 24
 
     var body: some View {
         GeometryReader { geo in
@@ -184,6 +191,7 @@ private struct MapThumbnail: View {
                         Self.image(picture)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
+                            .frame(width: geo.size.width, height: geo.size.height + 2 * Self.logoCrop)
                             .frame(width: geo.size.width, height: geo.size.height)
                             .clipped()
                     } else {
@@ -222,7 +230,8 @@ private struct MapThumbnail: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .task(id: Self.key(fix, geo.size)) {
                 guard let fix, geo.size.width > 0, geo.size.height > 0 else { picture = nil; return }
-                picture = await MapSnapshot.make(latitude: fix.latitude, longitude: fix.longitude, size: geo.size, span: 2000)
+                let taller = CGSize(width: geo.size.width, height: geo.size.height + 2 * Self.logoCrop)
+                picture = await MapSnapshot.make(latitude: fix.latitude, longitude: fix.longitude, size: taller, span: 2000)
             }
         }
         .accessibilityHidden(true)
