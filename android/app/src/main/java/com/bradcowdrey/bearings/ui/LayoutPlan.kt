@@ -7,9 +7,9 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * The four layouts of Concept A, the instrument panel (docs/REFINE.md "Concept A (chosen)", A.3). Every layout
- * reads, top to bottom: dial → readout → status line → location card → Targets card (only with a lock or a spot)
- * → its own tiles or map.
+ * The four layouts of Concept A, the instrument panel (docs/REFINE.md "Concept A (chosen)", A.3, with the owner's
+ * mod: the location card back at the top as a slim 40 dp bar). Every layout reads, top to bottom: location bar →
+ * dial → readout → status line → Targets card (only with a lock or a spot) → its own tiles or map.
  *
  * | | Small | Medium (default) | Large | Extra Large |
  * |---|---|---|---|---|
@@ -93,11 +93,11 @@ data class Plan(
     val widthCap: Float,
     /** The heading number's size before the text multiplier: 56 (64 on a tablet) × the readout scale. */
     val headingSize: Float,
-    /** Safe top → dial top: 18, or 12 given way (A.6 step 2). */
+    /** Safe top → dial top: the bar's 8, the bar and [barGap] (60 at text size 1). */
     val dialTop: Float,
-    /** Status line → location card: 12, or 8 given way. */
+    /** Status line → the Targets card (or the tiles or map without one): 12, or 8 given way. */
     val cardGap: Float,
-    /** The location card's height (56 × k, a line more for a wrapped place or date). */
+    /** The location bar's height: 40, or 8 + 32 × k, a line more for a wrapped place or date. */
     val location: Float,
     /** Lines of the status line (1, or 2 when it wraps). */
     val statusLines: Int,
@@ -135,8 +135,12 @@ data class Plan(
     val given: Set<LayoutPlan.Step> = emptySet(),
     /** The dial was held under what the height allowed so a larger layout keeps the larger compass. */
     val held: Boolean = false,
-    /** The Mac's update banner, between the location card and the Targets card. */
+    /** The Mac's update banner, between the status line and the Targets card. */
     val banner: Boolean = false,
+    /** Location bar → dial top: 12, or 8 given way (A.6 step 2). */
+    val barGap: Float = LayoutPlan.BAR_GAP,
+    /** The location bar's width: the column, or the full width inside the 24 margins in two panes. */
+    val barWidth: Float = 0f,
 ) {
     /** The location card shows the map button: the map is neither a tile nor a card. */
     val mapButton: Boolean get() = map == MapMode.BUTTON
@@ -159,12 +163,15 @@ data class Plan(
     /** Dial edge → readout → status line, as one group. */
     val group: Float get() = dialGap + readout + statusGap + status
 
-    // Positions from the top of the safe area, single column (A.1). In two panes the location card is top-aligned with the dial.
+    // Positions from the top of the safe area (A.1). The location bar is first, at safe top + 8, in every arrangement
+    // (full width in two panes); in two panes the trailing pane is top-aligned with the dial.
+    val locationTop: Float get() = LayoutPlan.BAR_TOP
     val readoutTop: Float get() = dialTop + dial + dialGap
     val statusTop: Float get() = readoutTop + readout + statusGap
-    val locationTop: Float get() = if (twoPane) dialTop else statusTop + status + cardGap
-    val targetsTop: Float get() = locationTop + location + targetsGap + bannerHeight
-    val gridTop: Float get() = (if (targetsRows > 0) targetsTop + targets else locationTop + location + bannerHeight) + gridGap
+    /** The first block under the status line (single column), or the trailing pane's top (two panes). */
+    val belowTop: Float get() = if (twoPane) dialTop else statusTop + status + cardGap
+    val targetsTop: Float get() = belowTop + bannerHeight
+    val gridTop: Float get() = if (targetsRows > 0) targetsTop + targets + gridGap else targetsTop
     val gridHeight: Float get() = LayoutPlan.gridHeight(grid, tile, tile2)
     /** The map card's top: Small's card is where the grid starts (its band is inside it); otherwise under the grid. */
     val mapTop: Float get() = if (grid == GridMode.BAND || gridHeight == 0f) gridTop else gridTop + gridHeight + mapGap
@@ -191,11 +198,12 @@ data class Plan(
 
 /**
  * The layout planner (A.5), one pure function with no UI code and the same steps as LayoutPlan.swift:
- * 1. Anchors: the dial's top is the safe top + 18; the stack ends [Plan.endGap] above the safe bottom.
- * 2. Fixed blocks: the readout group (12 + readout + 6k + status), 12 + the location card, 8 + the Targets card
- *    (rows × row height, only with a lock or spot), 8 + the layout's grid at its minimum (Small: a 140 map card).
+ * 1. Anchors: the location bar at the safe top + 8, the dial's top 12 under it; the stack ends [Plan.endGap] above
+ *    the safe bottom.
+ * 2. Fixed blocks: 8 + the location bar (40), 12, the readout group (12 + readout + 6k + status), 12 + the Targets
+ *    card (rows × row height, only with a lock or spot) + 8, the layout's grid at its minimum (Small: a 140 map card).
  * 3. Dial = min(cap, what is left). Under the owner's floor ceil(0.40 H), the layout gives way in A.6's order,
- *    re-planning after each step: spare gaps (18 → 12, 12 → 8), Targets rows to compact height, grid density
+ *    re-planning after each step: spare gaps (bar → dial 12 → 8, status → Targets 12 → 8), Targets rows to compact height, grid density
  *    (Large's six → 2 × 2 compact), the map tile or card → the location card's map button with one compact row, and
  *    only then the scrolling list. Given-up steps come back, in reverse order, where the height allows.
  * 4. Spare height goes to the layout's growth (Small's map card; Medium's rows to 88, row 2 on to 176; Large's to
@@ -204,19 +212,21 @@ data class Plan(
  */
 object LayoutPlan {
     // The frozen gap tokens (A.1).
-    /** Safe top → dial top, and given way. */
-    const val DIAL_TOP = 18f
-    const val DIAL_TOP_TIGHT = 12f
+    /** Safe top → the location bar's top (the owner's mod: the bar is first). */
+    const val BAR_TOP = 8f
+    /** Location bar → dial top, and given way. */
+    const val BAR_GAP = 12f
+    const val BAR_GAP_TIGHT = 8f
     /** Dial edge → the readout's cap top. */
     const val DIAL_GAP = 12f
     /** Readout → status line, × k. */
     const val STATUS_GAP = 6f
-    /** Status line → location card, and given way. */
+    /** Status line → the Targets card (or the tiles or map), and given way. */
     const val CARD_GAP = 12f
     const val CARD_GAP_TIGHT = 8f
-    /** Location card → Targets card. */
+    /** The Mac's update banner → the Targets card. */
     const val TARGETS_GAP = 8f
-    /** Targets card (or location card) → the tiles or map. */
+    /** Targets card → the tiles or map. */
     const val GRID_GAP = 8f
     const val ROW_GAP = 8f
     /** Grid → map card (iPad Medium, two panes, Small at large text). */
@@ -238,9 +248,11 @@ object LayoutPlan {
     const val OWNER_SHARE = 0.40f
     const val LARGE_SHARE = 0.42f
 
-    const val LOCATION = 56f
-    const val TITLE_LINE = 22f
-    const val DATE_LINE = 20f
+    /** The location bar (owner's mod): 40 high, 4 above and below a 15 sp place on an 18 line and a 12 sp date on a 14 line. */
+    const val LOCATION = 40f
+    const val BAR_PAD = 4f
+    const val TITLE_LINE = 18f
+    const val DATE_LINE = 14f
     const val HEADING = 56f
     const val HEADING_TABLET = 64f
     const val READOUT_LINE = 1.1f
@@ -359,9 +371,9 @@ object LayoutPlan {
     fun groupHeight(headingSize: Float, k: Float, noHeading: Boolean, statusLines: Int) =
         DIAL_GAP + readoutBlock(headingSize, k, noHeading) + STATUS_GAP * k + statusHeight(k, statusLines)
 
-    /** The location card: 56, or 14 + the place's 22 and the date's 20 lines × k; a line more for a wrapped place (bit 1) or date (bit 2). */
+    /** The location bar: 40, or 4 + the place's 18 and the date's 14 lines × k + 4; a line more for a wrapped place (bit 1) or date (bit 2). */
     fun locationHeight(k: Float, extraLines: Int = 0) =
-        max(LOCATION, 14f + 42f * k) + (if (extraLines and 1 != 0) TITLE_LINE * k else 0f) + (if (extraLines and 2 != 0) DATE_LINE * k else 0f)
+        max(LOCATION, 2 * BAR_PAD + (TITLE_LINE + DATE_LINE) * k) + (if (extraLines and 1 != 0) TITLE_LINE * k else 0f) + (if (extraLines and 2 != 0) DATE_LINE * k else 0f)
 
     /** A Targets row: [base] at text size 1, taller with the 22 line of 17 sp text. */
     fun targetRow(base: Float, k: Float) = max(base, base - 22f + 22f * k)
@@ -457,7 +469,7 @@ object LayoutPlan {
             (if (titleWraps) 1 else 0) + (if (dateWraps) 2 else 0), if (moving) Sixth.SPEED else Sixth.PRESSURE, decimal, end, margin)
         if (accessibilityText) return list(inp, layout, k)
         if (isLandscapePhone || (w > h && w >= TWO_PANE_WIDTH)) return twoPanes(inp, layout) ?: list(inp, layout, k)
-        return column(inp, layout) ?: list(inp, layout, kk)
+        return columnOrList(inp, layout)
     }
 
     /** What every step of the planner needs to know. */
@@ -492,9 +504,10 @@ object LayoutPlan {
      * One column (portrait): steps 1–4. The larger layout is planned first and holds this one's dial, so the
      * dials step up. Null when nothing keeps the dial at the owner's floor: the list.
      */
-    private fun column(inp: Input, layout: Layout): Plan? {
-        val larger = layout.larger?.let { column(inp, it) ?: list(inp, it, inp.k) }
-        return columnWith(inp, layout, larger?.dial ?: Float.MAX_VALUE)
+    private fun columnOrList(inp: Input, layout: Layout): Plan {
+        val limit = layout.larger?.let { columnOrList(inp, it) }?.dial ?: Float.MAX_VALUE
+        // A layout that only fits as the list keeps its dial under the larger layout's too (never under the floor).
+        return columnWith(inp, layout, limit) ?: list(inp, layout, inp.k, limit)
     }
 
     private fun columnWith(inp: Input, layout: Layout, limit: Float): Plan? {
@@ -514,10 +527,12 @@ object LayoutPlan {
             // the first that keeps the floor wins, so given-up steps come back where the height allows.
             for ((gaps, compact) in listOf(false to false, true to false, true to true)) {
                 if (compact && inp.rows == 0) continue
-                val dialTop = if (gaps) DIAL_TOP_TIGHT else DIAL_TOP
+                val barGap = if (gaps) BAR_GAP_TIGHT else BAR_GAP
+                val dialTop = BAR_TOP + location + barGap
                 val cardGap = if (gaps) CARD_GAP_TIGHT else CARD_GAP
                 val rowH = targetRowHeight(layout, tablet, k, compact)
-                val targets = if (inp.rows > 0) TARGETS_GAP + inp.rows * rowH else 0f
+                // The Targets card and the 8 under it, only with a lock or a spot.
+                val targets = if (inp.rows > 0) inp.rows * rowH + GRID_GAP else 0f
                 val t0 = minTile(level.grid, k, tablet)
                 val gridMin = gridHeight(level.grid, t0, t0)
                 val card = when {
@@ -525,7 +540,7 @@ object LayoutPlan {
                     level.grid == GridMode.BAND -> MAP_MIN
                     else -> MAP_GAP + MAP_MIN
                 }
-                val fixed = dialTop + group + cardGap + location + banner + targets + GRID_GAP + gridMin + card
+                val fixed = dialTop + group + cardGap + banner + targets + gridMin + card
                 val room = avail - fixed
                 if (room + 0.5f < floor) continue
                 var dial = min(min(cap, hold), room)
@@ -583,7 +598,7 @@ object LayoutPlan {
                         else -> {}
                     }
                 }
-                val used = dialTop + dial + group + cardGap + location + banner + targets + GRID_GAP +
+                val used = dialTop + dial + group + cardGap + banner + targets +
                     gridHeight(level.grid, tile, tile2) + (if (level.map == MapMode.CARD) mapHeight + (if (level.grid == GridMode.BAND) 0f else MAP_GAP) else 0f) +
                     spare + inp.end
                 return Plan(
@@ -593,6 +608,7 @@ object LayoutPlan {
                     grid = level.grid, map = level.map, tile = tile, tile2 = tile2, mapHeight = mapHeight, sixth = inp.sixth,
                     decimal = inp.decimal, bottomSpare = spare, endGap = inp.end, trailingWidth = 0f, locked = inp.locked,
                     hasSpot = inp.spot, used = used, noHeading = inp.noHeading, given = given, held = held, banner = inp.banner,
+                    barGap = barGap, barWidth = c,
                 )
             }
         }
@@ -600,32 +616,33 @@ object LayoutPlan {
     }
 
     /**
-     * The scrolling list (A.7): the dial (still at least 0.40 H), readout, status, the location card (wrapping),
+     * The scrolling list (A.7): the location bar (wrapping), the dial (still at least 0.40 H), readout, status,
      * Targets rows of 84 with the cue on line 2, one 96 row per tile (Position, Elevation, Sun, Moon), then a 176
      * Map tile. A 24 fade at the bottom says there is more.
      */
-    private fun list(inp: Input, layout: Layout, k: Float): Plan {
+    private fun list(inp: Input, layout: Layout, k: Float, limit: Float = Float.MAX_VALUE): Plan {
         val kl = k.coerceIn(1f, 2f)
         val w = inp.w; val h = inp.h
         val c = columnWidth(w, h, false, inp.margin)
         val floor = ownerFloor(w, h)
-        val dial = max(floor, min(ceil8(OWNER_SHARE * h), w - 32f))
+        val dial = max(floor, min(min(ceil8(OWNER_SHARE * h), w - 32f), limit))
         val headingSize = (if (inp.tablet) HEADING_TABLET else HEADING) * layout.readoutScale
         val row = listTileHeight(kl)
+        val location = locationHeight(kl, 1)
         return Plan(
             layout = layout, twoPane = false, list = true, tablet = inp.tablet, k = kl, dial = dial, floor = floor, cap = dial,
-            widthCap = dial, headingSize = headingSize, dialTop = DIAL_TOP, cardGap = CARD_GAP, location = locationHeight(kl, 1),
+            widthCap = dial, headingSize = headingSize, dialTop = BAR_TOP + location + BAR_GAP, cardGap = CARD_GAP, location = location,
             statusLines = 2, targetsRows = inp.rows, targetsRowHeight = targetRow(TARGET_ROW_LIST, kl), margin = inp.margin,
             column = c, grid = GridMode.ROWS, map = MapMode.TILE, tile = row, tile2 = row, mapHeight = LIST_MAP, sixth = inp.sixth,
             decimal = inp.decimal, bottomSpare = 0f, endGap = inp.end, trailingWidth = 0f, locked = inp.locked, hasSpot = inp.spot,
-            used = inp.s, noHeading = inp.noHeading, banner = inp.banner,
+            used = inp.s, noHeading = inp.noHeading, banner = inp.banner, barWidth = c,
         )
     }
 
     /**
-     * Two panes (A.8): no full-width header. Left: the dial, readout and status, top-aligned at safe top + 18, the
-     * dial min(pane − 48, the height under it, share × H). Right, top-aligned with the dial: the location card, 8,
-     * the Targets card, 8, the grid (Medium Position | Elevation, Sun | Moon; Large six; Extra Large the strip;
+     * Two panes (A.8, owner's mod): the location bar full width at safe top + 8, as in one column; 12 under it the two
+     * panes. Left: the dial, readout and status, the dial min(pane − 48, the height under it, share × H). Right,
+     * top-aligned with the dial: the Targets card, 8, the grid (Medium Position | Elevation, Sun | Moon; Large six; Extra Large the strip;
      * Small none), 8 and a map card to the bottom (240 or more; Small 60% of the pane). Short of height the map
      * card gives way: compact Targets rows, a card of 140, then the map tile (Medium) or the card's map button.
      * Null when not even a 140 dial fits: the list.
@@ -636,10 +653,11 @@ object LayoutPlan {
         val pane = w - 2 * PANE_MARGIN - PANE_GAP - trailing
         val headingSize = (if (tablet) HEADING_TABLET else HEADING) * layout.readoutScale
         val group = groupHeight(headingSize, k, inp.noHeading, inp.statusLines)
-        val avail = inp.s - inp.end - DIAL_TOP
+        val location = locationHeight(k, inp.locationLines)
+        val dialTop = BAR_TOP + location + BAR_GAP
+        val avail = inp.s - inp.end - dialTop
         if (avail - group < DIAL_MIN) return null
         val dial = min(min(pane - 48f, avail - group), max(DIAL_MIN, layout.paneShare * h))
-        val location = locationHeight(k, inp.locationLines)
         val banner = if (inp.banner) BANNER + TARGETS_GAP else 0f
         // Extra Large in a narrow trailing pane: the strip's Position column is too narrow for a longitude, so the pane
         // takes two rows instead (Position full width, then Elevation | Sun) at the full tile height.
@@ -655,17 +673,19 @@ object LayoutPlan {
         val t0 = rowMin(own)
         val gridH = gridHeight(own, t0, t0)
         val cardMin = if (layout == Layout.SMALL) max(PANE_MAP, PANE_SMALL_SHARE * avail) else PANE_MAP
+        // The trailing pane under the bar: the Targets card and 8, the grid (Small's band is inside its card), the card.
         fun content(rowH: Float, grid: GridMode, g: Float, card: Float) =
-            location + banner + (if (inp.rows > 0) TARGETS_GAP + inp.rows * rowH else 0f) +
-                (if (grid == GridMode.BAND) 0f else GRID_GAP + g) + (if (card > 0f) (if (grid == GridMode.BAND) GRID_GAP else MAP_GAP) + card else 0f)
+            banner + (if (inp.rows > 0) inp.rows * rowH + GRID_GAP else 0f) +
+                (if (grid == GridMode.BAND) 0f else g) + (if (card > 0f) (if (grid == GridMode.BAND) 0f else MAP_GAP) + card else 0f)
+        val cardLead = if (own == GridMode.BAND) 0f else MAP_GAP
         var grid = own; var map = MapMode.CARD; var mapHeight = 0f; var compact = false
         var rowH = targetRowHeight(layout, tablet, k, false)
         val given = mutableSetOf<Step>()
-        val full = avail - content(rowH, grid, gridH, 0f) - (if (grid == GridMode.BAND) GRID_GAP else MAP_GAP)
+        val full = avail - content(rowH, grid, gridH, 0f) - cardLead
         if (full >= cardMin - 0.5f) mapHeight = full else {
             compact = inp.rows > 0
             if (compact) { rowH = targetRowHeight(layout, tablet, k, true); given += Step.ROWS }
-            val left = avail - content(rowH, grid, gridH, 0f) - (if (grid == GridMode.BAND) GRID_GAP else MAP_GAP)
+            val left = avail - content(rowH, grid, gridH, 0f) - cardLead
             if (left >= MAP_MIN - 0.5f) mapHeight = left else {
                 given += Step.BUTTON
                 when (layout) {
@@ -677,7 +697,7 @@ object LayoutPlan {
         }
         var t = rowMin(grid)
         var t2 = t
-        if (map != MapMode.CARD && location + GRID_GAP + gridHeight(grid, t, t) > avail + 0.5f) return null
+        if (map != MapMode.CARD && gridHeight(grid, t, t) > avail + 0.5f) return null
         if (map != MapMode.CARD) {
             // No card: the tiles take the pane's spare (Medium's Map tile grows with it), all but 24.
             val spare = avail - content(rowH, grid, gridHeight(grid, t, t), 0f) - BOTTOM_SPARE_MAX
@@ -692,11 +712,11 @@ object LayoutPlan {
         if (used > avail + 0.5f) return null
         return Plan(
             layout = layout, twoPane = true, list = false, tablet = tablet, k = k, dial = dial, floor = DIAL_MIN, cap = dial,
-            widthCap = dial, headingSize = headingSize, dialTop = DIAL_TOP, cardGap = CARD_GAP, location = location,
+            widthCap = dial, headingSize = headingSize, dialTop = dialTop, cardGap = CARD_GAP, location = location,
             statusLines = inp.statusLines, targetsRows = inp.rows, targetsRowHeight = rowH, margin = PANE_MARGIN, column = trailing,
             grid = grid, map = map, tile = t, tile2 = t2, mapHeight = mapHeight, sixth = inp.sixth, decimal = inp.decimal,
             bottomSpare = max(0f, avail - used), endGap = inp.end, trailingWidth = trailing, locked = inp.locked, hasSpot = inp.spot,
-            used = inp.s, noHeading = inp.noHeading, given = given, banner = inp.banner,
+            used = inp.s, noHeading = inp.noHeading, given = given, banner = inp.banner, barWidth = w - 2 * PANE_MARGIN,
         )
     }
 
@@ -821,15 +841,16 @@ object LayoutPlan {
 
     /** The frozen tokens a plan may use (A.1). */
     private fun tokensOk(p: Plan): Boolean =
-        (p.dialTop == DIAL_TOP || (p.dialTop == DIAL_TOP_TIGHT && Step.GAPS in p.given)) &&
+        (p.barGap == BAR_GAP || (p.barGap == BAR_GAP_TIGHT && Step.GAPS in p.given)) &&
+            abs(p.dialTop - (BAR_TOP + p.location + p.barGap)) < 0.01f &&
             (p.cardGap == CARD_GAP || (p.cardGap == CARD_GAP_TIGHT && Step.GAPS in p.given)) &&
             p.dialGap == DIAL_GAP && abs(p.statusGap - STATUS_GAP * p.k) < 0.01f && p.targetsGap == TARGETS_GAP &&
             p.gridGap == GRID_GAP && p.rowGap == ROW_GAP
 
     /**
      * Runs the golden table (devices × layouts × states × text sizes) and returns the cases that break a rule
-     * (A.11): every row's widths, gaps and insets add up to the column; the gaps are A.1's tokens; the dial's top is
-     * safe top + 18 (12 given way) and nothing sits above it; the location card is the status line's bottom + 12 (8);
+     * (A.11): every row's widths, gaps and insets add up to the column; the gaps are A.1's tokens; the location bar is
+     * first, at safe top + 8, 40 or taller, the dial's top 12 (8 given way) under it; the Targets card is the status line's bottom + 12 (8);
      * the Targets card has a row for each of the lock and the spot, the lock first, at 48 / 40 / 56 / 64 / 48; the
      * content fills the safe height with at most 24 left at the bottom; in one portrait column the dial is at least
      * 0.40 H (every layout, state and text size, the list too); map cards are 140 or more; at k ≥ 1.3 no
@@ -851,7 +872,10 @@ object LayoutPlan {
                 if (abs(row.total - p.column) > 0.01f) failures += "$name: row ${row.tiles} is ${row.total} wide in a ${p.column} column"
                 if (row.widths.any { it < 80f }) failures += "$name: a tile in ${row.tiles} is under 80 wide (${row.widths})"
             }
-            if (!tokensOk(p)) failures += "$name: gaps ${p.dialTop} / ${p.cardGap} are not A.1's tokens"
+            if (!tokensOk(p)) failures += "$name: gaps ${p.barGap} / ${p.cardGap} (dial top ${p.dialTop}) are not A.1's tokens"
+            // The owner's mod: the location bar first at safe top + 8, 40 tall at text size 1 (taller only for larger text or a wrapped line).
+            if (abs(p.locationTop - BAR_TOP) > 0.01f || p.location + 0.01f < LOCATION) failures += "$name: the location bar is not first at safe top + 8, 40 or taller (${p.location})"
+            if (k == 1f && !p.list && abs(p.location - LOCATION) > 0.01f) failures += "$name: the location bar is ${p.location} tall, not 40"
             val wantRows = (if (state.locked && !state.noHeading) 1 else 0) + (if (state.spot) 1 else 0)
             if (p.targetsRows != wantRows) failures += "$name: ${p.targetsRows} Targets rows for $wantRows"
             if (p.targetsRows > 0) {
@@ -867,8 +891,7 @@ object LayoutPlan {
             if (p.list) continue
             if (!p.twoPane) {
                 if (layout == Layout.EXTRA_LARGE && p.map != MapMode.BUTTON) failures += "$name: Extra Large's map is not the card's button"
-                if (p.dialTop + 0.01f < DIAL_TOP_TIGHT) failures += "$name: something above the dial"
-                if (abs(p.locationTop - (p.statusTop + p.status + p.cardGap)) > 0.01f) failures += "$name: the location card is not under the status line"
+                if (p.targetsRows > 0 && abs(p.targetsTop - (p.statusTop + p.status + p.cardGap + p.bannerHeight)) > 0.01f) failures += "$name: the Targets card is not under the status line"
                 if (p.bottomSpare > BOTTOM_SPARE_MAX + 0.5f && !p.held) failures += "$name: ${p.bottomSpare} empty at the bottom"
                 if (abs(p.used - d.s) > 0.5f) failures += "$name: planned ${p.used} for a safe height of ${d.s}"
                 val end = if (p.map == MapMode.CARD) p.mapTop + p.mapHeight else 0f
@@ -876,12 +899,10 @@ object LayoutPlan {
                 if (max(end, gridEnd) > d.s - p.endGap + 0.5f) failures += "$name: the last block ends at ${max(end, gridEnd)}, past ${d.s - p.endGap}"
                 if (p.dial > d.w - 16f + 0.5f) failures += "$name: dial ${p.dial} closer than 8 to the edge"
             } else {
-                // The trailing pane: the location card, Targets, grid and map card fit the pane.
-                val avail = d.s - p.endGap - p.dialTop
-                val content = p.location + p.bannerHeight + (if (p.targetsRows > 0) p.targetsGap + p.targets else 0f) +
-                    (if (p.grid == GridMode.BAND) 0f else p.gridGap + p.gridHeight) +
-                    (if (p.map == MapMode.CARD) p.mapGap + p.mapHeight else 0f)
-                if (content > avail + 0.5f) failures += "$name: trailing pane $content taller than $avail"
+                // The trailing pane: Targets, grid and map card fit under the bar, top-aligned with the dial.
+                val paneEnd = max(p.gridTop + p.gridHeight, if (p.map == MapMode.CARD) p.mapTop + p.mapHeight else 0f)
+                if (paneEnd > d.s - p.endGap + 0.5f) failures += "$name: trailing pane ends at $paneEnd, past ${d.s - p.endGap}"
+                if (abs(p.targetsTop - p.dialTop - p.bannerHeight) > 0.01f) failures += "$name: the trailing pane is not top-aligned with the dial"
                 if (p.map == MapMode.CARD && p.bottomSpare > BOTTOM_SPARE_MAX + 0.5f) failures += "$name: ${p.bottomSpare} empty under the map card"
                 if (p.map == MapMode.TILE && p.rows.none { TileKind.MAP in it.tiles }) failures += "$name: the Map tile has no cell"
             }
@@ -913,9 +934,11 @@ object LayoutPlan {
         val pixel = devices.first { it.name == "Pixel 7" }
         val moving = planFor(pixel, Layout.LARGE, moving = true)
         if (moving.rows.last().tiles.last() != TileKind.SPEED || planFor(pixel, Layout.LARGE).rows.last().tiles.last() != TileKind.PRESSURE) failures += "Large's sixth tile on Pixel 7"
-        // The worked numbers: Medium on the Pixel 7, sample: dial ceil8(0.40 H) = 368, 2 × 2 with the Map tile, tiles 88.
+        // The worked numbers: Medium on the Pixel 7, sample: the 40 bar first, the dial 60 down at its W − 32 cap (380),
+        // 2 × 2 with the Map tile, tiles 88 or more.
         val pm = planFor(pixel, Layout.MEDIUM)
-        if (pm.grid != GridMode.QUAD || pm.map != MapMode.TILE || abs(pm.dial - 368f) > 0.5f || abs(pm.tile - 88f) > 0.5f) failures += "Medium on Pixel 7: ${pm.resultLine}, tiles ${pm.tile}"
+        if (pm.grid != GridMode.QUAD || pm.map != MapMode.TILE || abs(pm.dial - 380f) > 0.5f || pm.tile + 0.5f < 88f ||
+            abs(pm.dialTop - 60f) > 0.01f || abs(pm.location - LOCATION) > 0.01f) failures += "Medium on Pixel 7: ${pm.resultLine}, tiles ${pm.tile}, dial top ${pm.dialTop}"
         val compact = compactWidths(370f)
         if (compact != listOf(146f, 104f, 104f) || compactWidths(700f) != listOf(306f, 189f, 189f)) failures += "Compact widths: $compact"
         if (Layout.of(null) != Layout.MEDIUM || Layout.of("bogus") != Layout.MEDIUM) failures += "Medium is not the default"

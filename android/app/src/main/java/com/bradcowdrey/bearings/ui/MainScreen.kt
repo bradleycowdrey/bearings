@@ -227,10 +227,10 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
                     val title = nav.title
                     val dates = Triple(nav.dateText(), nav.dateText(short = true), nav.clock(nav.now))
                     val twoPane = landscapePhone || (w > h && w >= LayoutPlan.TWO_PANE_WIDTH)
-                    // The location card's room for its text: the column (the trailing pane in two panes) less its
-                    // fixed parts and, where it has one, the map button's slot.
-                    val wraps = { l: Layout, button: Boolean ->
-                        val card = if (twoPane) LayoutPlan.trailingWidth(l, w) else column
+                    // The location bar's room for its text: the column (the full width inside the 24 margins in two
+                    // panes) less its fixed parts and, where it has one, the map button's slot.
+                    val wraps = { _: Layout, button: Boolean ->
+                        val card = if (twoPane) w - 2 * LayoutPlan.PANE_MARGIN else column
                         val px = with(density) { (card - LOCATION_FIXED - (if (button) 48f else 0f)).dp.toPx() }
                         val titleWraps = measurer.measure(AnnotatedString(title), tStyle, softWrap = false, maxLines = 1).size.width > px
                         val dateWraps = TextFit.headerLines(dates.first, dates.second, dates.third) {
@@ -295,8 +295,9 @@ private class Actions(
 // ---------- The three arrangements ----------
 
 /**
- * One fixed column (A.1): the dial [Plan.dialTop] under the status bar, then the readout, the status line, the
- * location card, the Targets card and the layout's tiles or map, each at the planner's size with the frozen gaps;
+ * One fixed column (A.1, owner's mod): the slim location bar 8 under the status bar, the dial 12 under it
+ * ([Plan.dialTop]), then the readout, the status line, the Targets card and the layout's tiles or map, each at the
+ * planner's size with the frozen gaps;
  * what step 4 left (24 at most) sits at the bottom. It sits in a scroll view only as a guard: when the plan fits
  * (it always does at font scales up to 1.3) nothing moves, and if text ever runs taller than planned the last
  * block scrolls into view instead of being cut, with a fade and an indicator to say so.
@@ -308,55 +309,57 @@ private fun SingleColumn(nav: Navigator, plan: Plan, dial: Dp, noCompass: Boolea
     val cue = rememberScrollCue(scroll, flash = false)
     Column(
         Modifier.fillMaxSize().scrollCue(scroll, cue).verticalScroll(scroll)
-            .padding(top = plan.dialTop.dp, bottom = (plan.endGap + plan.bottomSpare).dp),
+            .padding(top = plan.locationTop.dp, bottom = (plan.endGap + plan.bottomSpare).dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        LocationCard(nav, plan, a, wrap = false, Modifier.width(column))
+        Spacer(Modifier.height(plan.barGap.dp))
         DialBlock(nav, dial, noCompass)
         Spacer(Modifier.height(plan.dialGap.dp))
         ReadoutGroup(nav, plan, noCompass, Modifier.width(column))
         Spacer(Modifier.height(plan.cardGap.dp))
-        LocationCard(nav, plan, a, wrap = false, Modifier.width(column))
         if (plan.targetsRows > 0) {
-            Spacer(Modifier.height(plan.targetsGap.dp))
             TargetsCard(nav, plan, noCompass, Modifier.width(column))
+            Spacer(Modifier.height(plan.gridGap.dp))
         }
-        Spacer(Modifier.height(plan.gridGap.dp))
         PanelGrid(nav, plan, a)
     }
 }
 
 /**
- * Two panes (A.8): no full-width header. The dial, readout and status line top-aligned in the leading pane, the
- * dial's top 18 under the status bar; in the trailing pane, top-aligned with the dial, the location card (with ⋯),
- * the Targets card, the grid and a map card to the bottom.
+ * Two panes (A.8, owner's mod): the location bar (with ⋯) full width 8 under the status bar, as in one column; 12
+ * under it the panes: the dial, readout and status line top-aligned in the leading pane; in the trailing pane,
+ * top-aligned with the dial, the Targets card, the grid and a map card to the bottom.
  */
 @Composable
 private fun TwoPanes(nav: Navigator, plan: Plan, dial: Dp, noCompass: Boolean, a: Actions) {
-    Row(
+    Column(
         Modifier.fillMaxSize().padding(start = LayoutPlan.PANE_MARGIN.dp, end = LayoutPlan.PANE_MARGIN.dp,
-            top = plan.dialTop.dp, bottom = plan.endGap.dp),
+            top = plan.locationTop.dp, bottom = plan.endGap.dp),
     ) {
-        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-            DialBlock(nav, dial, noCompass)
-            Spacer(Modifier.height(plan.dialGap.dp))
-            ReadoutGroup(nav, plan, noCompass, Modifier.fillMaxWidth())
-        }
-        Spacer(Modifier.width(LayoutPlan.PANE_GAP.dp))
-        Column(Modifier.width(plan.trailingWidth.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
-            LocationCard(nav, plan, a, wrap = false, Modifier.fillMaxWidth())
-            if (plan.targetsRows > 0) {
-                Spacer(Modifier.height(plan.targetsGap.dp))
-                TargetsCard(nav, plan, noCompass, Modifier.fillMaxWidth())
+        LocationCard(nav, plan, a, wrap = false, Modifier.fillMaxWidth())
+        Spacer(Modifier.height(plan.barGap.dp))
+        Row(Modifier.fillMaxWidth().weight(1f)) {
+            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                DialBlock(nav, dial, noCompass)
+                Spacer(Modifier.height(plan.dialGap.dp))
+                ReadoutGroup(nav, plan, noCompass, Modifier.fillMaxWidth())
             }
-            Spacer(Modifier.height(plan.gridGap.dp))
-            PanelGrid(nav, plan, a)
+            Spacer(Modifier.width(LayoutPlan.PANE_GAP.dp))
+            Column(Modifier.width(plan.trailingWidth.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                if (plan.targetsRows > 0) {
+                    TargetsCard(nav, plan, noCompass, Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(plan.gridGap.dp))
+                }
+                PanelGrid(nav, plan, a)
+            }
         }
     }
 }
 
 /**
- * Accessibility text sizes (A.7): the whole screen is one list. The dial (still at least 40% of the screen), the
- * readout, the status line, the location card (wrapped), the Targets card with the cue on line 2, one row per tile
+ * Accessibility text sizes (A.7): the whole screen is one list. The location bar (wrapped, first, as everywhere),
+ * the dial (still at least 40% of the screen), the readout, the status line, the Targets card with the cue on line 2, one row per tile
  * (caption leading, value trailing) and a 176 Map tile. A 24 fade at the bottom and an indicator shown when the
  * list appears say there is more below.
  */
@@ -367,19 +370,19 @@ private fun ListScreen(nav: Navigator, plan: Plan, dial: Dp, noCompass: Boolean,
     val column = plan.column.dp
     Column(
         Modifier.fillMaxSize().scrollCue(scroll, cue).verticalScroll(scroll)
-            .padding(top = plan.dialTop.dp, bottom = 24.dp),
+            .padding(top = plan.locationTop.dp, bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        LocationCard(nav, plan, a, wrap = true, Modifier.width(column))
+        Spacer(Modifier.height(plan.barGap.dp))
         DialBlock(nav, dial, noCompass)
         Spacer(Modifier.height(plan.dialGap.dp))
         ReadoutGroup(nav, plan, noCompass, Modifier.width(column))
         Spacer(Modifier.height(plan.cardGap.dp))
-        LocationCard(nav, plan, a, wrap = true, Modifier.width(column))
         if (plan.targetsRows > 0) {
-            Spacer(Modifier.height(plan.targetsGap.dp))
             TargetsCard(nav, plan, noCompass, Modifier.width(column))
+            Spacer(Modifier.height(plan.gridGap.dp))
         }
-        Spacer(Modifier.height(plan.gridGap.dp))
         PanelGrid(nav, plan, a)
     }
 }
@@ -447,31 +450,40 @@ private fun Modifier.scrollCue(state: ScrollState, cue: androidx.compose.runtime
     }
 }
 
-// ---------- The location card ----------
+// ---------- The location bar ----------
 
-/** The location card's fixed parts beside the text: its 16 inset, 8, the sky glyph's 32 slot, ⋯'s 48 and 4 trailing. */
-private const val LOCATION_FIXED = 16f + 8f + 32f + 48f + 4f
+/**
+ * The location bar's fixed parts beside the text: its 12 inset, 8, the sky glyph's 24 slot, ⋯'s 48 slot and 2
+ * trailing (so ⋯'s 28 circle sits 12 from the bar's edge). The map button, where there is one, adds its 48 slot.
+ */
+private const val LOCATION_FIXED = 12f + 8f + 24f + 48f + 2f
+/** A button's slot in the bar: 48 wide, its 28 circle centred, its 48 × 48 touch area overhanging the 40 bar. */
+private const val BAR_BUTTON_SLOT = 48f
+/** The bar's corners (the owner's mod: radius 12). */
+private val BAR_SHAPE = RoundedCornerShape(12.dp)
 
-@Composable private fun titleStyle(): TextStyle = text(18f, FontWeight.SemiBold).copy(lineHeight = 22.sp)
-@Composable private fun dateStyle(): TextStyle = text(13f, color = headerSecondary()).copy(lineHeight = 20.sp, fontFeatureSettings = "tnum")
-@Composable private fun pillStyle(): TextStyle = text(12f, FontWeight.SemiBold).copy(lineHeight = 16.sp)
+@Composable private fun titleStyle(): TextStyle = text(15f, FontWeight.SemiBold).copy(lineHeight = LayoutPlan.TITLE_LINE.sp)
+@Composable private fun dateStyle(): TextStyle = text(12f, color = headerSecondary()).copy(lineHeight = LayoutPlan.DATE_LINE.sp, fontFeatureSettings = "tnum")
+@Composable private fun pillStyle(): TextStyle = text(10f, FontWeight.SemiBold).copy(lineHeight = 12.sp)
 @Composable private fun statusStyle(): TextStyle = text(13f, color = secondary()).copy(lineHeight = 18.sp)
 
-/** The Sample pill's width in px: "Sample" at 12 semibold and 8 each side. */
+/** The Sample pill's width in px: "Sample" at 10 semibold and 6 each side. */
 @Composable
 private fun pillWidth(measurer: TextMeasurer): Float {
     val style = pillStyle()
     val density = LocalDensity.current
-    return measurer.measure(AnnotatedString("Sample"), style, softWrap = false, maxLines = 1).size.width + with(density) { 16.dp.toPx() }
+    return measurer.measure(AnnotatedString("Sample"), style, softWrap = false, maxLines = 1).size.width + with(density) { 12.dp.toPx() }
 }
 
 /**
- * The location card (A.2), under the status line in every layout (Option 1; at the top of the trailing pane in two
- * panes): on the sky, the whole place name, "Maroon Bells, Colorado" (wrapped to a second line rather than
- * shortened or cut), over "Sun, Nov 1 · 9:41 AM" and the Sample pill trailing it; then, at fixed places at the
- * trailing end, the sky's symbol, the map button (Large and Extra Large; its slot kept but empty in two panes, where
- * a map card shows the map) and the ⋯ menu. Read as one heading, the buttons after it. The time is never cut: the
- * date shortens to "Nov 1", then line 2 wraps at the "·". Only at accessibility sizes does the pill move up to line 1.
+ * The location bar (A.2 with the owner's mod): first on the screen in every layout, 8 under the status bar (full
+ * width in two panes), 40 high with radius 12 on the sky: the whole place name, "Maroon Bells, Colorado" at 15
+ * semibold (wrapped to a second line rather than shortened or cut), over "Sun, Nov 1 · 9:41 AM" at 12, white 75%,
+ * and the Sample pill (10) trailing it; then, at fixed places at the trailing end, the sky's 16 symbol, the map
+ * button (Large and Extra Large; its slot kept but empty in two panes, where a map card shows the map) and the ⋯
+ * menu, both 28 circles whose 48 × 48 touch areas overhang the bar. Read as one heading, the buttons after it. The
+ * time is never cut: the date shortens to "Nov 1", then line 2 wraps at the "·". At larger text the bar grows to fit.
+ * Only at accessibility sizes does the pill move up to line 1.
  */
 @Composable
 private fun LocationCard(nav: Navigator, plan: Plan, a: Actions, wrap: Boolean, modifier: Modifier) {
@@ -479,12 +491,13 @@ private fun LocationCard(nav: Navigator, plan: Plan, a: Actions, wrap: Boolean, 
     val night = LocalNight.current
     val pillUp = nav.sample && wrap
     Row(
-        // In the list the card takes what its wrapped lines need (the planner's figure is only a minimum there).
-        modifier.heightIn(min = plan.location.dp).skyCard(sun?.altitude, Look.shape).padding(start = 16.dp, end = 4.dp),
+        // In the list the bar takes what its wrapped lines need (the planner's figure is only a minimum there). The
+        // sky is drawn, not clipped, so the buttons' 48 touch areas can reach past the bar's 40.
+        modifier.heightIn(min = plan.location.dp).background(SkyTone.brush(sun?.altitude), BAR_SHAPE).padding(start = 12.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
-            Modifier.weight(1f).padding(vertical = 4.dp).semantics(mergeDescendants = true) {
+            Modifier.weight(1f).padding(vertical = LayoutPlan.BAR_PAD.dp).semantics(mergeDescendants = true) {
                 heading()
                 contentDescription = "${nav.title}, ${nav.dateTimeText.replace(" · ", ", ")}${if (nav.sample) ", sample data" else ""}"
             },
@@ -506,15 +519,26 @@ private fun LocationCard(nav: Navigator, plan: Plan, a: Actions, wrap: Boolean, 
         }
         Spacer(Modifier.width(8.dp))
         // Decorative: TalkBack hears the place and time.
-        Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
-            Icon(skyIcon(sun?.altitude, sun?.azimuth), null, tint = white(Op.BODY), modifier = Modifier.size(22.dp))
+        Box(Modifier.width(24.dp), contentAlignment = Alignment.Center) {
+            Icon(skyIcon(sun?.altitude, sun?.azimuth), null, tint = white(Op.BODY), modifier = Modifier.size(16.dp))
         }
         when {
             plan.mapButton -> HeaderButton(Icons.Filled.Map, "Map", "Open the map", a.map)
-            plan.mapButtonSlot -> Spacer(Modifier.size(48.dp))
+            plan.mapButtonSlot -> Spacer(Modifier.width(BAR_BUTTON_SLOT.dp))
         }
         MenuButton(nav, night, a)
     }
+}
+
+/**
+ * A bar button's slot: 48 wide and only 28 high in the bar's layout (so the bar stays 40), with its 48 × 48 touch
+ * area centred on it (10 past the 28 slot, so 4 past the 40 bar above and below). Nothing clips the bar, so the overhang is hit.
+ */
+private fun Modifier.barButtonSlot(): Modifier = layout { measurable, _ ->
+    val touch = BAR_BUTTON_SLOT.dp.roundToPx()
+    val circle = 28.dp.roundToPx()
+    val p = measurable.measure(Constraints.fixed(touch, touch))
+    layout(touch, circle) { p.place(0, (circle - touch) / 2) }
 }
 
 /** Line 2: the date and time on one line where they fit, otherwise shortened, then wrapped; never "…". */
@@ -535,7 +559,7 @@ private fun DateTimeLines(nav: Navigator, modifier: Modifier) {
 }
 
 /**
- * The Sample pill (A.2): 12 semibold in a 20 high capsule, 8 each side; amber with black text by day, and at night
+ * The Sample pill (A.2, owner's mod): 10 semibold in a 14 high capsule, 6 each side; amber with black text by day, and at night
  * a black capsule with a white outline and white text (red through the screen's multiply), never red on red.
  */
 @Composable
@@ -544,7 +568,7 @@ private fun SampleBadge(night: Boolean) {
     val m = if (night) Modifier.clip(shape).background(Color.Black).border(1.5.dp, Color.White, shape)
         else Modifier.clip(shape).background(Palette.notice)
     Text("Sample", style = pillStyle().copy(color = if (night) Color.White else Color.Black), maxLines = 1,
-        modifier = m.heightIn(min = 20.dp).padding(horizontal = 8.dp, vertical = 2.dp))
+        modifier = m.heightIn(min = 14.dp).padding(horizontal = 6.dp, vertical = 1.dp))
 }
 
 /** The sun by day, sunrise or sunset in twilight, the moon at night, a pin before a fix (SkyTone.phase). */
@@ -555,21 +579,21 @@ private fun skyIcon(altitude: Double?, azimuth: Double?): ImageVector = when (Sk
     SkyTone.Phase.UNKNOWN -> Icons.Filled.LocationOn
 }
 
-/** A faint white 36 dp circle in a 48 dp touch target, as the ⋯ menu. */
+/** A faint white 28 dp circle with a 48 × 48 touch target that overhangs the bar, as the ⋯ menu. */
 @Composable
 private fun HeaderButton(icon: ImageVector, label: String, clickLabel: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = clickLabel, onClick = onClick)
+        Modifier.barButtonSlot().clip(CircleShape).clickable(role = Role.Button, onClickLabel = clickLabel, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(Palette.chipOff), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Box(Modifier.size(28.dp).clip(CircleShape).background(Palette.chipOff), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = Color.White, modifier = Modifier.size(18.dp))
         }
     }
 }
 
-/** The ⋯ menu (more_vert), at the trailing end of the location card on every layout, with everything Bearings can do or change. */
+/** The ⋯ menu (more_vert), at the trailing end of the location bar on every layout, with everything Bearings can do or change. */
 @Composable
 private fun MenuButton(nav: Navigator, night: Boolean, a: Actions) {
     var open by remember { mutableStateOf(false) }
@@ -581,12 +605,12 @@ private fun MenuButton(nav: Navigator, night: Boolean, a: Actions) {
     }
     Box {
         Box(
-            Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Open the menu") { open = true }
+            Modifier.barButtonSlot().clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Open the menu") { open = true }
                 .semantics { contentDescription = "Settings and more" },
             contentAlignment = Alignment.Center,
         ) {
-            Box(Modifier.size(36.dp).clip(CircleShape).background(Palette.chipOff), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.MoreVert, null, tint = Color.White, modifier = Modifier.size(24.dp))
+            Box(Modifier.size(28.dp).clip(CircleShape).background(Palette.chipOff), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.MoreVert, null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
         }
         DropdownMenu(open, onDismissRequest = { open = false }) {

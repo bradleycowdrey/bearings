@@ -18,13 +18,13 @@ enum PhoneSelfTest {
         for (name, ok) in CoreChecks.run() { check(ok, name) }
 
         // The layout planner (docs/REFINE.md "Concept A (chosen)", the same steps as Android): every device ×
-        // layout × state × compass × text size keeps every gap at its token, the dial 18 under the safe top
-        // (12 after giving way) with nothing above it, the location card under the status line, the Targets
-        // card's rows, no more than 24 empty at the bottom (unless the stack is centred), nothing cut, every
+        // layout × state × compass × text size keeps every gap at its token, the slim location bar first (safe
+        // top + 8, 40 × k) with the dial 12 under it (8 after giving way), the Targets card under the status
+        // line, the Targets card's rows, no more than 24 empty at the bottom (unless the stack is centred), nothing cut, every
         // dial at the owner's 0.40 H or more, rows whose widths add up to C, the dials in order and
         // neighbouring layouts never the same plan; the golden phones keep band / quad / six / strip.
         let planFailures = LayoutPlan.tableFailures()
-        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, nothing above the dial, location card under the status line, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
+        check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, the 40 pt location bar first, the dial 12 under it, Targets under the status line, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
         let summaryDevices: [(String, CGFloat, CGFloat, CGFloat)] = [
             ("iPhone SE", 375, 667, 647), ("iPhone 16", 393, 852, 759), ("iPhone 16 Pro", 402, 874, 778),
             ("iPad 11 portrait", 834, 1210, 1166),
@@ -63,7 +63,8 @@ enum PhoneSelfTest {
         }
         // What is drawn: "No heading" in words where the readout goes (it replaces the drawn dash), both
         // Position lines at one size, and the whole screen against its plan in every layout and state: the
-        // location card where planned, the grid each layout plans, and no more empty at the bottom than planned.
+        // location bar where planned (first, 40 high), the grid each layout plans, and no more empty at the
+        // bottom than planned.
         let noHeading = MainView.noHeadingFailures()
         check(noHeading.isEmpty, "No heading in words (\(noHeading.isEmpty ? "centred, 12 under the dial, 34 semibold, white 55%" : noHeading.prefix(2).joined(separator: "; ")))")
         let position = MainView.positionSizeFailures()
@@ -72,7 +73,7 @@ enum PhoneSelfTest {
         let drawSizes: [(CGFloat, CGFloat)] = [(402, 874), (375, 667), (834, 1210)]
         for (w, h) in drawSizes {
             let drawn = MainView.drawingFailures(nav: drawNav, width: w, height: h)
-            check(drawn.failures.isEmpty, "Screen drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "location card where planned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
+            check(drawn.failures.isEmpty, "Screen drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "location bar at the top and 40 high as planned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
             lines += drawn.info.map { "INFO \($0)" }
         }
         // Night secondary text: at least 4.5:1 on black (§4.3).

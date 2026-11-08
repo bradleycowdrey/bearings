@@ -1158,3 +1158,91 @@ Swift `Tests/BearingsTests/LayoutPlanTests.swift`, Kotlin `android/app/src/test/
     "6:36 AM" never split, last row above the safe bottom);
   - no empty band > 24 in any portrait golden.
 - The **golden table** devices and states are unchanged. Its checks are updated to the above.
+
+## Owner mod: location card back at top, slim 40 pt
+
+The owner's change to Concept A, Option 1: **"Put the location tile back at the top but make it less tall. I
+like the changes with this mod."** This section wins over A.1, A.2 (location card), A.5 step 1–2, A.8 (two
+panes) and A.11 wherever they differ. Everything else in Concept A stays exactly as built: the dial drawing,
+the readout, the status line, the Targets card, the four layouts' tiles and map, "No heading", the large-text
+rows, the scrolling list, night, the map sheet, iPad and Mac.
+
+**Order (portrait, one column):** **location bar → dial → readout → status line → Targets card → the layout's
+tiles / map.**
+
+**The location bar** (the sky card, now a slim bar):
+- First on screen: top = safe top + 8 (iPhone 16 Pro: 70; Mac window: the 28 title band + 8 = 36; Android:
+  status inset + 8 dp). Full column width; in two panes full width (W − 48) at the top, as in portrait.
+- **40 high** × k [40 dp], radius 12, the same sky gradient, no shadow. Leading padding 12; the two lines
+  centre in the bar (about 4 above and below).
+- Line 1: the place, 15 semibold [15 sp]. Line 2: the date · time, 12 [12 sp] at white 75%, tabular, with the
+  **Sample** pill inline (10 semibold in a 14 capsule; night: the outline). Nothing ellipsizes (the date
+  shortens, the place scales to 0.85).
+- Trailing, in order: the sky glyph 16 (white 85%, a 24 slot), the **map button** (Large, Extra Large, and
+  wherever the map gave way; hidden with its slot kept in two panes) and **⋯**, each a **28 visual circle**
+  (white 12%) whose hit area stays **44 × 44** [48 dp] by reaching 2 past the bar's top and bottom (Apple:
+  an overlay outside the bar's clip). The last circle sits 12 from the bar's edge.
+- Accessibility sizes (the list): the bar wraps and grows (place 24, date 17, the pill on line 1), never
+  under 40. The accessibility element and its label are unchanged.
+
+**Gaps (frozen tokens):**
+
+| From → to | pt / dp |
+|---|---|
+| safe top → location bar | 8 (never given up) |
+| location bar → dial | 12 (may fall to 8 under pressure, A.6 step 2) |
+| dial → readout, readout → status | 12, 6 × k (unchanged) |
+| status → Targets card (or the grid / Small's map card) | 12 (may fall to 8) |
+| Mac update banner → Targets → grid → map card, rows | 8 (unchanged; the banner is first under the status line) |
+
+When the stack is centred (spare beyond every growth), the extra goes between the bar and the dial and at
+the bottom; the bar stays at safe top + 8.
+
+**Two panes:** the bar spans the full width at the top; 12 under it the left pane (dial, readout, status) and
+the right pane (banner, Targets, grid, map card ≥ 240) start level. The map card takes the rest of the pane.
+
+**Planner:** the card's 48 + 12 under the status line and the 18 top gap (78 in all) become 8 + 40 + 12 above
+the dial and 12 under the status line (72): 14 pt more spare, which goes where it already went (A.5 step 4:
+growth first, then the dial to its width cap, then ≤ 24 at the bottom). The dial floor ceil(0.40 H) and the
+give-way order are unchanged.
+
+**iPhone 16 Pro, sample (lock + spot), k = 1.0** (on screen; safe top 62, end 840):
+
+| | Small | Medium | Large | Extra Large |
+|---|---|---|---|---|
+| Bar | 70–110 | 70–110 | 70–110 | 70–110 |
+| Dial top, size (% of H) | 122, 352 (40%) | 122, 352 (40%) | 122, 368 (42%) | 122, 386 (44%) |
+| Targets card | 564, 2 × 44 | 564, 2 × 44 | 580, 2 × 44 | 608, 2 × 52 |
+| Below | band over a 180 map card | 2 × 2 tiles ≈ 86 | 3 × 2 tiles ≈ 78 | strip ≈ 120 |
+
+Live (no lock, no spot): Small map card 276; Medium rows 88 / 176; Large rows 104 and the dial at its width
+cap 386; Extra Large strip 120 (the rest centred). iPhone SE Medium sample: still "dial 272 · compact · map
+button". iPad 11" portrait Medium: dial 488, quad at 96, map card ≈ 179. Mac 1200 × 800 Medium: dial 496.
+
+**Fixes made with the mod:**
+- Android maps drew place labels as solid white blocks. Every symbol layer is set to "Noto Sans Regular",
+  the regular of the Liberty style's own stack, which OpenFreeMap's glyph server serves (`MapDark.FONT`, as
+  before). Once per run, `MapDark.probeGlyphs()` also fetches that stack's 0–255 range. If it doesn't load
+  (no route to the glyph host, an error page), every symbol layer is hidden, so a label is never drawn
+  without its glyphs.
+- iPhone's Map tile: the `MKMapSnapshotter` image carries Apple's Maps logo baked into its bottom-left,
+  which sat under "MAP". The snapshot is now drawn 24 taller at each end and shown centred, so its bottom 24
+  (the logo) is cropped off and you stay in the middle; the tile's own Apple-logo "Maps" attribution in the caption
+  band stays.
+
+**Tests updated (both ports):** the frozen-rhythm and golden-table checks (bar first at safe top + 8, 40 × k,
+the dial 12 / 8 under it, Targets 12 / 8 under the status line, two panes level 12 under a full-width bar);
+`testLocationBarAtTop` replaces `testLocationCardBelowStatus`; the worked numbers above; iPad bar 40; the
+drawing check finds the bar's sky first on screen and 40 high. The 0.40 H, no-ellipsis, widths-sum,
+distinct-layouts and drawn-as-planned checks are kept.
+
+**Android (Pixel 7, 412 × 915, safe 867, end 8; sample, k = 1.0; dp from the safe top):** the bar is at 8–48.
+The dial's top is at 60. The old 18 top, 12 + 56 card and 8 Targets lead (94) become 8 + 40 + 12 + 12 (72),
+which frees 22 dp. Small: dial 368 (40.2%), Targets at 531, map card 224 with its band (was 202). Medium:
+dial 380 (41.5%, its W − 32 cap), tiles 90 / 90, Map tile. Large: dial 392 (42.8%), 3 × 2 at 96. Extra Large:
+dial 396 (43.3%), strip 126. Nothing gives way on the Pixel 7 or the iPhone 16 Pro sizes; the iPhone 16 (Android
+type) gives up only the bar → dial gap (8). In two panes the bar spans W − 48, and the panes start 12 under it,
+level. The bar's buttons are 28 circles in 48-wide slots; their 48 × 48 touch boxes overhang the 40 bar by 4
+at each edge (`Modifier.barButtonSlot()`). The sky is drawn with `background(brush, shape)` rather than
+clipped, so the overhang still takes touches. When only the scrolling list fits a layout, its dial is held
+under the next larger layout's dial (never under the floor), so the dials still step up.

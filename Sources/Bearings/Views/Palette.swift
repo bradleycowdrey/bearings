@@ -150,8 +150,8 @@ enum Look {
     static let tilePaddingV: CGFloat = 10
     /// The widgets keep 10 pt captions because of their size.
     static let widgetCaptionSize: CGFloat = 10
-    /// The header bar's corners.
-    static let headerRadius: CGFloat = 14
+    /// The location bar's corners (the slim 40 pt bar at the top; LayoutPlan.cardRadius).
+    static let headerRadius: CGFloat = 12
 
     /// "Last Quarter" → "Last quarter", as the Moon tile and the widgets write it.
     static func phaseName(_ phase: Sky.Phase) -> String {
