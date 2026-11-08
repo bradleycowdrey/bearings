@@ -1,6 +1,6 @@
 // Draws Bearings' icons and DMG background with Playwright (Chromium), in the style of Two Degrees:
-// the app's sky (day blue fading to night navy), white ticks and needle, pink north, and the crimson
-// band shared by every Bradley Cowdrey app. Writes:
+// the app's sky (day blue fading to night navy), white ticks and needle and pink north (the icon has no
+// crimson band; the widgets and the installer keep it). Writes:
 //   Resources/AppIcon.png (Mac, 1024, rounded with margin)  Resources/iOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png (full bleed)
 //   docs/icon.png (512)  Resources/dmg/background.png and background@2x.png  android/.../mipmap-*/ic_launcher*.png
 // Usage: node scripts/make-art.js
@@ -32,10 +32,10 @@ const glow = `<defs>
 
 const mac = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${glow}
   <g filter="url(#sh)"><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/></g>
-  <g clip-path="url(#sq)"><rect x="100" y="100" width="824" height="824" filter="url(#grain)" opacity="0.05"/><rect x="100" y="100" width="824" height="28" fill="#990F3D"/></g>
+  <g clip-path="url(#sq)"><rect x="100" y="100" width="824" height="824" filter="url(#grain)" opacity="0.05"/></g>
   ${needle(512, 526, 300)}</svg>`;
 const ios = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${glow}
-  <rect width="1024" height="1024" fill="url(#g)"/><rect width="1024" height="1024" filter="url(#grain)" opacity="0.05"/><rect width="1024" height="34" fill="#990F3D"/>
+  <rect width="1024" height="1024" fill="url(#g)"/><rect width="1024" height="1024" filter="url(#grain)" opacity="0.05"/>
   ${needle(512, 522, 370)}</svg>`;
 const fg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${needle(512, 512, 250)}</svg>`;
 const dmg = (s) => `<html><body style="margin:0;width:660px;height:400px;background:#000;font-family:Inter,-apple-system,system-ui,sans-serif;color:#fff;position:relative;overflow:hidden;zoom:${s}">
