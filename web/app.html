@@ -16,9 +16,10 @@
     --north: #E04A7A; --level: #8FC89A; --warn: #F2A65A; --sun: #F5B03C; --moon: #FFF1E5;
     --lock: #3D2128; --lock-edge: #5A2C38; --menu: #1E1E22; --land: #0F3B3A;
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", system-ui, sans-serif;
-    --r: 16px; --row: 44px; --bar: 40px; --below: 178px;
+    --r: 16px; --row: 44px; --bar: 40px; --below: 178px; --dial: 46vh;
     --f-place: 15px; --f-when: 12px; --f-deg: 56px; --f-status: 13px; --f-row: 17px; --f-cap: 11px; --f-v: 15px; --f-v1: 17px; --f-s: 13px;
   }
+  @supports (height: 1svh) { :root { --dial: 46svh; } }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   html { -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; background: var(--bg); }
@@ -67,7 +68,7 @@
 
   /* Dial, readout, status line */
   .compass { display: flex; flex-direction: column; align-items: center; margin: 4px 0; }
-  .dial-wrap { position: relative; flex: none; width: min(100%, 46vh); width: min(100%, 46svh); aspect-ratio: 1; }
+  .dial-wrap { position: relative; flex: none; width: min(100%, var(--dial)); aspect-ratio: 1; }
   .dial { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
   .dial svg { width: 100%; height: 100%; display: block; overflow: visible; }
   #card { transform-origin: 200px 200px; will-change: transform; }
@@ -87,13 +88,17 @@
 
   /* Targets: the locked bearing and the marked spot, in one card */
   .targets { border-radius: var(--r); background: var(--tile); box-shadow: inset 0 0 0 1px var(--stroke); overflow: hidden; }
-  .trow { display: flex; align-items: center; gap: 8px; min-height: var(--row); padding: 0 2px 0 14px; font-size: var(--f-row); white-space: nowrap; }
+  /* A row is its glyph, the words and the ✕. The words are the name and the value on one line, apart; when the
+     system's font is too wide for that (a narrow phone, large type) the value goes onto a second line, at the
+     right, and the row grows. Nothing is clipped and nothing overlaps; no fixed widths. */
+  .trow { display: flex; align-items: center; gap: 8px; min-height: var(--row); padding: 0 2px 0 14px; font-size: var(--f-row); }
+  .trow .tx { flex: 1 1 0; min-width: 0; margin-left: 4px; padding: 6px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 12px; }
   .trow + .trow { border-top: 1px solid rgba(255,255,255,.08); }
   .trow.lock { background: var(--lock); box-shadow: inset 0 0 0 1px var(--lock-edge); border-radius: var(--r) var(--r) 0 0; }
   .trow.lock:last-child, .trow.lock.only { border-radius: var(--r); }
   .trow .g { width: 16px; height: 16px; flex: none; color: var(--body); }
-  .trow .name { flex: 1 1 auto; min-width: 0; margin-left: 4px; }
-  .trow .val { flex: none; font-weight: 600; }
+  .trow .name, .trow .val { flex: 0 1 auto; max-width: 100%; overflow-wrap: anywhere; }
+  .trow .val { margin-left: auto; font-weight: 600; text-align: right; }
   .trow .x { width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%; background: none; color: var(--cap); cursor: pointer; display: grid; place-items: center; position: relative; }
   .trow .x::after { content: ""; position: absolute; inset: -2px; }
   .trow .x:hover { background: var(--press); color: #fff; }
@@ -189,15 +194,20 @@
 
   /* Narrow phones: slightly smaller type, so nothing is cut short or needs "…". */
   @media (max-width: 359px) { :root { --f-row: 15px; --f-v: 13px; --f-v1: 15px; --f-s: 12px; --f-cap: 10px; } .trow { padding-left: 10px; gap: 6px; } .tile { padding: 8px 10px; } }
-  /* Short screens (iPhone SE, a phone browser with its toolbars showing): the compact rows and tiles, a dial at
-     40% of the height, so it still fits one screen. */
-  @media (max-height: 740px) {
-    :root { --row: 36px; --f-deg: 44px; --f-row: 15px; }
-    .dial-wrap { width: min(100%, 40.5vh); width: min(100%, 40.5svh); }
-    .compass { margin: 0; } .readout { margin-top: 8px; } .subline { margin-top: 2px; }
-    .tile { min-height: 64px; padding: 8px 12px; }
-    #posS { display: none; }
-  }
+  /* One screen, from measured heights (fit(), below): type is as wide and as tall as the system's font makes it,
+     so nothing here assumes how high the page comes out. When it is taller than the window the page gives way in
+     the apps' order (docs/LAYOUTS.md), and <html data-fit> says how far it went:
+       1  the tiles compact and the spare gaps closed;
+       2  and the Targets rows and the readout compact;
+       3  and the dial smaller (--dial, set in px), but never under 40% of the height. After that the page scrolls. */
+  :is([data-fit="1"], [data-fit="2"], [data-fit="3"]) .compass { margin: 0; }
+  :is([data-fit="1"], [data-fit="2"], [data-fit="3"]) .readout { margin-top: 8px; }
+  :is([data-fit="1"], [data-fit="2"], [data-fit="3"]) .subline { margin-top: 2px; }
+  :is([data-fit="1"], [data-fit="2"], [data-fit="3"]) .tile { min-height: 64px; padding: 8px 12px; }
+  :is([data-fit="1"], [data-fit="2"], [data-fit="3"]) .map { min-height: 64px; }
+  :is([data-fit="1"], [data-fit="2"], [data-fit="3"]) #posS { display: none; }
+  [data-fit="2"], [data-fit="3"] { --row: 36px; --f-deg: 44px; --f-row: 15px; }
+  :is([data-fit="2"], [data-fit="3"]) .trow .tx { padding: 4px 0; }
   /* Tablets and desktops: the larger type the iPad and Mac use. */
   @media (min-width: 700px) and (min-height: 700px) {
     :root { --bar: 56px; --row: 52px; --below: 250px; --f-place: 20px; --f-when: 15px; --f-deg: 96px; --f-status: 15px; --f-row: 19px; --f-cap: 13px; --f-v: 22px; --f-v1: 22px; --f-s: 15px; }
@@ -274,14 +284,12 @@
     <section class="targets" id="targets" aria-label="Targets" hidden>
       <div class="trow lock" id="lockRow" hidden>
         <svg class="g" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2h.3c.7 0 1.2.5 1.2 1.2v5.1c0 .7-.5 1.2-1.2 1.2H4.2c-.7 0-1.2-.5-1.2-1.2V8.2c0-.7.5-1.2 1.2-1.2Zm1.6 0h3.8V5a1.9 1.9 0 0 0-3.8 0Z"/></svg>
-        <span class="name num" id="lockText"></span>
-        <span class="val num" id="lockTurn"></span>
+        <span class="tx"><span class="name num" id="lockText"></span><span class="val num" id="lockTurn"></span></span>
         <button type="button" class="x" id="lockClear" aria-label="Clear the locked bearing" title="Clear the locked bearing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button>
       </div>
       <div class="trow" id="spotRow" hidden>
         <svg class="g" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a3 3 0 0 1 .8 5.9V14a.8.8 0 0 1-1.6 0V6.9A3 3 0 0 1 8 1Zm-.9 1.8a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z"/></svg>
-        <span class="name">Marked spot</span>
-        <span class="val num" id="spotText"></span>
+        <span class="tx"><span class="name">Marked spot</span><span class="val num" id="spotText"></span></span>
         <button type="button" class="x" id="spotClear" aria-label="Clear the marked spot" title="Clear the marked spot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button>
       </div>
     </section>
@@ -904,6 +912,7 @@
       if (mapOpener && mapOpener.isConnected && mapOpener.offsetParent !== null) mapOpener.focus();
       mapOpener = null;
     }
+    if (!open) fitSoon();
     if (map) { map.resize(); if (S.fix) map.jumpTo({ center: [S.fix.lon, S.fix.lat] }); updateAccuracyRing(); }
   }
 
@@ -1051,6 +1060,30 @@
   mapSays('');
   drawWhen(); drawCompassState(); drawPlace(); drawSky();
 
+  // ---------- One screen, from measured heights ----------
+  // Nothing assumes how tall the page is: the type is the system's, and a wider font wraps a line that a narrow
+  // one doesn't. So measure, and while the page is taller than the window give way in the apps' order: tiles
+  // compact, Targets rows compact, then the dial down to its floor of 40% of the height. Only then does the page
+  // scroll. Run after drawing, and again whenever the window, the fonts or the size of a block changes.
+  const root = document.documentElement, dialWrap = $('.dial-wrap');
+  function fit() {
+    if (root.classList.contains('map-is-open')) return;   // the map covers the screen; fitted again when it closes
+    root.dataset.fit = '0'; root.style.removeProperty('--dial');
+    if (getComputedStyle($('#panel')).display === 'grid') return;   // two panes: the dial is sized by the window
+    const over = () => root.scrollHeight - root.clientHeight;
+    for (const level of ['1', '2']) { if (over() <= 0) return; root.dataset.fit = level; }
+    const by = over(); if (by <= 0) return;
+    root.dataset.fit = '3';
+    root.style.setProperty('--dial', `${Math.max(Math.ceil(0.4 * root.clientHeight), Math.floor(dialWrap.offsetWidth - by))}px`);
+  }
+  let fitQueued = false;
+  const fitSoon = () => { if (fitQueued) return; fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fit(); }); };
+  fit();
+  addEventListener('resize', fit);
+  if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fit); if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', fit); }
+  // A block that changes height (the status line wraps, the Targets card appears, a longer coordinate format).
+  if (window.ResizeObserver) { const ro = new ResizeObserver(fitSoon); for (const sel of ['#bar', '#readout', '#noHeading', '#subline', '#targets', '#tiles']) ro.observe($(sel)); }
+
   // A sample place for screenshots, previews without location, and the product page's demo.
   // ?heading= fixes the heading, ?lock= and ?spot add targets, ?nocompass shows a device with no compass,
   // ?night the red screen, ?t= a moment in time, ?store hides the Sample pill (as the apps' --store does).
@@ -1073,7 +1106,7 @@
       requestAnimationFrame(step);
       if (params.has('lock')) setTimeout(() => { S.lock = Number(params.get('lock')) || 0; drawHeading(); }, 50);
     } else S.usingTrue = settings.trueNorth;
-    drawWhen(); drawPlace(); drawCompassState(); drawSky(); drawSpot(); updateMap();
+    drawWhen(); drawPlace(); drawCompassState(); drawSky(); drawSpot(); updateMap(); fit();
   }
 
   window.Bearings = { state: S, settings, drawPlace, drawHeading, onOrientation, startSample, showMap };

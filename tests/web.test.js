@@ -132,6 +132,9 @@ function decodePNG(buf) {
 }
 const close = (p, q, tol) => Math.abs(p[0] - q[0]) <= tol && Math.abs(p[1] - q[1]) <= tol && Math.abs(p[2] - q[2]) <= tol;
 
+// The app uses the system font stack, so its type is as wide as the system's: SF and Inter are narrow; DejaVu Sans
+// and Verdana (a Linux desktop, a CI runner) are about a tenth wider and taller. The wide-font pass forces these.
+const WIDE_FONT = '* { font-family: "DejaVu Sans", Verdana, sans-serif !important; }';
 function serve() {
   const root = path.resolve(__dirname, '../docs');
   const types = { '.html': 'text/html; charset=utf-8', '.tsv': 'text/tab-separated-values; charset=utf-8', '.png': 'image/png' };
@@ -140,6 +143,8 @@ function serve() {
       const file = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
       if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end(); return; }
       res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream' });
+      // ?widefont: the page as a browser with wider system fonts draws it (Linux, some Android), from the first paint.
+      if (/[?&]widefont\b/.test(req.url) && file.endsWith('.html')) { res.end(fs.readFileSync(file, 'utf8').replace('</head>', `<style>${WIDE_FONT}</style></head>`)); return; }
       fs.createReadStream(file).pipe(res);
     }).listen(0, '127.0.0.1', () => resolve(server));
   });
@@ -183,10 +188,14 @@ async function layout(page) {
     // Rows of a Targets row never run into each other: the name ends before the value starts.
     for (const row of document.querySelectorAll('.trow')) {
       if (!seen(row)) continue;
+      // When the two don't fit on one line the value goes onto a line of its own under the name, and the row grows.
       const a = row.querySelector('.name').getBoundingClientRect(), b = row.querySelector('.val').getBoundingClientRect(), x = row.querySelector('.x').getBoundingClientRect();
-      if (b.left < a.left + 1 || b.right > x.left + 1 || x.right > row.getBoundingClientRect().right + 1) out.push(`Targets row is crowded: ${row.textContent.trim().slice(0, 30)}`);
+      const box = row.getBoundingClientRect(), says = row.textContent.trim().replace(/\s+/g, ' ').slice(0, 30), under = b.top >= a.bottom - 1;
+      if ((!under && b.left < a.left + 1) || b.left < a.left - 1 || b.right > x.left + 1 || x.right > box.right + 1) out.push(`Targets row is crowded: ${says}`);
       const range = document.createRange(); range.selectNodeContents(row.querySelector('.name'));
-      if (range.getBoundingClientRect().right > b.left - 4) out.push(`Targets row text collides: ${row.textContent.trim().slice(0, 30)}`);
+      if (!under && range.getBoundingClientRect().right > b.left - 4) out.push(`Targets row text collides: ${says}`);
+      if (Math.min(a.top, b.top) < box.top - 0.5 || Math.max(a.bottom, b.bottom) > box.bottom + 0.5) out.push(`Targets row is too short for its text: ${says}`);
+      if (parseFloat(getComputedStyle(row.querySelector('.val')).fontSize) < 12) out.push(`Targets row type under 12 px: ${says}`);
     }
     const blocks = ['#bar', '#compass', '#targets', '.tiles'].map((s) => document.querySelector(s)).filter(seen);
     const oneColumn = getComputedStyle(document.querySelector('.app')).display !== 'grid';
@@ -207,6 +216,14 @@ async function layout(page) {
     }
     return out;
   });
+}
+/** One screen on a phone: the page is no taller than the window. It may scroll only once everything that gives
+    way has: the tiles and the Targets rows compact and the dial at its floor, 40% of the height (the page says how
+    far it went in <html data-fit>: 1 tiles compact, 2 and the rows, 3 and the dial shrunk). */
+async function oneScreen(page, h) {
+  const m = await page.evaluate(() => ({ sh: document.documentElement.scrollHeight, fit: document.documentElement.dataset.fit, dial: document.querySelector('.dial-wrap').getBoundingClientRect().height }));
+  const atFloor = m.fit === '3' && m.dial <= Math.ceil(0.4 * h) + 0.5;
+  return { ok: m.sh <= h + 1 || atFloor, says: m.sh <= h + 1 ? `${m.sh} ≤ ${h}` : `${m.sh} > ${h}: it may scroll only with the tiles and rows compact and the dial at its 40% floor; fit ${m.fit}, dial ${Math.round(m.dial)} of ${h}` };
 }
 const box = (page, sel) => page.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, r: r.right, b: r.bottom }; });
 
@@ -275,8 +292,8 @@ const box = (page, sel) => page.$eval(sel, (e) => { const r = e.getBoundingClien
     }
     const probs = await layout(page);
     check(probs.length === 0, `${name}: layout${probs.length ? ' – ' + probs.join('; ') : ''}`);
-    const sh = await page.evaluate(() => document.documentElement.scrollHeight);
-    check(sh <= h + 1, `${name}: fits one screen (${sh} ≤ ${h})`);
+    const one = await oneScreen(page, h);
+    check(one.ok, `${name}: fits one screen (${one.says})`);
 
     // What is drawn: the screenshot's own pixels.
     const png = decodePNG(await page.screenshot());
@@ -354,11 +371,52 @@ const box = (page, sel) => page.$eval(sel, (e) => { const r = e.getBoundingClien
     const { context, page, errors } = await open(browser, 320, 568, '?demo&nomap&heading=228&lock=240&spot', { storage: { 'bearings.feet': false } });
     await page.waitForTimeout(300);
     const bad = [];
-    for (let i = 0; i < 6; i++) { const cap = await txt(page, '#posK'); bad.push(...(await layout(page)).map((p) => `${cap}: ${p}`)); await page.click('#posTile'); }
+    const narrowOne = await oneScreen(page, 568);
+    check(narrowOne.ok, `narrow phone (320 × 568): fits one screen (${narrowOne.says})`);
+    for (let i = 0; i < 6; i++) { const cap = await txt(page, '#posK'); bad.push(...(await layout(page)).map((p) => `${cap}: ${p}`)); await page.click('#posTile'); await page.waitForTimeout(60); }
     check(bad.length === 0, `narrow phone (320 wide): nothing is cut short in any format${bad.length ? ' – ' + bad.join('; ') : ''}`);
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'web-narrow.png'), fullPage: true });
     check(errors.length === 0, `narrow: no script errors${errors.length ? ' – ' + errors.join('; ') : ''}`);
     await context.close();
+  }
+
+  // The same phones with a wider system font (the app has no font of its own, so a Linux or Android browser
+  // draws it wider and taller than an iPhone does): nothing is cut short or collides in any format, the dial
+  // keeps its 40%, and the page still fits one screen, or scrolls only with everything else already compact.
+  {
+    const probe = await open(browser, 393, 852, '?demo&nomap&widefont');
+    const wideHere = await probe.page.evaluate(() => {
+      const c = document.createElement('canvas').getContext('2d'), width = (f) => { c.font = `16px ${f}`; return c.measureText('Marked spot 9.2 mi 46° NE').width; };
+      return { has: width('"DejaVu Sans", monospace') !== width('monospace') || width('Verdana, monospace') !== width('monospace'),
+        forced: /DejaVu Sans/.test(getComputedStyle(document.querySelector('#lockText')).fontFamily), ratio: width('"DejaVu Sans", Verdana, sans-serif') / width(getComputedStyle(document.documentElement).getPropertyValue('--font')) };
+    });
+    await probe.context.close();
+    if (!wideHere.has) results.push('SKIP wide font (neither DejaVu Sans nor Verdana is installed)');
+    else {
+      check(wideHere.forced, `wide font: the pass draws in DejaVu Sans or Verdana (${wideHere.ratio.toFixed(2)} × the width of the system font here)`);
+      for (const [name, w, h] of [['phone', 393, 852], ['small phone', 375, 667], ['narrow phone', 320, 568]]) {
+        const { context, page, errors } = await open(browser, w, h, `?demo&nomap&widefont&heading=228&lock=240&spot&t=${T0}`);
+        await page.waitForTimeout(400);
+        const bad = [], tall = [];
+        for (let i = 0; i < 6; i++) {
+          const cap = (await txt(page, '#posK')).replace('Position · ', '');
+          bad.push(...(await layout(page)).map((p) => `${cap}: ${p}`));
+          const one = await oneScreen(page, h); if (!one.ok) tall.push(`${cap}: ${one.says}`);
+          if (i === 0) {
+            const dial = await box(page, '.dial-wrap'), compass = await box(page, '#compass'), targets = await box(page, '#targets'), pos = await box(page, '#posTile');
+            check(dial.h >= 0.4 * h && Math.abs(dial.w - dial.h) < 1, `wide font, ${name}: the dial is at least 40% of the height (${Math.round(dial.h)} of ${h}, ${Math.round(100 * dial.h / h)}%)`);
+            check(compass.b <= targets.y && targets.b <= pos.y, `wide font, ${name}: dial, readout and status, then Targets, then the tiles`);
+            check(one.ok, `wide font, ${name}: fits one screen (${one.says})`);
+            if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `web-wide-font-${name.replace(' ', '-')}.png`), fullPage: true });
+          }
+          await page.click('#posTile'); await page.waitForTimeout(60);
+        }
+        check(bad.length === 0, `wide font, ${name}: nothing is cut short or collides in any format${bad.length ? ' – ' + bad.join('; ') : ''}`);
+        check(tall.length === 0, `wide font, ${name}: every format fits one screen${tall.length ? ' – ' + tall.join('; ') : ''}`);
+        check(errors.length === 0, `wide font, ${name}: no script errors${errors.length ? ' – ' + errors.join('; ') : ''}`);
+        await context.close();
+      }
+    }
   }
 
   // The sample with no compass (as a phone without one, and every desktop): words, not a dash.
