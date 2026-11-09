@@ -35,11 +35,8 @@ jobs:
         run: |
           SHOTS=fastlane/screenshots/en-US; rm -rf fastlane/screenshots; mkdir -p "$SHOTS"
           ID=com.bradcowdrey.bearings; export SIMCTL_CHILD_TZ=America/Denver
-          # The status bar's clock and date: 9:41 on the app's own day (Colorado's, as SIMCTL_CHILD_TZ sets
-          # it), written as an ISO date in the runner's time zone so the bar reads 9:41. Without the date the
-          # iPad's bar would show the runner's day, which is a day ahead of Colorado's for part of each day.
-          BAR_TIME="$(TZ=America/Denver date +%Y-%m-%d)T09:41:00$(date +%z | sed -E 's/([0-9]{2})$/:\1/')"
-          echo "Status bar time: $BAR_TIME"
+          # The status bar reads 9:41 (a plain time: an ISO date was not accepted by simctl and left the bar
+          # showing the runner's clock).
           pick() {   # newest runtime's available device whose name matches $1
             xcrun simctl list devices available -j | python3 -c '
           import json, re, sys
@@ -54,7 +51,7 @@ jobs:
             # let them pass so none lands in a store screenshot.
             sleep 90
             xcrun simctl ui "$D" appearance dark
-            xcrun simctl status_bar "$D" override --time "$BAR_TIME" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 || true
+            xcrun simctl status_bar "$D" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 || true
             xcrun simctl install "$D" dist/ios/Bearings.app
             xcrun simctl privacy "$D" grant location $ID || true
             xcrun simctl location "$D" set 39.09898,-106.94117 || true
