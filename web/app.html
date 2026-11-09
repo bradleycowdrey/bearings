@@ -1,256 +1,342 @@
 <title>Bearings</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Bearings: a compass with where you are, your coordinates, elevation, the sun and moon, and a map, on one screen. Free and open source, by Bradley Cowdrey.">
-<meta name="theme-color" content="#1A1816">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#000000">
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <style>
-  /* One column, one screen (docs/DESIGN.md): header with the place and time, dial, readout, tiles, map.
-     bradcowdrey.com colours: warm near-black, cream, crimson. 4-point grid; 16 margins; 12 gaps. */
+  /* The apps' Medium layout (docs/LAYOUTS.md, docs/LOOK.md): black screen, a slim location bar on the sky at the
+     top, the dial (at least 40% of the height on a phone), the readout and status line, one Targets card, and a
+     2 × 2 of tiles: Position, Elevation, Sun, Map. On a wide window there are two panes, as on the Mac: the dial
+     on the left; Targets, tiles (with a Moon tile) and a map card on the right.
+     White type quietened only by opacity; pink means north and nothing else. System fonts; no web fonts. */
   :root {
     color-scheme: dark;
-    --bg: #1A1816; --tile: #23201D; --tile-hover: #2A2622; --border: #2A2520; --border-strong: #3A3530;
-    --text: #FFFFFF; --cream: #FFF1E5; --secondary: #E0D8D0; --muted: #B0A898; --faint: #9A9286;
-    --crimson: #990F3D; --accent: #E04A7A; --ok: #8FC89A; --warn: #F2A65A; --sun: #F4B860;
-    --font: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-    --gap: 12px; --r-tile: 18px;
+    --bg: #000; --tile: rgba(255,255,255,.08); --stroke: rgba(255,255,255,.12); --press: rgba(255,255,255,.13);
+    --text: #fff; --body: rgba(255,255,255,.85); --sub: rgba(255,255,255,.7); --cap: rgba(255,255,255,.6); --faint: rgba(255,255,255,.35);
+    --north: #E04A7A; --level: #8FC89A; --warn: #F2A65A; --sun: #F5B03C; --moon: #FFF1E5;
+    --lock: #3D2128; --lock-edge: #5A2C38; --menu: #1E1E22; --land: #0F3B3A;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", system-ui, sans-serif;
+    --r: 16px; --row: 44px; --bar: 40px; --below: 178px;
+    --f-place: 15px; --f-when: 12px; --f-deg: 56px; --f-status: 13px; --f-row: 17px; --f-cap: 11px; --f-v: 15px; --f-v1: 17px; --f-s: 13px;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html { -webkit-font-smoothing: antialiased; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 400 15px/1.4 var(--font); letter-spacing: -.01em; font-feature-settings: "cv11", "ss01";
-    padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-  }
+  html { -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; background: var(--bg); }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 400 15px/1.35 var(--font); }
   button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
   a { color: inherit; text-decoration: none; }
-  :focus-visible { outline: 2px solid var(--cream); outline-offset: 2px; border-radius: 10px; }
+  :focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 10px; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .num { font-variant-numeric: tabular-nums; }
 
-  .panel {
-    position: relative; width: 100%; max-width: 460px; margin: 0 auto;
-    background: var(--bg); border-radius: 28px;
-    box-shadow: 0 0 0 0.5px var(--border-strong), 0 40px 100px rgba(0,0,0,.55);
-    padding: 20px 16px 16px; display: flex; flex-direction: column; gap: var(--gap); overflow: hidden;
+  .app {
+    width: 100%; max-width: 752px; margin: 0 auto; min-height: 100vh; min-height: 100dvh;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
-  .panel::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--crimson); }
-  .embedded .panel { box-shadow: 0 0 0 0.5px var(--border-strong), 0 16px 32px rgba(0,0,0,.4); }
-  /* Header: where and when */
-  .hdr { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+  .side { display: contents; }
+
+  /* Location bar: where and when, on the sky for the sun's height where you are. */
+  .bar { position: relative; z-index: 30; display: flex; align-items: center; gap: 4px; min-height: var(--bar); padding: 3px 4px 3px 14px;
+    border-radius: 14px; background: linear-gradient(#262626, #262626); }
   .where { flex: 1; min-width: 0; }
-  .where h1 { margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -.025em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .where .when { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sample { font-size: 11px; line-height: 14px; font-weight: 600; color: var(--bg); background: var(--warn); border-radius: 980px; padding: 1px 7px; margin-left: 8px; vertical-align: 1px; letter-spacing: 0; }
-  .circle { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer; position: relative;
-    background: var(--tile); box-shadow: inset 0 0 0 0.5px var(--border-strong); color: var(--secondary); transition: background .15s, color .15s; }
-  .circle::after { content: ""; position: absolute; inset: -4px; }   /* a 44-point target */
-  .circle:hover { background: var(--tile-hover); color: var(--text); }
+  .where h1 { margin: 0; font-size: var(--f-place); line-height: 1.2; font-weight: 600; letter-spacing: -.01em; overflow-wrap: anywhere; }
+  .where .when { font-size: var(--f-when); line-height: 1.25; color: rgba(255,255,255,.75); }
+  .sample { display: inline-block; font-size: 11px; line-height: 15px; font-weight: 600; color: #000; background: var(--warn); border-radius: 980px; padding: 0 7px; margin-left: 7px; vertical-align: 1px; }
+  .night .sample { background: #000; color: #fff; box-shadow: inset 0 0 0 1.5px #fff; }
+  .sky { width: 32px; flex: none; display: grid; place-items: center; color: var(--body); }
+  .sky svg { width: 22px; height: 22px; display: block; }
+  .circle { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer; position: relative;
+    background: rgba(255,255,255,.14); color: #fff; transition: background .15s; }
+  .circle::after { content: ""; position: absolute; inset: -6px; }   /* a 44-point target */
+  .circle:hover, .circle[aria-expanded="true"] { background: rgba(255,255,255,.24); }
   .circle svg { width: 18px; height: 18px; }
 
   /* Menu */
-  .menu-wrap { position: relative; }
-  .menu { position: absolute; z-index: 30; top: 44px; right: 0; width: 264px; max-height: min(74vh, 620px); overflow: auto;
-    background: #26221F; border-radius: 14px; padding: 6px; box-shadow: 0 0 0 0.5px var(--border-strong), 0 18px 48px rgba(0,0,0,.6); }
-  .menu .sec { padding: 10px 10px 4px; font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+  .menu-wrap { position: relative; flex: none; display: grid; }
+  .menu { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: 264px; max-height: min(74vh, 620px); overflow: auto;
+    background: var(--menu); border-radius: 14px; padding: 6px; box-shadow: 0 0 0 1px var(--stroke), 0 18px 48px rgba(0,0,0,.6); }
+  .menu .sec { padding: 10px 10px 4px; font-size: 11px; font-weight: 600; color: var(--cap); text-transform: uppercase; letter-spacing: .05em; }
   .menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px 10px; border: 0; border-radius: 8px;
     background: none; text-align: left; cursor: pointer; font-size: 14px; }
-  .menu button:hover, .menu button:focus-visible { background: var(--border-strong); }
+  .menu button:hover, .menu button:focus-visible { background: var(--press); }
   .menu button:disabled { color: var(--faint); cursor: default; background: none; }
-  .menu .ck { width: 14px; flex: none; text-align: center; color: var(--cream); }
-  .menu hr { border: 0; border-top: 0.5px solid var(--border-strong); margin: 6px 4px; }
+  .menu .ck { width: 14px; flex: none; text-align: center; }
+  .menu hr { border: 0; border-top: 1px solid var(--stroke); margin: 6px 4px; }
 
-  /* Dial */
-  .compass { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .dial-wrap { position: relative; width: min(100%, 360px, 36vh); aspect-ratio: 1; }
+  /* Dial, readout, status line */
+  .compass { display: flex; flex-direction: column; align-items: center; margin: 4px 0; }
+  .dial-wrap { position: relative; flex: none; width: min(100%, 46vh); width: min(100%, 46svh); aspect-ratio: 1; }
   .dial { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
   .dial svg { width: 100%; height: 100%; display: block; overflow: visible; }
   #card { transform-origin: 200px 200px; will-change: transform; }
-  /* No compass: said where the heading would be, in the readout's own space, so nothing overlaps the dial. */
-  .dial-note { display: flex; align-items: center; justify-content: center; max-width: 300px; min-height: 82px; margin-top: 4px; text-align: center; font-size: 15px; line-height: 20px; color: var(--muted); text-wrap: balance; }
+  .nohead .dial { cursor: default; }
+  .nohead #card { opacity: .55; }
   .dial-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); height: 44px; padding: 0 20px; border: 0; border-radius: 980px;
-    background: var(--cream); color: var(--bg); font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
-  .readout { display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-top: 4px; }
-  .readout .deg { font-size: 56px; font-weight: 600; letter-spacing: -.045em; line-height: 56px; }
-  .readout .pt { font-size: 28px; font-weight: 500; letter-spacing: -.03em; color: var(--muted); line-height: 1; min-width: 2.2em; }
-  /* Plain centred text, not a flex row: the parts are joined with no-break spaces around the dots (see drawSubline),
-     so a line breaks only after a " · " and a number never ends up apart from its unit. */
-  .subline { min-height: 18px; font-size: 13px; line-height: 18px; color: var(--muted); text-align: center; }
+    background: #fff; color: #000; font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .readout { display: flex; align-items: baseline; justify-content: center; gap: .16em; margin-top: 10px; font-size: var(--f-deg); line-height: 1; white-space: nowrap; }
+  .readout .deg { font-weight: 300; letter-spacing: -.035em; }
+  .readout .pt { font-size: .5em; font-weight: 500; color: var(--cap); }
+  .nohead-words { margin-top: 10px; font-size: 34px; line-height: 40px; font-weight: 600; letter-spacing: -.2px; color: rgba(255,255,255,.55); text-align: center; }
+  /* The parts are joined with no-break spaces before the dots (see drawSubline), so a line breaks only after
+     a " · " and a number never ends up apart from its unit. */
+  .subline { min-height: 18px; margin-top: 4px; font-size: var(--f-status); line-height: 18px; color: var(--cap); text-align: center; text-wrap: balance; }
   .subline .dot { color: var(--faint); }
-  .subline .lock { color: var(--accent); font-weight: 600; }
   .subline .bad { color: var(--warn); font-weight: 600; }
 
-  /* Marked spot */
-  .spot { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px 0 14px; border-radius: 980px; background: var(--tile); font-size: 14px; }
-  .spot .pin { width: 14px; height: 14px; flex: none; color: var(--accent); }
-  .spot b { font-weight: 600; }
-  .spot .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--secondary); }
-  .spot .x { width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%; background: var(--border-strong); color: var(--secondary); cursor: pointer; display: grid; place-items: center; position: relative; }
-  .spot .x::after { content: ""; position: absolute; inset: -6px; }
-  .spot .x svg { width: 12px; height: 12px; }
+  /* Targets: the locked bearing and the marked spot, in one card */
+  .targets { border-radius: var(--r); background: var(--tile); box-shadow: inset 0 0 0 1px var(--stroke); overflow: hidden; }
+  .trow { display: flex; align-items: center; gap: 8px; min-height: var(--row); padding: 0 2px 0 14px; font-size: var(--f-row); white-space: nowrap; }
+  .trow + .trow { border-top: 1px solid rgba(255,255,255,.08); }
+  .trow.lock { background: var(--lock); box-shadow: inset 0 0 0 1px var(--lock-edge); border-radius: var(--r) var(--r) 0 0; }
+  .trow.lock:last-child, .trow.lock.only { border-radius: var(--r); }
+  .trow .g { width: 16px; height: 16px; flex: none; color: var(--body); }
+  .trow .name { flex: 1 1 auto; min-width: 0; margin-left: 4px; }
+  .trow .val { flex: none; font-weight: 600; }
+  .trow .x { width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%; background: none; color: var(--cap); cursor: pointer; display: grid; place-items: center; position: relative; }
+  .trow .x::after { content: ""; position: absolute; inset: -2px; }
+  .trow .x:hover { background: var(--press); color: #fff; }
+  .trow .x svg { width: 14px; height: 14px; }
+  .night .trow .x { color: rgba(255,255,255,.9); }
 
   /* Tiles */
-  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .tile { position: relative; background: var(--tile); border-radius: var(--r-tile); padding: 12px 14px; min-width: 0; text-align: left; border: 0; }
+  .tiles { display: flex; flex-direction: column; flex: 1 1 auto; max-height: 216px; min-height: 0; }
+  .grid { flex: 1 1 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 8px; }
+  .tile { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 72px; padding: 10px 12px; text-align: left; border: 0; border-radius: var(--r);
+    background: var(--tile); box-shadow: inset 0 0 0 1px var(--stroke); }
   button.tile { cursor: pointer; transition: background .15s; }
-  button.tile:hover { background: var(--tile-hover); }
-  .tile.wide { grid-column: 1 / -1; }
-  .tile .k { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); }
-  .tile .v { font-size: 19px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-  .tile .v small { font-size: 15px; font-weight: 500; color: var(--muted); letter-spacing: -.01em; margin-left: 6px; }
-  .tile .s { display: flex; align-items: center; gap: 5px; font-size: 12px; line-height: 16px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-  .tile .s span { overflow: hidden; text-overflow: ellipsis; }
-  .tile .s svg { width: 12px; height: 12px; flex: none; }
-  .stale .v { color: var(--muted); }
-  .ask { background: var(--tile); border-radius: var(--r-tile); padding: 14px; display: flex; align-items: center; gap: 12px; }
-  .ask p { margin: 0; flex: 1; font-size: 13px; color: var(--secondary); line-height: 1.4; }
-  .ask button { flex: none; height: 40px; padding: 0 16px; border: 0; border-radius: 980px; background: var(--cream); color: var(--bg); font-weight: 600; font-size: 14px; cursor: pointer; }
+  button.tile:hover, button.tile:active { background: var(--press); }
+  .tile .k { display: flex; align-items: center; gap: .35em; font-size: var(--f-cap); line-height: 13px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--cap); white-space: nowrap; }
+  .night .tile .k { color: rgba(255,255,255,.9); }
+  .tile .k svg { width: 12px; height: 12px; flex: none; }
+  .tile .v { margin-top: auto; padding-top: 4px; font-size: var(--f-v); line-height: 1.27; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .tile .v > span { display: block; white-space: nowrap; }
+  .tile .v > #gridV { white-space: normal; }
+  .tile .v.one { font-size: var(--f-v1); }
+  .tile .v svg { width: .82em; height: .82em; vertical-align: -.06em; margin-right: .3em; }
+  .tile .s { font-size: var(--f-s); line-height: 1.3; color: var(--cap); font-variant-numeric: tabular-nums; }
+  .stale .v { color: var(--cap); }
+  #moonTile { display: none; }
+  .capmoon { display: contents; }
+  .ask { border-radius: var(--r); background: var(--tile); box-shadow: inset 0 0 0 1px var(--stroke); padding: 14px; display: flex; align-items: center; gap: 12px; }
+  .ask p { margin: 0; flex: 1; font-size: 13px; color: var(--body); line-height: 1.4; }
+  .ask button { flex: none; height: 40px; padding: 0 16px; border: 0; border-radius: 980px; background: #fff; color: #000; font-weight: 600; font-size: 14px; cursor: pointer; }
 
-  /* Map */
-  .map { position: relative; min-height: 120px; height: clamp(140px, 22vh, 220px); border-radius: var(--r-tile); overflow: hidden; background: var(--tile); }
-  #mapView { position: absolute; inset: 0; }
-  .map .maplibregl-ctrl-attrib { font-size: 10px; background: rgba(26,24,22,.72); color: var(--secondary); }
-  .map .maplibregl-ctrl-attrib a { color: var(--secondary); }
-  .map .maplibregl-ctrl-attrib-button { filter: invert(1); }
+  /* Map: the fourth tile on a phone (tap for the full map), a card in the right pane on a wide window. */
+  .map { position: relative; min-height: 72px; border-radius: var(--r); overflow: hidden; background: var(--land); box-shadow: inset 0 0 0 1px var(--stroke); }
+  #mapView { position: absolute; inset: 0; pointer-events: none; }
+  .map::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--stroke); pointer-events: none; z-index: 4; }
+  .map-open-btn { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; border: 0; padding: 0; background: none; cursor: pointer; border-radius: var(--r); }
+  .map-open-btn:hover { background: rgba(255,255,255,.06); }
+  .map-foot { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; pointer-events: none;
+    background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.65)); }
+  .map-foot svg { width: 11px; height: 11px; flex: none; }
+  .map-foot .k { font-size: var(--f-cap); font-weight: 600; letter-spacing: .6px; }
+  .attr { margin-left: auto; font-size: 9px; color: var(--cap); white-space: nowrap; }
+  .attr .more { display: none; }
   /* Balanced lines, so a centred message never leaves one word alone on the last line. */
-  .map-msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; font-size: 13px; color: var(--muted); text-wrap: balance; }
-  .map-tools { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
-  .map-tools button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer; position: relative;
-    background: rgba(26,24,22,.88); color: var(--cream); box-shadow: 0 0 0 0.5px var(--border-strong); font-size: 18px; line-height: 1; }
-  .map-tools button::after { content: ""; position: absolute; inset: -3px -6px; }
-  .map-tools button[aria-pressed="true"] { background: var(--cream); color: var(--bg); }
+  .map-msg { position: absolute; inset: 0 0 20px; z-index: 1; display: grid; place-items: center; align-content: center; gap: 6px; text-align: center; padding: 8px 10px; font-size: 11px; line-height: 1.3; color: var(--body); text-wrap: balance; }
+  .map-msg .full { display: none; }
+  .map-msg .dot { width: 14px; height: 14px; border-radius: 50%; background: #9AA0A6; box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(0,0,0,.5); }
+  .map-tools { position: absolute; top: 12px; right: 12px; display: none; flex-direction: column; gap: 8px; z-index: 5; }
+  .map-tools button, .map-close { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer; position: relative;
+    background: rgba(0,0,0,.6); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); color: #fff; font-size: 20px; font-weight: 500; line-height: 1; }
+  .map-tools button::after { content: ""; position: absolute; inset: -4px; }
+  .map-tools button:hover, .map-close:hover { background: rgba(60,60,60,.8); }
+  .map-tools button[aria-pressed="true"] { background: #fff; color: #000; }
   .map-tools button svg { width: 15px; height: 15px; }
-  .speed { position: absolute; left: 8px; bottom: 8px; z-index: 2; height: 28px; padding: 0 10px; border-radius: 980px; display: flex; align-items: center;
-    background: rgba(26,24,22,.88); box-shadow: 0 0 0 0.5px var(--border-strong); font-size: 13px; font-weight: 600; }
-  .me { position: relative; width: 18px; height: 18px; }
-  .me i { position: absolute; inset: 0; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(0,0,0,.5); }
-  .me .acc { position: absolute; left: 50%; top: 50%; border-radius: 50%; background: rgba(224,74,122,.16); border: 1px solid rgba(224,74,122,.45); transform: translate(-50%, -50%); pointer-events: none; }
+  .map-close { position: absolute; top: max(12px, env(safe-area-inset-top)); left: 12px; z-index: 5; display: none; width: auto; height: 36px; padding: 0 16px; border-radius: 980px; font-size: 15px; font-weight: 600; }
+  .speed { position: absolute; left: 12px; top: 12px; z-index: 5; display: none; align-items: center; padding: 5px 10px; border-radius: 14px; background: rgba(0,0,0,.72); font-size: 13px; font-weight: 600; }
+  .me { position: relative; width: 16px; height: 16px; }
+  .me i { position: absolute; inset: 0; border-radius: 50%; background: #9AA0A6; box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(0,0,0,.5); }
+  .me .acc { position: absolute; left: 50%; top: 50%; border-radius: 50%; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.4); transform: translate(-50%, -50%); pointer-events: none; }
   .me .cone { position: absolute; left: 50%; top: 50%; width: 70px; height: 70px; margin: -70px 0 0 -35px; transform-origin: 35px 70px; pointer-events: none;
-    background: linear-gradient(to top, rgba(224,74,122,.55), rgba(224,74,122,0)); clip-path: polygon(50% 100%, 18% 0, 82% 0); }
-  .spotmark { width: 14px; height: 14px; border-radius: 50%; background: var(--cream); box-shadow: 0 0 0 3px var(--accent); }
+    background: linear-gradient(to top, rgba(255,255,255,.6), rgba(255,255,255,0)); clip-path: polygon(50% 100%, 18% 0, 82% 0); }
+  .spotmark { width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px #000, 0 0 0 4px rgba(255,255,255,.6); }
 
-  /* Footer (Mac-sized and wider: on a phone it's in About) */
-  .foot { display: flex; justify-content: flex-end; font-size: 12px; color: var(--muted); padding: 0 2px; }
-  .foot a:hover { color: var(--text); }
-  .toast { position: fixed; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50;
-    background: var(--cream); color: var(--bg); font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 980px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  /* The map as a card (wide windows) or opened over the screen: it takes touches and shows its controls. */
+  .map.open { position: fixed; inset: 0; z-index: 35; border-radius: 0; box-shadow: none; }
+  .map.open::after { display: none; }
+  .map.open #mapView { pointer-events: auto; }
+  .map.open .map-open-btn, .map.open .map-foot .k, .map.open .map-foot svg, .map.open #mapExpand { display: none; }
+  .map.open .map-tools { display: flex; top: max(12px, env(safe-area-inset-top)); }
+  .map.open .map-close { display: grid; }
+  .map.open .speed:not([hidden]) { display: flex; top: auto; bottom: max(36px, env(safe-area-inset-bottom)); }
+  .map.open .map-foot { height: 30px; padding-bottom: env(safe-area-inset-bottom); box-sizing: content-box; pointer-events: auto; }
+  .map.open .attr { font-size: 11px; color: var(--body); }
+  .map.open .attr .more { display: inline; }
+  .map.open .map-msg { font-size: 15px; padding: 24px; }
+  .map.open .map-msg .full { display: inline; } .map.open .map-msg .brief { display: none; }
+  .map-is-open { overflow: hidden; }
+
+  .toast { position: fixed; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50; white-space: nowrap;
+    background: #fff; color: #000; font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 980px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
   /* Night mode: everything red, to keep your eyes used to the dark. */
   .night-filter { position: fixed; inset: 0; z-index: 40; pointer-events: none; background: #FF2E1F; mix-blend-mode: multiply; }
   .night .map #mapView { filter: brightness(.6); }
 
-  dialog { max-width: min(420px, calc(100vw - 32px)); border: 0; border-radius: 22px; padding: 24px; background: #26221F; color: var(--text);
-    box-shadow: 0 0 0 0.5px var(--border-strong), 0 30px 80px rgba(0,0,0,.6); }
-  dialog::backdrop { background: rgba(0,0,0,.55); }
+  dialog { max-width: min(420px, calc(100vw - 32px)); border: 0; border-radius: 22px; padding: 24px; background: var(--menu); color: var(--text);
+    box-shadow: 0 0 0 1px var(--stroke), 0 30px 80px rgba(0,0,0,.6); }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
   dialog h2 { margin: 12px 0 6px; font-size: 20px; letter-spacing: -.02em; }
-  dialog p { margin: 0 0 10px; color: var(--secondary); font-size: 14px; line-height: 1.5; }
+  dialog p { margin: 0 0 10px; color: var(--body); font-size: 14px; line-height: 1.5; }
   dialog u { text-decoration-color: var(--faint); }
   dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
   dialog .row button, dialog .row a { height: 40px; padding: 0 16px; border: 0; border-radius: 980px; cursor: pointer; font-weight: 600; font-size: 14px; display: inline-grid; place-items: center; }
-  dialog .primary { background: var(--cream); color: var(--bg); }
-  dialog .plain { background: var(--border-strong); color: var(--text); }
+  dialog .primary { background: #fff; color: #000; }
+  dialog .plain { background: var(--stroke); color: var(--text); }
 
-  /* On a phone the column is the whole screen: no frame, map to the bottom. */
-  @media (max-width: 500px) {
-    body { padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-    html, body { height: 100%; }
-    .panel { box-shadow: none; padding: 0; border-radius: 0; min-height: 100%; }
-    .panel::before, .foot { display: none; }
-    .map { flex: 1 1 0; height: auto; min-height: 110px; }
-    .spot { min-height: 40px; }
-    .dial-wrap { width: min(100%, 360px, 31vh); }
-    .readout .deg { font-size: 52px; line-height: 52px; }
+  /* Narrow phones: slightly smaller type, so nothing is cut short or needs "…". */
+  @media (max-width: 359px) { :root { --f-row: 15px; --f-v: 13px; --f-v1: 15px; --f-s: 12px; --f-cap: 10px; } .trow { padding-left: 10px; gap: 6px; } .tile { padding: 8px 10px; } }
+  /* Short screens (iPhone SE, a phone browser with its toolbars showing): the compact rows and tiles, a dial at
+     40% of the height, so it still fits one screen. */
+  @media (max-height: 740px) {
+    :root { --row: 36px; --f-deg: 44px; --f-row: 15px; }
+    .dial-wrap { width: min(100%, 40.5vh); width: min(100%, 40.5svh); }
+    .compass { margin: 0; } .readout { margin-top: 8px; } .subline { margin-top: 2px; }
+    .tile { min-height: 64px; padding: 8px 12px; }
+    #posS { display: none; }
   }
-
-  /* Short phones (iPhone SE): a smaller dial, readout and map, so it still fits one screen. */
-  @media (max-width: 500px) and (max-height: 700px) {
-    .dial-wrap { width: min(100%, 26vh); }
-    .readout .deg { font-size: 44px; line-height: 44px; } .readout .pt { font-size: 22px; }
-    .panel { gap: 8px; }   /* the compact spacing the Android app uses on short screens */
-    .tile { padding: 8px 14px; } .tile .v { font-size: 17px; line-height: 22px; }
-    .map { min-height: 96px; }
-    .where h1 { font-size: 18px; line-height: 24px; }
+  /* Tablets and desktops: the larger type the iPad and Mac use. */
+  @media (min-width: 700px) and (min-height: 700px) {
+    :root { --bar: 56px; --row: 52px; --below: 250px; --f-place: 20px; --f-when: 15px; --f-deg: 96px; --f-status: 15px; --f-row: 19px; --f-cap: 13px; --f-v: 22px; --f-v1: 22px; --f-s: 15px; }
+    .app { padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+    .bar { border-radius: 16px; padding-left: 16px; }
+    .sample { font-size: 13px; line-height: 19px; }
+    .circle { width: 36px; height: 36px; margin-right: 6px; }
+    .subline { line-height: 20px; }
+    .tile { padding: 12px 16px; min-height: 100px; }
+    .tile .k { line-height: 16px; } .tile .k svg { width: 14px; height: 14px; }
+    .tile .s { color: var(--sub); }
+    .tiles { max-height: 260px; }
+    .trow { padding-left: 16px; }
+  }
+  /* Wide windows: two panes, as on the Mac and a landscape iPad. */
+  @media (min-width: 640px) and (min-aspect-ratio: 11/10) {
+    .app { max-width: 1560px; display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(300px, .92fr); grid-template-rows: auto minmax(0, 1fr); gap: 12px 24px; }
+    .bar { grid-column: 1 / -1; }
+    .compass { grid-column: 1; justify-content: center; margin: 0; }
+    .dial-wrap { width: min(100%, max(160px, calc(100vh - var(--below)))); width: min(100%, max(160px, calc(100dvh - var(--below)))); }
+    .side { grid-column: 2; display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+    .tiles, .grid { max-height: none; }
+    /* Before a position is known the ask fills the pane as one card, so the right side is never a hole. */
+    .ask { flex: 1 1 auto; flex-direction: column; justify-content: center; text-align: center; gap: 16px; padding: 24px; }
+    .ask p { flex: none; max-width: 420px; font-size: 15px; }
+    .grid { grid-auto-rows: auto; grid-template-rows: auto auto minmax(140px, 1fr); }
+    #moonTile { display: flex; }
+    .capmoon { display: none; }
+    .map { grid-column: 1 / -1; }
+    .map:not(.open) #mapView { pointer-events: auto; }
+    .map:not(.open) .map-open-btn, .map:not(.open) .map-foot .k, .map:not(.open) .map-foot svg { display: none; }
+    .map:not(.open) .map-tools { display: flex; }
+    .map:not(.open) .speed:not([hidden]) { display: flex; }
+    .map:not(.open) .map-foot { pointer-events: auto; }
+    .map:not(.open) .attr .more { display: inline; }
+    .map:not(.open) .map-msg { font-size: 13px; padding: 16px 56px; }
+    .map:not(.open) .map-msg .full { display: inline; } .map:not(.open) .map-msg .brief { display: none; }
+  }
+  @media (min-width: 640px) and (min-aspect-ratio: 11/10) and (max-height: 520px) {
+    .grid { grid-template-rows: auto auto; } .map:not(.open) { display: none; }   /* a phone on its side: no room for the map card */
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
-<main class="panel" id="panel">
-  <header class="hdr">
+<main class="app" id="panel">
+  <header class="bar" id="bar">
     <div class="where">
       <h1 id="place">Bearings</h1>
       <div class="when num" id="when">&nbsp;</div>
     </div>
+    <span class="sky" id="skyGlyph" aria-hidden="true"></span>
     <div class="menu-wrap">
       <button type="button" class="circle" id="moreBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Settings and more" title="Settings and more">
-        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
       </button>
       <div class="menu" id="menu" role="menu" hidden></div>
     </div>
   </header>
 
-  <section class="compass" aria-label="Compass">
+  <section class="compass" id="compass" aria-label="Compass">
     <div class="dial-wrap">
       <button type="button" class="dial" id="dial" aria-label="Compass">
         <svg viewBox="0 0 400 400" id="dialSvg" aria-hidden="true"></svg>
       </button>
       <button type="button" class="dial-cta" id="startCompass" hidden>Start Compass</button>
     </div>
-    <div class="dial-note" id="dialNote" hidden></div>
-    <div class="readout num" aria-hidden="true"><span class="deg" id="deg">—</span><span class="pt" id="pt"></span></div>
+    <div class="readout num" id="readout" aria-hidden="true"><span class="deg" id="deg">—</span><span class="pt" id="pt"></span></div>
+    <div class="nohead-words" id="noHeading" aria-hidden="true" hidden>No heading</div>
     <div class="subline" id="subline"></div>
     <span class="sr" id="srHeading" aria-live="polite"></span>
   </section>
 
-  <div class="spot" id="spotPill" hidden>
-    <svg class="pin" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>
-    <span class="txt num" id="spotText"></span>
-    <button type="button" class="x" id="spotClear" aria-label="Clear the marked spot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  <div class="side">
+    <section class="targets" id="targets" aria-label="Targets" hidden>
+      <div class="trow lock" id="lockRow" hidden>
+        <svg class="g" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2h.3c.7 0 1.2.5 1.2 1.2v5.1c0 .7-.5 1.2-1.2 1.2H4.2c-.7 0-1.2-.5-1.2-1.2V8.2c0-.7.5-1.2 1.2-1.2Zm1.6 0h3.8V5a1.9 1.9 0 0 0-3.8 0Z"/></svg>
+        <span class="name num" id="lockText"></span>
+        <span class="val num" id="lockTurn"></span>
+        <button type="button" class="x" id="lockClear" aria-label="Clear the locked bearing" title="Clear the locked bearing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button>
+      </div>
+      <div class="trow" id="spotRow" hidden>
+        <svg class="g" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a3 3 0 0 1 .8 5.9V14a.8.8 0 0 1-1.6 0V6.9A3 3 0 0 1 8 1Zm-.9 1.8a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z"/></svg>
+        <span class="name">Marked spot</span>
+        <span class="val num" id="spotText"></span>
+        <button type="button" class="x" id="spotClear" aria-label="Clear the marked spot" title="Clear the marked spot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button>
+      </div>
+    </section>
+
+    <section class="tiles" aria-label="Where you are">
+      <div class="ask" id="askLoc" hidden>
+        <p>Allow your location to see where you are, your coordinates, elevation and map. It stays on this device.</p>
+        <button type="button" id="useLoc">Use My Location</button>
+      </div>
+      <div class="grid" id="tiles">
+        <button type="button" class="tile" id="posTile" title="Click for the next format; hold to copy">
+          <div class="k" id="posK">Position</div>
+          <div class="v" id="posV"><span id="latV">—</span><span id="lonV"></span><span id="gridV" hidden></span></div>
+          <div class="s" id="posS"></div>
+        </button>
+        <div class="tile" id="eleTile" role="group"><div class="k">Elevation</div><div class="v one" id="eleV">—</div><div class="s" id="eleS">&nbsp;</div></div>
+        <div class="tile" id="sunTile" role="group"><div class="k" id="sunK">Sun</div><div class="v" id="sunV"><span id="sunUp">—</span><span id="sunDown"></span></div></div>
+        <div class="tile" id="moonTile" role="group"><div class="k">Moon</div><div class="v one" id="moonV">—</div><div class="s" id="moonS">&nbsp;</div></div>
+        <section class="map" id="mapCard" aria-label="Map of where you are">
+          <div id="mapView"></div>
+          <div class="map-msg" id="mapMsg"><i class="dot" aria-hidden="true"></i><span id="mapMsgText"></span></div>
+          <div class="map-foot">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10V4h6M4 4l7 7M20 14v6h-6M20 20l-7-7"/></svg>
+            <span class="k" aria-hidden="true">MAP</span>
+            <span class="attr" id="mapAttr"><span class="more"><a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> </span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a></span>
+          </div>
+          <button type="button" class="map-open-btn" id="mapOpen" aria-label="Map, opens full map" title="Open the map"></button>
+          <button type="button" class="map-close" id="mapClose">Done</button>
+          <div class="map-tools" id="mapTools" hidden>
+            <button type="button" id="zoomIn" aria-label="Zoom in" title="Zoom in">+</button>
+            <button type="button" id="zoomOut" aria-label="Zoom out" title="Zoom out">−</button>
+            <button type="button" id="followBtn" aria-pressed="false" aria-label="Follow your heading" title="Follow your heading">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 19 21 12 17 5 21Z"/></svg>
+            </button>
+            <button type="button" id="mapExpand" aria-label="Make the map larger" title="Make the map larger">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10V4h6M4 4l7 7M20 14v6h-6M20 20l-7-7"/></svg>
+            </button>
+            <button type="button" id="openMap" aria-label="Open in a full map" title="Open in a full map">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h10v10M19 5 6 18"/></svg>
+            </button>
+          </div>
+          <div class="speed num" id="speedChip" hidden></div>
+        </section>
+      </div>
+    </section>
   </div>
-
-  <section aria-label="Where you are">
-    <div class="ask" id="askLoc" hidden>
-      <p>Allow your location to see where you are, your coordinates, elevation and map. It stays on this device.</p>
-      <button type="button" id="useLoc">Use My Location</button>
-    </div>
-    <div class="grid" id="tiles">
-      <button type="button" class="tile" id="latTile"><div class="k">Latitude</div><div class="v" id="latV">—</div><div class="s" id="latS">&nbsp;</div></button>
-      <button type="button" class="tile" id="lonTile"><div class="k">Longitude</div><div class="v" id="lonV">—</div><div class="s" id="lonS">&nbsp;</div></button>
-      <button type="button" class="tile wide" id="gridTile" hidden><div class="k" id="gridK">UTM</div><div class="v" id="gridV">—</div><div class="s" id="gridS">&nbsp;</div></button>
-      <div class="tile" id="eleTile" role="group"><div class="k">Elevation</div><div class="v" id="eleV">—</div><div class="s" id="eleS">&nbsp;</div></div>
-      <div class="tile" id="sunTile" role="group"><div class="k">Sun</div><div class="v" id="sunV">—</div><div class="s" id="sunS">&nbsp;</div></div>
-    </div>
-  </section>
-
-  <section class="map" aria-label="Map of where you are">
-    <div id="mapView"></div>
-    <div class="map-msg" id="mapMsg">The map appears once Bearings knows where you are.</div>
-    <div class="map-tools" id="mapTools" hidden>
-      <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
-      <button type="button" id="zoomOut" aria-label="Zoom out">−</button>
-      <button type="button" id="followBtn" aria-pressed="false" aria-label="Follow your heading" title="Follow your heading">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 19 21 12 17 5 21Z"/></svg>
-      </button>
-      <button type="button" id="openMap" aria-label="Open in a full map" title="Open in a full map">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
-      </button>
-    </div>
-    <div class="speed num" id="speedChip" hidden></div>
-  </section>
-
-  <footer class="foot">
-    <a href="https://bradcowdrey.com" target="_blank" rel="noopener">Made by Bradley Cowdrey · bradcowdrey.com ↗</a>
-  </footer>
 </main>
 <div class="night-filter" id="nightFilter" hidden></div>
 
 <dialog id="about">
-  <svg width="56" height="56" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#2A2420"/><rect width="64" height="3" fill="#990F3D"/><circle cx="32" cy="33" r="21" fill="none" stroke="#3E3832" stroke-width="1.5"/><path d="M32 17 37 33H27Z" fill="#E04A7A"/><path d="M32 49 27 33h10Z" fill="#FFF1E5"/><circle cx="32" cy="33" r="2" fill="#1A1816"/></svg>
+  <svg width="56" height="56" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="abSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3D74B0"/><stop offset=".55" stop-color="#1C3A5E"/><stop offset="1" stop-color="#0A0E1C"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#abSky)"/><circle cx="32" cy="32" r="21" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="2.5"/><path d="M32 13 37.5 32H26.5Z" fill="#E04A7A"/><path d="M32 51 26.5 32h11Z" fill="#fff"/><circle cx="32" cy="32" r="3.2" fill="#14213A"/></svg>
   <h2>Bearings</h2>
   <p>Get your bearings: the compass, where you are, your coordinates and elevation, the sun and moon, and a map, on one screen. Free, open source, no ads, no tracking.</p>
   <p>Made by Bradley Cowdrey · <a href="https://bradcowdrey.com" target="_blank" rel="noopener"><u>bradcowdrey.com</u></a></p>
-  <p style="font-size:12px;color:var(--muted)">Ground elevation: <a href="https://open-meteo.com" target="_blank" rel="noopener"><u>Open-Meteo</u></a> (CC BY 4.0), Copernicus DEM GLO-90 © DLR/ESA.
+  <p style="font-size:12px;color:var(--cap)">Ground elevation: <a href="https://open-meteo.com" target="_blank" rel="noopener"><u>Open-Meteo</u></a> (CC BY 4.0), Copernicus DEM GLO-90 © DLR/ESA.
     Maps: <a href="https://openfreemap.org" target="_blank" rel="noopener"><u>OpenFreeMap</u></a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"><u>OpenStreetMap contributors</u></a>, <a href="https://maplibre.org" target="_blank" rel="noopener"><u>MapLibre</u></a>.
     Places: <a href="https://www.geonames.org" target="_blank" rel="noopener"><u>GeoNames</u></a> (CC BY 4.0). Magnetic model: WMM2025 (NOAA, BGS).
     Not a navigation or safety instrument.</p>
@@ -269,7 +355,7 @@
   'use strict';
   const T = window.TN;
   const $ = (s) => document.querySelector(s);
-  const NB = '\u00a0';   // a no-break space: keeps a number with its unit, and a dot with what comes before it
+  const NB = ' ';   // a no-break space: keeps a number with its unit, and a dot with what comes before it
   const params = new URLSearchParams(location.search);
   if (params.has('embed') || window.self !== window.top) document.documentElement.classList.add('embedded');
 
@@ -309,11 +395,13 @@
   const zone = S.sample ? { timeZone: 'America/Denver' } : {};   // the sample place's own clock
   const fmtTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', ...zone });
   const fmtDay = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', ...zone });
-  /** "6:42" (no AM/PM: sunrise is the morning one) or "06:42" on a 24-hour clock. */
-  const shortTime = (t) => fmtTime.formatToParts(t).filter((p) => p.type !== 'dayPeriod').map((p) => p.value).join('').trim();
+  /** "6:36 AM" with a narrow no-break space before AM/PM, so a time never splits; "06:36" on a 24-hour clock. */
+  const clock = (t) => fmtTime.format(t).replace(/[\s  ]+(?=\D+$)/, ' ');
   const now = () => (S.sample && params.get('t') ? Number(params.get('t')) : Date.now());
   const vis = (el, on) => el.toggleAttribute('hidden', !on);   // works for SVG too
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  /** No compass here (a desktop browser), or its permission was refused: the dial stays north-up and says so. */
+  const noHeading = () => S.compassState === 'none' || S.compassState === 'denied';
 
   // ---------- Glyphs ----------
   /** The moon as it looks: the lit part for the phase (0 new … 0.5 full … 1 new), radius r, centred on 0,0. */
@@ -323,34 +411,73 @@
     return `M0 ${-r} A${r} ${r} 0 0 ${outer} 0 ${r} A${rx} ${r} 0 0 ${inner} 0 ${-r}Z`;
   }
   function sunGlyph(r) {
-    let s = `<circle r="${r}" fill="#F4B860"/>`;
-    for (let i = 0; i < 8; i++) s += `<line x1="0" y1="${-(r + 3)}" x2="0" y2="${-(r + 7)}" stroke="#F4B860" stroke-width="2" stroke-linecap="round" transform="rotate(${i * 45})"/>`;
+    let s = `<circle r="${r}" fill="#F5B03C"/>`;
+    for (let i = 0; i < 8; i++) s += `<line x1="0" y1="${-(r + 3)}" x2="0" y2="${-(r + 7)}" stroke="#F5B03C" stroke-width="2" stroke-linecap="round" transform="rotate(${i * 45})"/>`;
     return s;
   }
-  function moonGlyph(phase, r) { return `<circle r="${r}" fill="#4A433C"/><path d="${moonPath(phase, r)}" fill="#FFF1E5"/>`; }
+  function moonGlyph(phase, r) { return `<circle r="${r}" fill="#4A4744"/><path d="${moonPath(phase, r)}" fill="#FFF1E5"/>`; }
+  const moonIcon = (phase) => `<svg viewBox="-10 -10 20 20" aria-hidden="true">${moonGlyph(phase, 9)}</svg>`;
+
+  // The location bar's sky: top and bottom colours for the sun's altitude (docs/LOOK.md "The sky"), and its symbol.
+  const SKY_STOPS = [[-12, 0x141E3C, 0x0A0E1C], [-2, 0x4F78A3, 0x24384F], [8, 0x4F78A3, 0x24384F], [15, 0x3D74B0, 0x1C3A5E]];
+  function skyColors(alt) {
+    const hex = (a, b, f) => '#' + [16, 8, 0].map((sh) => Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * f).toString(16).padStart(2, '0')).join('');
+    let i = 0;
+    while (i < SKY_STOPS.length - 2 && alt > SKY_STOPS[i + 1][0]) i++;
+    const lo = SKY_STOPS[i], hi = SKY_STOPS[i + 1], f = Math.max(0, Math.min(1, (alt - lo[0]) / (hi[0] - lo[0])));
+    return [hex(lo[1], hi[1], f), hex(lo[2], hi[2], f)];
+  }
+  const SKY_GLYPHS = (() => {
+    let rays = '', half = '';
+    for (let i = 0; i < 8; i++) rays += `<line x1="12" y1="2.2" x2="12" y2="4.4" transform="rotate(${i * 45} 12 12)"/>`;
+    for (let i = -2; i <= 2; i++) half += `<line x1="12" y1="6.2" x2="12" y2="8.2" transform="rotate(${i * 45} 12 16)"/>`;
+    const st = 'fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"';
+    const horizon = `<path d="M7.6 16a4.4 4.4 0 0 1 8.8 0Z" fill="currentColor"/><g ${st}>${half}<path d="M3 16h18M7 20h10"/></g>`;
+    return {
+      day: `<circle cx="12" cy="12" r="4.6" fill="currentColor"/><g ${st}>${rays}</g>`,
+      rise: `${horizon}<g ${st}><path d="M12 5V1.5M10 3.2l2-2 2 2"/></g>`,
+      set: `${horizon}<g ${st}><path d="M12 1.2v3.6M10 3l2 2 2-2"/></g>`,
+      night: '<path d="M14.5 3.5a8.5 8.5 0 1 0 6 12.3A7 7 0 0 1 14.5 3.5Z" fill="currentColor"/><path d="M5 3l.7 1.8L7.5 5.5l-1.8.7L5 8l-.7-1.8L2.5 5.5l1.8-.7Z" fill="currentColor"/>',
+      none: '<path d="M20.5 3.5 13 20.5l-2.2-7.3L3.5 11Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>',
+    };
+  })();
+  let skyShown = '';
+  function drawBarSky(sun) {
+    const alt = sun ? sun.altitude : null;
+    const [top, bottom] = alt === null ? ['#262626', '#262626'] : skyColors(alt);
+    const kind = alt === null ? 'none' : alt >= 8 ? 'day' : alt >= -6 ? (sun.azimuth < 180 ? 'rise' : 'set') : 'night';
+    $('#bar').style.background = `linear-gradient(${top}, ${bottom})`;
+    if (kind !== skyShown) { skyShown = kind; $('#skyGlyph').innerHTML = `<svg viewBox="0 0 24 24">${SKY_GLYPHS[kind]}</svg>`; }
+  }
 
   // ---------- Dial ----------
+  // The apps' colours: a dark disc on black, white ticks quietened by opacity, pink for north and nothing else.
   function buildDial() {
-    let s = '<circle cx="200" cy="200" r="196" fill="#201D1A"/><circle cx="200" cy="200" r="196" fill="none" stroke="#3A3530" stroke-width="1"/>';
+    const W = (o) => `rgba(255,255,255,${o})`;
+    let s = `<circle cx="200" cy="200" r="196" fill="#141414"/><circle cx="200" cy="200" r="196" fill="none" stroke="${W(0.12)}" stroke-width="1"/>`;
     s += '<g id="card">';
     for (let d = 0; d < 360; d += 2) {
       const major = d % 30 === 0, mid = d % 10 === 0, len = major ? 18 : mid ? 12 : 6, w = major ? 2.4 : mid ? 1.4 : 1;
-      const col = d === 0 ? '#E04A7A' : major ? '#FFF1E5' : mid ? '#B0A898' : '#5A534B';
+      const col = d === 0 ? '#E04A7A' : major ? '#FFFFFF' : mid ? W(0.6) : W(0.3);
       s += `<line x1="200" y1="12" x2="200" y2="${12 + len}" stroke="${col}" stroke-width="${w}" stroke-linecap="round" transform="rotate(${d} 200 200)"/>`;
     }
-    const F = 'font-family="Inter, system-ui, sans-serif"';
-    for (let d = 30; d < 360; d += 30) if (d % 90) s += `<text x="200" y="56" transform="rotate(${d} 200 200)" text-anchor="middle" font-size="15" font-weight="500" fill="#B0A898" ${F}>${d}</text>`;
-    for (const [l, d, c] of [['N', 0, '#E04A7A'], ['E', 90, '#FFF1E5'], ['S', 180, '#FFF1E5'], ['W', 270, '#FFF1E5']]) s += `<text x="200" y="${d ? 62 : 64}" transform="rotate(${d} 200 200)" text-anchor="middle" font-size="${d ? 26 : 30}" font-weight="600" fill="${c}" ${F}>${l}</text>`;
-    for (const [l, d] of [['NE', 45], ['SE', 135], ['SW', 225], ['NW', 315]]) s += `<text x="200" y="58" transform="rotate(${d} 200 200)" text-anchor="middle" font-size="13" font-weight="600" fill="#9A9286" ${F}>${l}</text>`;
+    const F = 'font-family="-apple-system, BlinkMacSystemFont, \'SF Pro Text\', \'Segoe UI\', Roboto, system-ui, sans-serif"';
+    for (let d = 30; d < 360; d += 30) if (d % 90) s += `<text x="200" y="56" transform="rotate(${d} 200 200)" text-anchor="middle" font-size="15" font-weight="500" fill="${W(0.6)}" ${F}>${d}</text>`;
+    for (const [l, d, c] of [['N', 0, '#E04A7A'], ['E', 90, '#FFFFFF'], ['S', 180, '#FFFFFF'], ['W', 270, '#FFFFFF']]) s += `<text x="200" y="${d ? 62 : 64}" transform="rotate(${d} 200 200)" text-anchor="middle" font-size="${d ? 26 : 30}" font-weight="600" fill="${c}" ${F}>${l}</text>`;
+    for (const [l, d] of [['NE', 45], ['SE', 135], ['SW', 225], ['NW', 315]]) s += `<text x="200" y="58" transform="rotate(${d} 200 200)" text-anchor="middle" font-size="13" font-weight="600" fill="${W(0.45)}" ${F}>${l}</text>`;
     s += '<g id="sunG" hidden></g><g id="moonG" hidden></g>';
-    s += '<g id="spotG" hidden><circle r="9" fill="#FFF1E5" stroke="#E04A7A" stroke-width="4"/></g>';
-    s += '<path id="lockArc" fill="none" stroke="#E04A7A" stroke-width="6" stroke-linecap="round" opacity=".85"/>';
-    s += '<g id="lockMark" hidden><path d="M200 10 207 0H193Z" fill="#E04A7A"/></g>';
+    // The marked spot: a white pin inside the tick ring, its point towards the centre, its hole and edge black.
+    s += '<g id="spotG" hidden><path d="M0 15C-2.5 9-8 6-8 0A8 8 0 1 1 8 0C8 6 2.5 9 0 15Z" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/><circle r="3" fill="#000000"/></g>';
+    s += `<path id="lockArc" fill="none" stroke="${W(0.85)}" stroke-width="6" stroke-linecap="round"/>`;
+    s += '<g id="lockMark" hidden><path d="M200 15 209 0H191Z" fill="#FFFFFF" stroke="#000000" stroke-width="1"/></g>';
     s += '</g>';
-    s += '<path d="M200 0 209 16H191Z" fill="#FFF1E5"/>';
-    s += '<line x1="200" y1="88" x2="200" y2="312" stroke="#2E2A26"/><line x1="88" y1="200" x2="312" y2="200" stroke="#2E2A26"/>';
-    s += '<circle cx="200" cy="200" r="40" fill="none" stroke="#3A3530" stroke-width="1.5"/><circle cx="200" cy="200" r="13" fill="none" stroke="#5A534B" stroke-width="1.5"/>';
+    s += '<path id="lubber" d="M200 0 209 16H191Z" fill="#FFFFFF"/>';
+    s += `<line x1="200" y1="88" x2="200" y2="312" stroke="${W(0.07)}"/><line x1="88" y1="200" x2="312" y2="200" stroke="${W(0.07)}"/>`;
+    s += `<circle cx="200" cy="200" r="40" fill="none" stroke="${W(0.15)}" stroke-width="1.5"/><circle id="ring2" cx="200" cy="200" r="13" fill="none" stroke="${W(0.15)}" stroke-width="1.5"/>`;
     s += '<circle id="bubble" cx="200" cy="200" r="11" fill="#8FC89A" opacity="0"/>';
+    // No compass: the card stays north-up and says so, with a crossed-out heading arrow in the middle.
+    s += `<g id="noHeadG" hidden><text x="200" y="100" text-anchor="middle" font-size="13" font-weight="500" fill="${W(0.6)}" ${F}>N ↑ fixed</text>`
+      + `<g fill="none" stroke="${W(0.6)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M212 188 202 213 199 203 188 199Z"/><path d="M188 187 213 213"/></g></g>`;
     $('#dialSvg').innerHTML = s;
   }
 
@@ -371,9 +498,10 @@
 
   let lastSpoken = null, lastCardinal = null;
   function drawHeading() {
-    const card = $('#card');
-    if (S.heading === null) {
+    const card = $('#card'), none = noHeading();
+    if (S.heading === null || none) {
       $('#deg').textContent = '—'; $('#pt').textContent = '';
+      if (none) { S.shown = 0; card.style.transform = 'rotate(0deg)'; }
     } else {
       const h = S.heading;
       S.shown += T.delta(S.shown, -h);
@@ -388,32 +516,30 @@
       if (near && c !== lastCardinal) { if (lastCardinal !== null && navigator.vibrate) try { navigator.vibrate(8); } catch {} lastCardinal = c; }
     }
     const mark = $('#lockMark'), arc = $('#lockArc');
-    if (S.lock !== null && S.heading !== null) { vis(mark, true); mark.setAttribute('transform', `rotate(${S.lock} 200 200)`); arc.setAttribute('d', arcPath(S.lock, S.heading, 190)); }
+    if (S.lock !== null && S.heading !== null && !none) { vis(mark, true); mark.setAttribute('transform', `rotate(${S.lock} 200 200)`); arc.setAttribute('d', arcPath(S.lock, S.heading, 190)); }
     else { vis(mark, false); arc.setAttribute('d', ''); }
     const b = $('#bubble');
-    if (S.tilt) {
+    if (S.tilt && !none) {
       const x = Math.max(-1, Math.min(1, -S.tilt.gamma / 30)), y = Math.max(-1, Math.min(1, -S.tilt.beta / 30));
       const len = Math.hypot(x, y), sc = len > 1 ? 1 / len : 1;
       b.setAttribute('cx', (200 + x * sc * 40).toFixed(1)); b.setAttribute('cy', (200 + y * sc * 40).toFixed(1));
-      b.setAttribute('fill', Math.hypot(S.tilt.beta, S.tilt.gamma) < 2 ? '#8FC89A' : '#FFF1E5'); b.setAttribute('opacity', '1');
+      b.setAttribute('fill', Math.hypot(S.tilt.beta, S.tilt.gamma) < 2 ? '#8FC89A' : '#FFFFFF'); b.setAttribute('opacity', '1');
     } else b.setAttribute('opacity', '0');
     drawSubline(); drawSpot();
   }
 
+  /** The status line: "True north · 8° E declination · ±8° accuracy". The lock and the spot are in the Targets card. */
   function drawSubline() {
     const parts = [];
-    if (S.compassState === 'live' || S.sample) {
+    if (noHeading()) {
+      parts.push(S.compassState === 'denied' ? 'Motion &amp; Orientation access is off. Allow it in your browser’s settings, then reload.' : `Position, sun and map still${NB}work`);
+    } else if (S.compassState === 'live' || S.sample) {
       // No-break spaces (NB) keep numbers with their units and phrases whole; a line may break only after a dot.
-      let north = S.usingTrue ? `True${NB}north` : `Magnetic${NB}north`;
-      if (S.usingTrue && S.decl !== null && Math.abs(S.decl) >= 0.5) north += `${NB}· ${Math.round(Math.abs(S.decl))}°${NB}${S.decl >= 0 ? 'E' : 'W'}`;
-      parts.push(`<span>${north}</span>`);
+      parts.push(S.usingTrue ? `True${NB}north` : `Magnetic${NB}north`);
+      if (S.usingTrue && S.decl !== null && Math.abs(S.decl) >= 0.5) parts.push(`${Math.round(Math.abs(S.decl))}°${NB}${S.decl >= 0 ? 'E' : 'W'}${NB}declination`);
       if (S.headingAcc !== null && S.headingAcc >= 0) {
         if (S.headingAcc > 25) parts.splice(0, parts.length, '<span class="bad">Low accuracy: move your phone in a figure 8</span>');
-        else parts.push(`<span>±${Math.round(S.headingAcc)}°</span>`);
-      }
-      if (S.lock !== null && S.heading !== null) {
-        const d = Math.round(T.delta(S.heading, S.lock));
-        parts.push(`<span class="lock">Locked${NB}${Math.round(S.lock) % 360}°${NB}· ${d === 0 ? `on${NB}bearing` : `turn${NB}${Math.abs(d)}°${NB}${d > 0 ? 'right' : 'left'}`}</span>`);
+        else parts.push(`±${Math.round(S.headingAcc)}°${NB}accuracy`);
       }
     }
     $('#subline').innerHTML = parts.join(`${NB}<span class="dot">·</span> `);
@@ -422,28 +548,49 @@
   // ---------- Sky ----------
   function drawSky() {
     const f = S.fix, sun = $('#sunG'), moon = $('#moonG');
-    if (!f) { vis(sun, false); vis(moon, false); $('#sunV').textContent = '—'; $('#sunS').innerHTML = '&nbsp;'; return; }
+    if (!f) {
+      vis(sun, false); vis(moon, false); drawBarSky(null);
+      $('#sunUp').textContent = '—'; $('#sunDown').textContent = ''; $('#sunK').textContent = 'Sun'; $('#moonV').textContent = '—'; $('#moonS').innerHTML = '&nbsp;';
+      return;
+    }
     const t = now();
     const sp = T.sunPosition(t, f.lat, f.lon), mp = T.moonPosition(t, f.lat, f.lon), ph = T.moonPhase(t);
     vis(sun, true); placeOnCard(sun, sp.azimuth, 118, sunGlyph(7)); sun.setAttribute('opacity', sp.altitude > -0.833 ? '1' : '.35');
     vis(moon, true); placeOnCard(moon, mp.azimuth, 118, moonGlyph(ph.phase, 8)); moon.setAttribute('opacity', mp.altitude > 0 ? '1' : '.35');
-    const times = T.sunTimes(t, f.lat, f.lon);
-    const v = times.sunrise === null ? (times.polar === 'day' ? 'Sun up all day' : 'Sun down all day')
-      : `${shortTime(times.sunrise)} – ${shortTime(times.sunset)}`;
-    $('#sunV').textContent = v;
-    $('#sunS').innerHTML = `<svg viewBox="-10 -10 20 20" aria-hidden="true">${moonGlyph(ph.phase, 9)}</svg><span>${ph.name.replace(' ', NB)}${NB}· ${Math.round(ph.fraction * 100)}%</span>`;
-    $('#sunTile').setAttribute('aria-label', `Sun. ${times.sunrise === null ? v : `Sunrise ${fmtTime.format(times.sunrise)}, sunset ${fmtTime.format(times.sunset)}`}. Moon: ${ph.name}, ${Math.round(ph.fraction * 100)} percent lit.`);
+    drawBarSky(sp);
+    const times = T.sunTimes(t, f.lat, f.lon), pct = `${Math.round(ph.fraction * 100)}%`;
+    const polar = times.sunrise === null ? (times.polar === 'day' ? 'Sun up all day' : 'Sun down all day') : null;
+    $('#sunUp').textContent = polar ? polar.slice(0, polar.indexOf(' all')) : `↑${NB}${clock(times.sunrise)}`;
+    $('#sunDown').textContent = polar ? 'all day' : `↓${NB}${clock(times.sunset)}`;
+    // On a phone the Sun tile's caption carries the moon ("SUN · ◐ 53%"); a wide window has a Moon tile instead.
+    $('#sunK').innerHTML = `Sun<span class="capmoon"><span class="sep">·</span>${moonIcon(ph.phase)}<span id="moonPct">${pct}</span></span>`;
+    $('#moonV').innerHTML = `${moonIcon(ph.phase)}${pct}`;
+    $('#moonS').textContent = ph.name.charAt(0) + ph.name.slice(1).toLowerCase();   // "Last quarter", as the apps write it
+    const moonSays = `Moon: ${ph.name}, ${Math.round(ph.fraction * 100)} percent lit.`;
+    $('#sunTile').setAttribute('aria-label', `Sun. ${polar || `Sunrise ${fmtTime.format(times.sunrise)}, sunset ${fmtTime.format(times.sunset)}`}. ${moonSays}`);
+    $('#moonTile').setAttribute('aria-label', moonSays);
   }
 
-  // ---------- Marked spot ----------
+  // ---------- Targets: the locked bearing and the marked spot ----------
   function drawSpot() {
-    const f = S.fix, pill = $('#spotPill'), g = $('#spotG');
-    if (!S.spot || !f) { pill.hidden = true; vis(g, false); return; }
-    const m = T.distance(f.lat, f.lon, S.spot.lat, S.spot.lon), b = T.bearing(f.lat, f.lon, S.spot.lat, S.spot.lon);
-    const here = m <= Math.max(10, f.acc), shown = onCard(b);
-    pill.hidden = false;
-    $('#spotText').innerHTML = here ? '<b>Marked spot</b> · You’re here' : `<b>Marked spot</b> · ${T.distanceText(m, settings.feet)} · ${Math.round(shown) % 360}° ${T.point(shown)}`;
-    vis(g, !here); if (!here) placeOnCard(g, b, 176);
+    const f = S.fix, g = $('#spotG'), spotRow = $('#spotRow'), lockRow = $('#lockRow');
+    const lockOn = S.lock !== null;
+    lockRow.hidden = !lockOn;
+    if (lockOn) {
+      $('#lockText').textContent = `Locked${NB}${Math.round(S.lock) % 360}°`;
+      const d = S.heading === null || noHeading() ? null : Math.round(T.delta(S.heading, S.lock));
+      $('#lockTurn').textContent = d === null ? '' : d === 0 ? `on${NB}bearing` : `turn${NB}${Math.abs(d)}°${NB}${d > 0 ? 'right' : 'left'}`;
+    }
+    const spotOn = !!(S.spot && f);
+    spotRow.hidden = !spotOn;
+    if (spotOn) {
+      const m = T.distance(f.lat, f.lon, S.spot.lat, S.spot.lon), b = T.bearing(f.lat, f.lon, S.spot.lat, S.spot.lon);
+      const here = m <= Math.max(10, f.acc), shown = onCard(b);
+      $('#spotText').textContent = here ? `You’re${NB}here` : `${T.distanceText(m, settings.feet).replace(/ /g, NB)}${NB}· ${Math.round(shown) % 360}°${NB}${T.point(shown)}`.replace('· ', `·${NB}`);
+      vis(g, !here); if (!here) placeOnCard(g, b, 177);
+    } else vis(g, false);
+    lockRow.classList.toggle('only', lockOn && !spotOn);
+    $('#targets').hidden = !lockOn && !spotOn;
   }
   function markSpot() {
     if (!S.fix) return;
@@ -471,7 +618,7 @@
     updateHeading();
   }
   function updateHeading() {
-    if (S.magnetic === null) return;
+    if (S.magnetic === null) { requestDraw(); return; }
     S.usingTrue = settings.trueNorth && S.decl !== null;
     S.heading = T.normalize(S.magnetic + (S.usingTrue ? S.decl : 0));
     requestDraw();
@@ -495,14 +642,19 @@
       setTimeout(() => { if (!gotEvent) { S.compassState = 'none'; drawCompassState(); } }, 2500);
     }).catch(() => { S.compassState = 'denied'; drawCompassState(); });
   }
+  /** With no compass the words "No heading" take the readout's place and the status line says what still works. */
   function drawCompassState() {
-    const note = $('#dialNote'), cta = $('#startCompass');
-    cta.hidden = S.compassState !== 'needs-tap';
-    const msg = { none: 'No compass on this device. Open Bearings on a phone or tablet to use it.',
-      denied: 'Motion & Orientation access is off. Allow it in your browser’s settings, then reload.' }[S.compassState];
-    note.hidden = !msg; note.textContent = msg || '';
-    document.querySelector('.readout').hidden = !!msg; $('#subline').hidden = !!msg;
-    drawSubline();
+    const none = noHeading();
+    $('#startCompass').hidden = S.compassState !== 'needs-tap';
+    $('#compass').classList.toggle('nohead', none);
+    $('#readout').hidden = none; $('#noHeading').hidden = !none;
+    vis($('#noHeadG'), none); vis($('#lubber'), !none); vis($('#ring2'), !none);
+    if (none) {
+      $('#dial').setAttribute('aria-label', 'Compass. No heading on this device. Position, sun and map still work.');
+      clearTimeout(drawHeading.t); lastSpoken = null;
+      $('#srHeading').textContent = 'Heading unavailable';
+    }
+    drawHeading();
   }
 
   // ---------- Location ----------
@@ -571,19 +723,20 @@
     return m < 60 ? `${m} min ago` : `${Math.round(m / 60)} hr ago`;
   }
 
+  /** "Sun, Nov 1 · 9:41 AM", then the Sample pill (hidden with ?store, as the apps' --store does for store shots). */
   function drawWhen() {
     const t = new Date(now());
-    // The Sample badge sits on this line, so a long place name above keeps the whole width.
-    $('#when').innerHTML = `${esc(fmtDay.format(t))} · ${esc(fmtTime.format(t))}` + (S.sample ? '<span class="sample" title="No location here, so Bearings shows a sample place">Sample</span>' : '');
+    $('#when').innerHTML = `${esc(fmtDay.format(t))} · ${esc(clock(t))}`
+      + (S.sample && !params.has('store') ? '<span class="sample" title="No location here, so Bearings shows a sample place">Sample</span>' : '');
   }
 
+  const CAPTION = { dd: 'DD', dms: 'DMS', ddm: 'DDM', utm: 'UTM', mgrs: 'MGRS', plus: 'Plus' };
   function drawPlace() {
     const f = S.fix;
     const title = S.sample ? 'Maroon Bells, Colorado'
       : f ? (S.place || (S.place === '' ? 'Where you are' : 'Finding the place…'))
       : S.locState === 'asking' ? 'Finding where you are…' : 'Bearings';
     $('#place').textContent = title;
-    $('#place').title = title;
 
     const ask = $('#askLoc'), tiles = $('#tiles');
     const needAsk = !f && (S.locState === 'idle' || S.locState === 'denied' || S.locState === 'unavailable');
@@ -598,38 +751,37 @@
     }
     tiles.hidden = needAsk;
 
+    // Position: one tile, two lines (or one for the grid formats); the caption names the format.
     const fmt = T.FORMATS.find((x) => x.id === settings.format);
     const out = f ? T.format(settings.format, f.lat, f.lon) : null;
     const paired = !out || !out.single;
-    const accLine = f ? `${T.accuracy(f.acc, settings.feet)} · ${S.sample ? 'Sample' : ago(f.time)}` : (S.locState === 'asking' ? 'Finding you…' : ' ');
-    $('#latTile').hidden = !paired; $('#lonTile').hidden = !paired; $('#gridTile').hidden = paired;
-    if (paired) {
-      $('#latV').textContent = out ? out.lat : '—'; $('#lonV').textContent = out ? out.lon : '—';
-      $('#latS').textContent = accLine; $('#lonS').textContent = fmt.name;
-      $('#latTile').setAttribute('aria-label', `Latitude ${out ? out.lat : 'unknown'}, accuracy ${accLine}. Tap to change the format; touch and hold to copy.`);
-      $('#lonTile').setAttribute('aria-label', `Longitude ${out ? out.lon : 'unknown'}, ${fmt.name}. Tap to change the format; touch and hold to copy.`);
-    } else {
-      $('#gridK').textContent = fmt.name; $('#gridV').textContent = out.single; $('#gridS').textContent = accLine;
-      $('#gridTile').setAttribute('aria-label', `${fmt.name} ${out.single}. Tap to change the format; touch and hold to copy.`);
-    }
+    const accLine = f ? `${T.accuracy(f.acc, settings.feet).replace(/ /g, NB)} · ${S.sample ? 'Sample' : ago(f.time).replace(/ /g, NB)}` : (S.locState === 'asking' ? 'Finding you…' : '');
+    $('#posK').textContent = `Position · ${CAPTION[settings.format] || fmt.short}`;
+    $('#latV').hidden = !paired; $('#lonV').hidden = !paired; $('#gridV').hidden = paired;
+    if (paired) { $('#latV').textContent = out ? out.lat : '—'; $('#lonV').textContent = out ? out.lon : ''; }
+    else $('#gridV').textContent = out.single;
+    $('#posS').textContent = accLine;
+    $('#posTile').setAttribute('aria-label', `Position, ${fmt.name}: ${out ? (out.single || `${out.lat}, ${out.lon}`) : 'unknown'}${f ? `, accuracy ${accLine}` : ''}. Tap to change the format; touch and hold to copy.`);
 
     // Elevation: a browser's GPS height is above the ellipsoid, not sea level, so terrain data comes first.
-    let ev = '—', es = ' ', spoken = 'unknown';
+    let ev = '—', es = NB, spoken = 'unknown';
     if (f) {
       const val = S.ground ? S.ground.m : typeof f.alt === 'number' ? f.alt : null;
       if (val !== null) {
         const e = T.elevation(val);
-        ev = settings.feet ? `${e.ft}<small>${e.m}</small>` : `${e.m}<small>${e.ft}</small>`;
-        es = S.ground ? 'Terrain data' : `GPS${typeof f.altAcc === 'number' ? ' ' + T.accuracy(f.altAcc, settings.feet) : ''}`;
-        spoken = `${e.ft.replace(' ft', ' feet')}, ${e.m.replace(' m', ' metres')}, from ${es.toLowerCase()}`;
+        const src = S.ground ? 'Terrain data' : `GPS${typeof f.altAcc === 'number' ? ' ' + T.accuracy(f.altAcc, settings.feet) : ''}`;
+        ev = settings.feet ? e.ft : e.m;
+        es = `${(settings.feet ? e.m : e.ft).replace(/ /g, NB)} · ${src.replace(/ /g, NB)}`;
+        spoken = `${e.ft.replace(' ft', ' feet')}, ${e.m.replace(' m', ' metres')}, from ${src.toLowerCase()}`;
       } else es = S.groundState === 'failed' ? 'Needs a connection' : 'Looking it up…';
     }
-    $('#eleV').innerHTML = ev; $('#eleS').textContent = es;
+    $('#eleV').textContent = ev.replace(/ /g, NB); $('#eleS').textContent = es;
     $('#eleTile').setAttribute('aria-label', `Elevation, ${spoken}`);
     const stale = f && !S.sample && Date.now() - f.time > 120000;
     document.querySelectorAll('#tiles .tile').forEach((t) => t.classList.toggle('stale', !!stale));
 
-    const sp = f && typeof f.speed === 'number' && f.speed >= 0.5 ? T.speedText(f.speed, settings.feet) : null;
+    // Hidden in the sample, which is still, as in the apps.
+    const sp = f && !S.sample && typeof f.speed === 'number' && f.speed >= 0.5 ? T.speedText(f.speed, settings.feet) : null;
     $('#speedChip').hidden = !sp; $('#speedChip').textContent = sp || '';
   }
 
@@ -654,7 +806,33 @@
       setTimeout(() => rej(new Error('timeout')), 15000);
     });
   }
+  // The apps' dark map: teal land, grey roads, deep blue water, plain pale labels with a land-coloured halo.
+  // OpenFreeMap's style is recoloured here; if it can't be fetched or read, its own style is used as it is.
+  const STYLES = 'https://tiles.openfreemap.org/styles/';
+  function darkStyle(style) {
+    const LAND = '#0F3B3A', WATER = '#22348A', ROAD = '#5A6470', LABEL = '#C9D3D6';
+    for (const l of style.layers) {
+      const src = l['source-layer'] || '', p = l.paint || (l.paint = {}), lay = l.layout || (l.layout = {});
+      if (l.type === 'background') p['background-color'] = LAND;
+      else if (l.type === 'fill') {
+        delete p['fill-pattern']; delete p['fill-outline-color'];
+        p['fill-color'] = /water/.test(src) ? WATER : src === 'building' ? '#17494A' : /park|landcover|landuse/.test(src) ? '#124544' : LAND;
+      } else if (l.type === 'line') {
+        delete p['line-pattern'];
+        p['line-color'] = /water/.test(src) ? WATER : src === 'boundary' ? '#7C8A90' : ROAD;
+      } else if (l.type === 'symbol') {
+        if (src === 'poi') lay.visibility = 'none';
+        p['text-color'] = LABEL; p['text-halo-color'] = LAND; p['text-halo-width'] = 1.5; delete p['text-halo-blur'];
+      } else if (l.type === 'fill-extrusion') lay.visibility = 'none';
+    }
+    return style;
+  }
+  function loadStyle() {
+    const get = (name) => fetch(STYLES + name).then((r) => r.ok ? r.json() : Promise.reject(r.status)).then(darkStyle);
+    return get('dark').catch(() => get('liberty')).catch(() => STYLES + 'liberty');
+  }
   function el(cls, html) { const e = document.createElement('div'); e.className = cls; e.innerHTML = html || ''; return e; }
+  function mapSays(full, brief) { $('#mapMsg').hidden = false; $('#mapMsgText').innerHTML = full ? `<span class="full">${full}</span><span class="brief">${brief || full}</span>` : ''; }
   function updateMap() {
     const f = S.fix; if (!f) return;
     if (map) {
@@ -667,12 +845,13 @@
     }
     if (mapLoading || params.has('nomap')) return;
     mapLoading = true;
-    $('#mapMsg').textContent = 'Loading the map…';
-    loadMapLib().then((ml) => {
-      map = new ml.Map({ container: 'mapView', style: 'https://tiles.openfreemap.org/styles/liberty', center: [f.lon, f.lat], zoom,
-        dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: { compact: true } });
+    mapSays('Loading the map…');
+    Promise.all([loadMapLib(), loadStyle()]).then(([ml, style]) => {
+      const at = S.fix || f;
+      map = new ml.Map({ container: 'mapView', style, center: [at.lon, at.lat], zoom,
+        dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: false });   // credit: the map's own foot
       map.touchZoomRotate.disableRotation();
-      marker = new ml.Marker({ element: el('me', '<span class="acc"></span><span class="cone"></span><i></i>') }).setLngLat([f.lon, f.lat]).addTo(map);
+      marker = new ml.Marker({ element: el('me', '<span class="acc"></span><span class="cone"></span><i></i>') }).setLngLat([at.lon, at.lat]).addTo(map);
       map.on('load', () => { $('#mapMsg').hidden = true; $('#mapTools').hidden = false; updateMap(); });
       map.on('zoomend', () => { zoom = map.getZoom(); store.set('zoom', Math.round(zoom)); updateAccuracyRing(); });
       map.on('error', () => { if (!map.loaded()) mapFailed(); });
@@ -680,8 +859,7 @@
   }
   function mapFailed() {
     mapLoading = false;
-    const msg = $('#mapMsg'); msg.hidden = false;
-    msg.textContent = 'The map can’t load right now. Everything else still works offline.';
+    mapSays('The map can’t load right now. Everything else still works offline.', 'The map can’t load right now');
   }
   function updateAccuracyRing() {
     if (!map || !S.fix) return;
@@ -692,9 +870,9 @@
   /** The cone points along your heading; with Follow Heading the map turns instead, so the cone points up. */
   function updateCone() {
     if (!marker) return;
-    const c = marker.getElement().querySelector('.cone');
-    c.style.display = S.heading === null ? 'none' : '';
-    if (S.heading === null) return;
+    const c = marker.getElement().querySelector('.cone'), none = S.heading === null || noHeading();
+    c.style.display = none ? 'none' : '';
+    if (none) return;
     const trueHeading = S.usingTrue ? S.heading : S.heading + (S.decl || 0);
     if (settings.follow && performance.now() - lastRotate > 250) { lastRotate = performance.now(); map.rotateTo(trueHeading, { duration: 240 }); }
     c.style.transform = `rotate(${trueHeading - map.getBearing()}deg)`;
@@ -710,12 +888,30 @@
     const z = map ? Math.round(map.getZoom()) : 15;
     window.open(`https://www.openstreetmap.org/?mlat=${f.lat.toFixed(5)}&mlon=${f.lon.toFixed(5)}#map=${z}/${f.lat.toFixed(5)}/${f.lon.toFixed(5)}`, '_blank', 'noopener');
   }
+  /** The Map tile (or the card's ⤢ button) opens the map over the whole screen; Done or Escape puts it back. */
+  let mapOpener = null;
+  function showMap(open) {
+    const card = $('#mapCard');
+    if (card.classList.contains('open') === open) return;
+    card.classList.toggle('open', open);
+    document.documentElement.classList.toggle('map-is-open', open);
+    if (open) {
+      mapOpener = document.activeElement;
+      card.setAttribute('role', 'dialog'); card.setAttribute('aria-modal', 'true');
+      $('#mapClose').focus();
+    } else {
+      card.removeAttribute('role'); card.removeAttribute('aria-modal');
+      if (mapOpener && mapOpener.isConnected && mapOpener.offsetParent !== null) mapOpener.focus();
+      mapOpener = null;
+    }
+    if (map) { map.resize(); if (S.fix) map.jumpTo({ center: [S.fix.lon, S.fix.lat] }); updateAccuracyRing(); }
+  }
 
   // ---------- Night mode ----------
   function setNight(on) {
     settings.night = on; store.set('night', on);
     $('#nightFilter').hidden = !on; document.documentElement.classList.toggle('night', on);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', on ? '#1A0503' : '#1A1816');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', on ? '#140000' : '#000000');
   }
 
   // ---------- Menu ----------
@@ -737,7 +933,7 @@
     h += '<hr>';
     const has = !!S.fix;
     h += item('role="menuitem" data-act="spot"', S.spot ? 'Clear Marked Spot' : 'Mark This Spot', false, !S.spot && !has);
-    h += item('role="menuitem" data-act="lock"', S.lock === null ? 'Lock This Bearing' : 'Clear Locked Bearing', false, S.heading === null);
+    h += item('role="menuitem" data-act="lock"', S.lock === null ? 'Lock This Bearing' : 'Clear Locked Bearing', false, S.lock === null && (S.heading === null || noHeading()));
     h += item('role="menuitem" data-act="copy"', 'Copy Coordinates', false, !has);
     h += item('role="menuitem" data-act="shareLoc"', 'Share My Location…', false, !has);
     h += '<hr>';
@@ -754,7 +950,18 @@
   }
   $('#moreBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
   document.addEventListener('click', (e) => { if (!$('#menu').hidden && !e.target.closest('.menu-wrap')) toggleMenu(false); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#menu').hidden) { toggleMenu(false); $('#moreBtn').focus(); } });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!$('#menu').hidden) { toggleMenu(false); $('#moreBtn').focus(); }
+    else if ($('#mapCard').classList.contains('open')) showMap(false);
+  });
+  // Up and Down move through the menu, as in a native one.
+  $('#menu').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const items = [...$('#menu').querySelectorAll('button:not(:disabled)')], i = items.indexOf(document.activeElement);
+    if (!items.length) return;
+    items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); e.preventDefault();
+  });
   $('#menu').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b || b.disabled) return;
     if (b.dataset.fmt) { settings.format = b.dataset.fmt; store.set('format', settings.format); drawPlace(); }
@@ -802,8 +1009,9 @@
     if (navigator.share && window.self === window.top) navigator.share({ title: 'Bearings', text: SHARE_TEXT, url }).catch(() => {});
     else copy(`${SHARE_TEXT} ${url}`, 'Link copied');
   }
+  /** Locks the heading you face; a lock can always be cleared, even after the compass has gone. */
   function toggleLock() {
-    if (S.heading === null) return;
+    if (S.lock === null && (S.heading === null || noHeading())) return;
     S.lock = S.lock === null ? Math.round(S.heading) % 360 : null;
     if (navigator.vibrate) try { navigator.vibrate(12); } catch {}
     drawHeading();
@@ -814,18 +1022,23 @@
   $('#dial').addEventListener('click', toggleLock);
   $('#startCompass').addEventListener('click', (e) => { e.stopPropagation(); askForCompass(); });
   $('#useLoc').addEventListener('click', startLocation);
-  for (const id of ['#latTile', '#lonTile', '#gridTile']) {
-    const t = $(id);
+  {
+    const t = $('#posTile');
     let timer = null, held = false;   // touch and hold copies; a tap changes the format
     t.addEventListener('pointerdown', () => { held = false; timer = setTimeout(() => { held = true; copyCoords(); }, 550); });
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) t.addEventListener(ev, () => clearTimeout(timer));
     t.addEventListener('click', () => { if (held) { held = false; return; } cycleFormat(); });
+    t.addEventListener('contextmenu', (e) => { if (S.fix) { e.preventDefault(); clearTimeout(timer); held = false; copyCoords(); } });   // a right-click copies, too
   }
   $('#spotClear').addEventListener('click', clearSpot);
+  $('#lockClear').addEventListener('click', () => { if (S.lock !== null) toggleLock(); });
   $('#zoomIn').addEventListener('click', () => map && map.zoomIn());
   $('#zoomOut').addEventListener('click', () => map && map.zoomOut());
   $('#followBtn').addEventListener('click', () => setFollow(!settings.follow));
   $('#openMap').addEventListener('click', openFullMap);
+  $('#mapOpen').addEventListener('click', () => showMap(true));
+  $('#mapExpand').addEventListener('click', () => showMap(true));
+  $('#mapClose').addEventListener('click', () => showMap(false));
   document.addEventListener('keydown', (e) => {
     if (e.target.closest('input, textarea, dialog')) return;
     if (e.key === 'c' && (e.metaKey || e.ctrlKey) && !getSelection().toString()) { copyCoords(); e.preventDefault(); }
@@ -835,30 +1048,35 @@
   buildDial();
   setNight(settings.night);
   $('#followBtn').setAttribute('aria-pressed', String(settings.follow));
-  drawWhen(); drawHeading(); drawPlace(); drawSky();
+  mapSays('');
+  drawWhen(); drawCompassState(); drawPlace(); drawSky();
 
   // A sample place for screenshots, previews without location, and the product page's demo.
+  // ?heading= fixes the heading, ?lock= and ?spot add targets, ?nocompass shows a device with no compass,
+  // ?night the red screen, ?t= a moment in time, ?store hides the Sample pill (as the apps' --store does).
   function startSample() {
-    S.sample = true; S.compassState = 'live';
+    S.sample = true; S.compassState = params.has('nocompass') ? 'none' : 'live';
     S.fix = { lat: 39.09898, lon: -106.94117, acc: 5, alt: 2925, altAcc: 4, speed: params.has('moving') ? 1.43 : 0, time: Date.now() };
     S.ground = { m: 2922, lat: T.rounded(S.fix.lat), lon: T.rounded(S.fix.lon) }; S.groundState = 'ok';
     if (params.has('spot')) S.spot = { lat: 39.1911, lon: -106.8175 };
-    S.headingAcc = 8; S.tilt = { beta: 1.2, gamma: -0.8 };
     S.decl = T.magneticDeclination(S.fix.lat, S.fix.lon, 2925, now());
     if (params.has('night')) setNight(true);
-    const t0 = performance.now(), fixed = params.get('heading');
-    const step = (t) => {
-      const h = fixed !== null ? Number(fixed) : 228 + 14 * Math.sin((t - t0) / 2600);
-      S.magnetic = smooth.push(T.normalize(h - (settings.trueNorth ? S.decl : 0)));
-      updateHeading();
-      if (fixed === null) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-    if (params.has('lock')) setTimeout(() => { S.lock = Number(params.get('lock')) || 0; drawHeading(); }, 50);
-    drawPlace(); drawCompassState(); drawSky(); drawSpot(); updateMap();
+    if (S.compassState === 'live') {
+      S.headingAcc = 8; S.tilt = { beta: 1.2, gamma: -0.8 };
+      const t0 = performance.now(), fixed = params.get('heading');
+      const step = (t) => {
+        const h = fixed !== null ? Number(fixed) : 228 + 14 * Math.sin((t - t0) / 2600);
+        S.magnetic = smooth.push(T.normalize(h - (settings.trueNorth ? S.decl : 0)));
+        updateHeading();
+        if (fixed === null) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+      if (params.has('lock')) setTimeout(() => { S.lock = Number(params.get('lock')) || 0; drawHeading(); }, 50);
+    } else S.usingTrue = settings.trueNorth;
+    drawWhen(); drawPlace(); drawCompassState(); drawSky(); drawSpot(); updateMap();
   }
 
-  window.Bearings = { state: S, settings, drawPlace, drawHeading, onOrientation, startSample };
+  window.Bearings = { state: S, settings, drawPlace, drawHeading, onOrientation, startSample, showMap };
 
   if (S.sample) { startSample(); return; }
   listenCompass();

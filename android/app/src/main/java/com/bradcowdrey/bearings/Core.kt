@@ -42,6 +42,8 @@ object Geo {
 
     fun point(deg: Double): String = POINTS[(jsRound(normalize(deg) / 22.5) % 16).toInt()]
     fun pointName(deg: Double): String = NAMES[(jsRound(normalize(deg) / 22.5) % 16).toInt()]
+    /** "228 degrees, southwest": all a screen reader hears of the heading as the phone turns (as on iPhone). */
+    fun headingSpoken(deg: Double): String = "${Math.round(deg) % 360} degrees, ${pointName(deg).lowercase()}"
 
     // ---------- Coordinate formats ----------
 

@@ -48,6 +48,8 @@ class LayoutPlanTest {
         assertEquals(listOf(181f, 181f), LayoutPlan.rows(GridMode.QUAD, MapMode.TILE, 370f)[0].widths)
         val strip = LayoutPlan.rows(GridMode.STRIP, MapMode.BUTTON, 370f).single()
         assertEquals(370f, strip.widths.sum() + 2f, 0.01f)
+        // 1.2 | 1 | 1, as on Apple (review 2.3.0, 11).
+        assertEquals(listOf(138f, 115f, 115f), strip.widths)
         val two = LayoutPlan.rows(GridMode.TWO_ROW, MapMode.BUTTON, 370f)
         assertEquals(listOf(370f), two[0].widths)
         assertEquals(listOf(181f, 181f), two[1].widths)
@@ -148,6 +150,48 @@ class LayoutPlanTest {
         assertTrue(t, ' ' !in t)
         assertEquals("6:36\u202FAM", t)
         assertEquals("↑\u00A06:36\u202FAM", TextFit.sunLine("↑", "6:36 AM"))
+    }
+
+    /**
+     * Review 2.3.0, 2: no layout overflows. The heights the single column stacks add up to the safe height exactly,
+     * in every layout, state and text size on every portrait screen; and rounded to whole pixels at the usual screen
+     * densities, the column is never more than its empty end gap can absorb (8 dp) taller than the screen, so nothing
+     * scrolls and no fade is drawn over the last tiles.
+     */
+    @Test fun noLayoutOverflows() {
+        val off = mutableListOf<String>()
+        for ((name, d, p) in everyPlan()) {
+            if (p.list || p.twoPane) continue
+            val sum = LayoutPlan.columnPieces(p).sum()
+            if (abs(sum - d.s) > 0.5f) off += "$name: the column is $sum dp for a safe height of ${d.s}"
+            for (density in listOf(1f, 1.5f, 2f, 2.625f, 2.75f, 3f, 3.5f, 4f)) {
+                val over = LayoutPlan.pixelOverflow(p, d.s, density)
+                val slack = Math.round(minOf(LayoutPlan.OVERFLOW_SLACK, p.endGap + p.bottomSpare) * density)
+                // Android's column ends 8 above the navigation bar; that gap takes the rounding.
+                if (d.android && over > slack) off += "$name at $density px per dp: $over px over, $slack to spare"
+                if (over > Math.round(LayoutPlan.OVERFLOW_SLACK * density)) off += "$name at $density px per dp: $over px over"
+            }
+        }
+        assertEquals(emptyList<String>(), off)
+        // The emulator CI photographs: 412 × 914 at 2.625, sample, where Large and Small looked cut off.
+        val ci = device("Android 412x914")
+        for (l in Layout.entries) {
+            val p = LayoutPlan.planFor(ci, l)
+            assertTrue("${l.id}: ${LayoutPlan.pixelOverflow(p, ci.s, 2.625f)} px", LayoutPlan.pixelOverflow(p, ci.s, 2.625f) <= Math.round(8f * 2.625f))
+        }
+    }
+
+    /** Review 2.3.0, 11: the strip's values are one size, the largest from the top down to 15 that fits. */
+    @Test fun stripValueSize() {
+        assertEquals(20f, LayoutPlan.stripValueSize(20f) { true }, 0f)
+        assertEquals(15f, LayoutPlan.stripValueSize(20f) { false }, 0f)
+        assertEquals(17f, LayoutPlan.stripValueSize(20f) { it <= 17f }, 0f)
+        assertEquals(26f, LayoutPlan.stripValueSize(LayoutPlan.STRIP_VALUE_MAX_TABLET) { true }, 0f)
+        // Never under the old 15, so Extra Large's values are never smaller than Medium's.
+        assertTrue(LayoutPlan.STRIP_VALUE_MIN >= 15f && LayoutPlan.STRIP_VALUE_MAX > 17f)
+        // The strip holds its caption, the gap and two lines of the largest values between its 14 paddings.
+        val need = 2 * LayoutPlan.STRIP_PAD + 13f + LayoutPlan.STRIP_CAPTION_GAP + 2 * (LayoutPlan.STRIP_VALUE_MAX + 2f)
+        assertTrue("$need in ${LayoutPlan.STRIP}", need <= LayoutPlan.STRIP)
     }
 
     /** No portrait golden plan leaves an empty band wider than 24. */

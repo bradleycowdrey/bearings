@@ -59,6 +59,11 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
     /// The locked bearing, on the card's north (true or magnetic). Shared with the widgets when it changes.
     @Published var lock: Double? { didSet { if lock != oldValue { shareWithWidgets(force: true) } } }
     @Published private(set) var sample = false
+    /// The sample as the App Store screenshots show it (the `--store` launch argument): no Sample pill, and
+    /// today's date at the sample's time of day, so the bar agrees with the device's status bar.
+    @Published private(set) var storeSample = false
+    /// The location bar shows the Sample pill: with the sample, except in the store's screenshots.
+    var showsSamplePill: Bool { sample && !storeSample }
     /// "Aspen, Colorado", or nil until it's known.
     @Published private(set) var place: String?
     /// Whether a name has been looked for at this fix (so "Finding where you are…" can give way).
@@ -547,13 +552,24 @@ final class Navigator: NSObject, ObservableObject, CLLocationManagerDelegate {
     /// 9:41 AM in Colorado on 1 November 2026, with the sun and the moon both up over Maroon Bells.
     static let sampleTime = Date(timeIntervalSince1970: 1793551260)
 
+    /// The sample's time of day (9:41 AM where the device is) on `day`: what `--store` shows, so the date in
+    /// the location bar is the one in the device's status bar.
+    static func storeTime(on day: Date = Date(), calendar: Calendar = .current) -> Date {
+        let clock = calendar.dateComponents([.hour, .minute], from: sampleTime)
+        return calendar.date(bySettingHour: clock.hour ?? 9, minute: clock.minute ?? 41, second: 0, of: day) ?? sampleTime
+    }
+
     /// `noCompass`: the same place on a device without a compass (CI's no-compass photographs): no heading,
-    /// the rose at rest, "—°" and the no-compass note.
-    func showSample(heading sampleHeading: Double = 228, lock sampleLock: Double? = nil, noCompass: Bool = false) {
+    /// the rose at rest, "No heading" and the no-compass note. `store`: the App Store screenshots' sample
+    /// (`--store`): no Sample pill and today's date.
+    func showSample(heading sampleHeading: Double = 228, lock sampleLock: Double? = nil, noCompass: Bool = false,
+                    store: Bool = false) {
         stop()
         sample = true
-        now = Self.sampleTime
-        fix = Fix(latitude: 39.09898, longitude: -106.94117, accuracy: 5, altitude: nil, altitudeAccuracy: nil, time: Self.sampleTime)
+        storeSample = store
+        let time: Date = store ? Self.storeTime() : Self.sampleTime
+        now = time
+        fix = Fix(latitude: 39.09898, longitude: -106.94117, accuracy: 5, altitude: nil, altitudeAccuracy: nil, time: time)
         ground = Ground(metres: 2922, latitude: 39.099, longitude: -106.941)
         groundState = .ok
         place = "Maroon Bells, Colorado"

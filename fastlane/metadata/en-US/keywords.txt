@@ -1,1 +1,1 @@
-altimeter,altitude,GPS,coordinates,UTM,MGRS,hiking,trail,declination,sunrise,level,offline,map
+widget,bearing,waypoint,altimeter,altitude,GPS,coordinates,UTM,MGRS,hiking,declination,sunrise,level

@@ -167,4 +167,11 @@ class CoreTest {
         assertTrue(TermsSchedule.shouldAsk(null, 0L, now = 1000L))
         assertTrue(!TermsSchedule.shouldAsk(Brand.TERMS_VERSION, 1000L, now = 2000L))
     }
+
+    /** TalkBack hears only this as the phone turns (review 2.3.0, 45; the words VoiceOver hears on iPhone). */
+    @Test fun headingSpoken() {
+        assertEquals("228 degrees, southwest", Geo.headingSpoken(228.0))
+        assertEquals("0 degrees, north", Geo.headingSpoken(359.6))
+        assertEquals("90 degrees, east", Geo.headingSpoken(90.2))
+    }
 }

@@ -15,7 +15,7 @@ Made by <a href="https://bradcowdrey.com">Bradley Cowdrey · bradcowdrey.com</a>
 </p>
 
 <p align="center">
-  <a href="https://bradcowdrey.com/bearings"><img src="docs/screenshot-app.png" width="360" alt="Bearings on a phone: a compass dial reading 228° SW with a bearing locked at 240°, then latitude 39.09898° N, longitude 106.94117° W, elevation 9,587 ft and 2,922 m, accuracy ±16 ft, and a map."></a>
+  <a href="https://bradcowdrey.com/bearings"><img src="docs/screenshot-app.png" width="360" alt="Bearings on a phone, at the sample place: a slim location bar reading Maroon Bells, Colorado; a large compass dial reading 228° SW; the status line; a Targets card with a bearing locked at 240° and a marked spot; and tiles for position, elevation, the sun and a map."></a>
 </p>
 
 ---
@@ -28,7 +28,7 @@ when, exactly where on the map, how high you are, and where the sun and moon are
 The ten things people use most in the leading compass and altimeter apps (see [docs/RESEARCH.md](docs/RESEARCH.md)),
 all in Bearings, laid out in [docs/DESIGN.md](docs/DESIGN.md):
 
-1. **A clear compass**: 228° SW under a fixed line, true or magnetic north with the declination, smooth,
+1. **A clear compass**: 228° SW under a fixed line, at least 40% of the screen, true or magnetic north with the declination, smooth,
    turning the short way past north, with a light tick at N, E, S and W.
 2. **Where and when**: the town you're in ("Aspen, Colorado"), or how far you are from the nearest one,
    with the date and time.
@@ -44,8 +44,10 @@ all in Bearings, laid out in [docs/DESIGN.md](docs/DESIGN.md):
 10. **Honest accuracy**: ± for position and heading, a figure-8 hint only when needed, a warning near
     magnets and metal, and your speed as you move.
 
-Plus **night mode** (all red, to keep your night vision), **widgets** (iPhone and iPad Home Screen and Lock
-Screen, Mac desktop, Android Home Screen), and it works **offline** except for the map and terrain elevation.
+Plus **four layouts** (Small, Medium, Large and Extra Large: from a compass with a big map to the biggest
+compass with one summary row), **night mode** (all red, to keep your night vision), **compass widgets**
+(iPhone and iPad Home Screen, Mac desktop, Android Home Screen; elevation on the Lock Screen), and it works
+**offline** except for the map and terrain elevation.
 
 Before building it, we looked at the most-used compass apps and the open-source ones: see
 [docs/RESEARCH.md](docs/RESEARCH.md) for what Bearings borrows and what it avoids.
@@ -65,7 +67,7 @@ version uses only the built-in list. No analytics, no account. The full
 |---|---|
 | iPhone, iPad, Mac | SwiftUI (`Sources/`), one screen shared by all three; CoreLocation for position and heading (true north from iOS), CoreMotion for the level, MapKit for the map. `project.yml` (XcodeGen) builds both apps. |
 | Android | Kotlin and Jetpack Compose (`android/`); Android's own LocationManager (no Google Play services), the rotation-vector sensor remapped to the screen, `GeomagneticField` for true north, `AltitudeConverter` for sea-level GPS heights, MapLibre for the map. |
-| Web | `web/app.html` and `web/core.js`, built into `docs/` (GitHub Pages) by `scripts/build-web.sh`. Device orientation events, the Geolocation API, MapLibre GL JS. |
+| Web | `web/app.html` and `web/core.js`, built into `docs/` (GitHub Pages) by `scripts/build-web.sh`; `docs/app.html` is built, never edited. Device orientation events, the Geolocation API, MapLibre GL JS. |
 
 The coordinate maths is written three times (`web/core.js`, `Sources/Bearings/Core/Geo.swift`,
 `android/.../Core.kt`) and all three are tested against the same expected values,
@@ -89,12 +91,16 @@ cd android && ./gradlew assembleDebug testDebugUnitTest   # Android (JDK 17 and 
 
 ## Tests in CI
 
-Every push runs the Swift unit tests and the web tests (phone, small phone, tablet and desktop). On `main`:
+Every push runs the Swift unit tests and the web tests (phone, small phone, tablet and desktop). The web
+tests also retake the picture at the top of this page when asked
+(`README_SHOT=docs/screenshot-app.png node tests/web.test.js`), so it shows the screen they have just
+checked. On `main`:
 
 - **Mac**: builds the app and runs `Bearings --selftest` on a real Mac, with a live elevation lookup. Report
-  and picture on the [`ci-shots`](https://github.com/bradleycowdrey/bearings/tree/ci-shots) branch.
+  and pictures (every layout, wide windows, no compass) on the [`ci-shots`](https://github.com/bradleycowdrey/bearings/tree/ci-shots) branch.
 - **iPhone**: builds for the Simulator, places it at Maroon Bells, Colorado, and runs the self-test (location
-  fix, live elevation), then photographs iPhone and iPad:
+  fix, live elevation), then photographs iPhone and iPad in every layout, at larger text sizes and in
+  landscape:
   [`ci-shots-ios`](https://github.com/bradleycowdrey/bearings/tree/ci-shots-ios).
 - **Android**: builds, runs the unit tests, then the self-test in the emulator:
   [`ci-shots-android`](https://github.com/bradleycowdrey/bearings/tree/ci-shots-android).

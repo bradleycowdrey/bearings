@@ -117,6 +117,10 @@ class Navigator(private val context: Context, private val displayRotation: () ->
             }
         }
     var sample by mutableStateOf(false); private set
+    /** Store screenshots (the `store` extra, Apple's `--store`): the sample without its pill, dated today. */
+    var store by mutableStateOf(false); private set
+    /** Whether the location bar carries the Sample pill: with the sample, except in store screenshots. */
+    val samplePill: Boolean get() = sample && !store
 
     /** The place's name; null once [placeKnown] means nowhere within 200 km. */
     var place by mutableStateOf<String?>(null); private set
@@ -607,12 +611,16 @@ class Navigator(private val context: Context, private val displayRotation: () ->
      * Maroon Bells, Colorado, at 9:41 AM on 1 November 2026 (as on Apple), walking at 3.2 mph, with a spot marked
      * near Aspen and a bearing locked. [noCompass] shows the same place on a phone without a compass (§4.2): no
      * heading and no lock. [sampleLock] null and [markSpot] false give the live state (no lock row, no spot row).
+     * [forStore] (store screenshots, as Apple's `--store`) hides the Sample pill and dates the sample today, still at
+     * 9:41 AM in Colorado, so the bar's date matches the status bar's.
      */
-    fun showSample(sampleHeading: Double = 228.0, sampleLock: Double? = 240.0, noCompass: Boolean = false, markSpot: Boolean = true) {
+    fun showSample(sampleHeading: Double = 228.0, sampleLock: Double? = 240.0, noCompass: Boolean = false, markSpot: Boolean = true,
+                   forStore: Boolean = false) {
         stop()
         sample = true
+        store = forStore
         zone = TimeZone.getTimeZone("America/Denver")
-        now = SAMPLE_TIME
+        now = if (forStore) storeTime(System.currentTimeMillis()) else SAMPLE_TIME
         fix = Fix(39.09898, -106.94117, 5.0, null, null, 2925.0, SAMPLE_TIME)
         ground = Ground(2922.0, 39.099, -106.941); groundState = GroundState.OK
         place = "Maroon Bells, Colorado"; placeKnown = true
@@ -630,7 +638,7 @@ class Navigator(private val context: Context, private val displayRotation: () ->
         }
         speedReset?.cancel(); speed = 1.43
         mark = if (markSpot) 39.1911 to -106.8175 else null
-        pressure = 721.0
+        pressure = 712.4
         access = Access.ALLOWED
     }
 
@@ -638,6 +646,17 @@ class Navigator(private val context: Context, private val displayRotation: () ->
         const val POOR_HEADING_ACCURACY = 25.0
         /** 9:41 AM in Colorado on Sunday 1 November 2026. */
         const val SAMPLE_TIME = 1793551260000L
+
+        /** 9:41 AM in Colorado on the day of [today] (ms): the store screenshots' time. */
+        fun storeTime(today: Long): Long {
+            val c = java.util.Calendar.getInstance(TimeZone.getTimeZone("America/Denver"))
+            c.timeInMillis = today
+            c.set(java.util.Calendar.HOUR_OF_DAY, 9)
+            c.set(java.util.Calendar.MINUTE, 41)
+            c.set(java.util.Calendar.SECOND, 0)
+            c.set(java.util.Calendar.MILLISECOND, 0)
+            return c.timeInMillis
+        }
 
         /** The marked spot saved in the app's preferences ("lat,lon"), for the app and the widget. */
         fun savedMark(prefs: SharedPreferences): Pair<Double, Double>? {

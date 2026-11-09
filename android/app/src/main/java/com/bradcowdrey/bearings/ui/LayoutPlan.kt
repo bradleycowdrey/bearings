@@ -47,7 +47,7 @@ enum class Layout(
  * - [BAND] Small: Position · DD | Elevation | Sun on a band along the map card's bottom (1.2 | 1 | 1);
  * - [QUAD] Medium: Position | Elevation, Sun | Map (Sun | Moon when the map is a card, on a tablet or in two panes);
  * - [SIX] Large: Latitude | Longitude | Elevation, Sun | Moon | Pressure or Speed (3 × 2 compact tiles);
- * - [STRIP] Extra Large: one summary tile, Position | Elevation | Sun (1.25 | 1 | 1, 1 dp dividers);
+ * - [STRIP] Extra Large: one summary tile, Position | Elevation | Sun (1.2 | 1 | 1 as on Apple, 1 dp dividers);
  * - [QUAD_COMPACT] Large given way (or at large text): Position | Elevation, Sun | Pressure or Speed;
  * - [ROW] the give-way row (A.6 step 6): Position (C − 16 − 2w) | Elevation (w) | Sun (w), the map in the card's button;
  * - [TWO_ROW] large text (k ≥ 1.3): Position full width, then Elevation | Sun; also Extra Large in a trailing pane
@@ -289,8 +289,23 @@ object LayoutPlan {
     const val BAND = 72f
     const val STRIP = 104f
     const val STRIP_MAX = 120f
-    /** The strip's columns: 12 across each side. */
+    /** The strip's columns: 12 across each side, 14 above and below; the dividers stop 12 short of the top and bottom. */
     const val STRIP_INSET = 12f
+    const val STRIP_PAD = 14f
+    const val STRIP_DIVIDER_INSET = 12f
+    /** The strip's Position column against Elevation and Sun (1.2 | 1 | 1, as on Apple). */
+    const val STRIP_POSITION = 1.2f
+    /**
+     * The strip's values (review 2.3.0, 11): one size for all three columns, the largest from [STRIP_VALUE_MAX]
+     * ([STRIP_VALUE_MAX_TABLET] on a tablet) down to [STRIP_VALUE_MIN] at which the longitude and the times fit, on a
+     * line 4 taller; they sit [STRIP_CAPTION_GAP] under the caption, not at the tile's foot.
+     */
+    const val STRIP_VALUE_MAX = 20f
+    const val STRIP_VALUE_MAX_TABLET = 26f
+    const val STRIP_VALUE_MIN = 15f
+    const val STRIP_CAPTION_GAP = 6f
+    /** A real overflow: under this (dp) the column is only a pixel or two of rounding over, which its end gap absorbs. */
+    const val OVERFLOW_SLACK = 8f
     /** "106.94117° W" on one line at 0.85 of the strip's 15 sp value, with a little to spare (Apple: the same at 15 pt). */
     const val POSITION_LINE = 88f
     const val MAP_MIN = 140f
@@ -742,7 +757,7 @@ object LayoutPlan {
     /**
      * The grid's rows at column width [c] (A.3): band (12 insets, 8 gaps, 1.2 | 1 | 1), quad (C − 8) / 2, six
      * (C − 16) / 3 (Latitude and Longitude only for DD; otherwise one Position tile 2u + 8), strip (1 dp dividers,
-     * 1.25 | 1 | 1), the compact row, two rows and the list.
+     * 1.2 | 1 | 1, Apple's widths), the compact row, two rows and the list.
      */
     fun rows(mode: GridMode, map: MapMode, c: Float, sixth: Sixth = Sixth.PRESSURE, decimal: Boolean = true): List<TileRowPlan> {
         val half = ((c - ROW_GAP) / 2).roundToInt().toFloat()
@@ -762,7 +777,7 @@ object LayoutPlan {
                 else TileRowPlan(listOf(TileKind.POSITION, TileKind.ELEVATION), listOf(2 * u + ROW_GAP, c - 2 * ROW_GAP - 2 * u)),
                 TileRowPlan(listOf(TileKind.SUN, TileKind.MOON, last), thirds),
             )
-            GridMode.STRIP -> listOf(TileRowPlan(listOf(TileKind.POSITION, TileKind.ELEVATION, TileKind.SUN), split(c - 2f, listOf(1.25f, 1f, 1f)), 1f))
+            GridMode.STRIP -> listOf(TileRowPlan(listOf(TileKind.POSITION, TileKind.ELEVATION, TileKind.SUN), split(c - 2f, listOf(STRIP_POSITION, 1f, 1f)), 1f))
             GridMode.QUAD_COMPACT -> listOf(
                 TileRowPlan(listOf(TileKind.POSITION, TileKind.ELEVATION), halves),
                 TileRowPlan(listOf(TileKind.SUN, last), halves),
@@ -945,8 +960,59 @@ object LayoutPlan {
         return failures
     }
 
+    /**
+     * The strip's value size: the largest whole size from [max] down to [STRIP_VALUE_MIN] that [fits] (the screen
+     * measures the longitude and the times with it), or the minimum, where the text then shrinks or wraps as before.
+     */
+    fun stripValueSize(max: Float, fits: (Float) -> Boolean): Float {
+        var size = max
+        while (size > STRIP_VALUE_MIN + 0.001f) {
+            if (fits(size)) return size
+            size -= 1f
+        }
+        return STRIP_VALUE_MIN
+    }
+
+    /**
+     * The heights the single column stacks for [p], top to bottom, in dp, exactly as MainScreen's SingleColumn lays
+     * them out: the top padding, the bar, the gaps, the dial, the readout, the status line, each Targets row, each
+     * grid row (or the map card) and the bottom padding (the end gap and what step 4 left).
+     */
+    fun columnPieces(p: Plan): List<Float> {
+        val pieces = mutableListOf(p.locationTop, p.location, p.barGap, p.dial, p.dialGap, p.readout, p.statusGap, p.status, p.cardGap)
+        if (p.targetsRows > 0) {
+            repeat(p.targetsRows) { pieces += p.targetsRowHeight }
+            pieces += p.gridGap
+        }
+        when (p.grid) {
+            GridMode.BAND -> pieces += p.mapHeight
+            GridMode.STRIP, GridMode.ROW -> pieces += p.tile
+            GridMode.ROWS -> { repeat(4) { pieces += p.tile }; repeat(3) { pieces += p.rowGap } }
+            else -> { pieces += p.tile; pieces += p.rowGap; pieces += p.tile2 }
+        }
+        if (p.map == MapMode.CARD && p.grid != GridMode.BAND) { pieces += p.mapGap; pieces += p.mapHeight }
+        pieces += p.endGap + p.bottomSpare
+        return pieces
+    }
+
+    /**
+     * How many px the single column for [p] is taller than a safe height of [s] dp on a screen of [density] px per
+     * dp, each piece rounded to whole px as Compose does: the rounding the column's end gap has to absorb, so that
+     * nothing scrolls and no fade is drawn. Negative when it is shorter.
+     */
+    fun pixelOverflow(p: Plan, s: Float, density: Float): Int =
+        columnPieces(p).sumOf { Math.round(it * density) } - Math.round(s * density)
+
     /** The last plan the main screen drew, for the self-test's report. */
     @Volatile var last: Plan? = null
+    /**
+     * What the single column measured when it was last laid out: the layout it drew, how far its content ran past
+     * the safe height before the end gap absorbed it (dp; 0 or less: it fits), and how far it can scroll (px; 0:
+     * nothing scrolls, no fade). The self-test fails on an overflow.
+     */
+    @Volatile var drawnLayout: Layout? = null
+    @Volatile var drawnOverflow: Float = 0f
+    @Volatile var drawnScroll: Int = 0
     @Volatile var lastWidth: Float = 0f
     @Volatile var lastHeight: Float = 0f
     @Volatile var lastSafeHeight: Float = 0f

@@ -3,14 +3,16 @@ name: iPhone
 # Builds the iPhone and iPad app with its widget, checks the packaged widget, and runs the app in the
 # iOS Simulator: --selftest with the Simulator placed at Maroon Bells, Colorado (location fix, live
 # ground elevation, naming the place, the compass's "no compass" state with "No heading" in words, every
-# widget size drawn, the layout planner's golden table from docs/REFINE.md "Concept A" A.11: the dial at
-# the safe top + 18 with nothing above it, the dial at least 40% of H, then readout, status line, location
-# card, Targets card and grid, every gap a frozen token × k, 24 or less spare, nothing cut, rows that add
+# widget size drawn, the layout planner's golden table (docs/LAYOUTS.md §8): the slim location
+# bar first at the safe top + 8, the dial 12 under it and at least 40% of H, then readout, status line,
+# Targets card and grid, every gap a frozen token × k, 24 or less spare, nothing cut, rows that add
 # up to C, the four layouts distinct by grid and map surface), then photographs the terms, the live
 # screen, the sample place, every layout (--layout small|large|extraLarge; the rest use the Medium
-# default), the map sheet (--map-sheet), the no-compass state (--no-compass) in Medium and Extra Large on
-# iPhone and iPad, larger text and an accessibility size on iPhone, and iPad in landscape in all four
-# layouts and without a compass (docs/LAYOUTS.md §8).
+# default), the map sheet (--map-sheet), the no-compass state (--no-compass) in Medium and Extra Large, and
+# the App Store's sample (--store: no Sample pill, today's date) on iPhone and iPad, three Text Sizes on
+# iPhone (one notch up, two notches up, and an accessibility size; the first and last must be different
+# pictures), and iPad in landscape in all four layouts and without a compass, saved upright
+# (docs/LAYOUTS.md §8).
 # Results go to the ci-shots-ios branch; the job fails if any check fails.
 on:
   push:
@@ -79,13 +81,17 @@ jobs:
             # The map sheet (the Map tile's full-height sheet), opened at launch with --map-sheet.
             xcrun simctl launch "$DEVICE" $ID --sample --format dd --map-sheet; sleep 8
             xcrun simctl io "$DEVICE" screenshot "$OUT/$P-10-map-sheet.png"; xcrun simctl terminate "$DEVICE" $ID || true
-            # No compass with the sample place (REFINE.md A.2): "No heading" in words (34 semibold, white 55%)
-            # in the readout's slot, "Position, sun and map still work" under it, the dial's no-compass drawing,
-            # the location card and the layout's normal grid below. Medium, then Extra Large.
+            # No compass with the sample place: "No heading" in words (34 semibold, white 55%) in the
+            # readout's slot, "Position, sun and map still work" right under it, the dial's no-compass
+            # drawing, the location bar above and the layout's normal grid below. Medium, then Extra Large.
             xcrun simctl launch "$DEVICE" $ID --sample --format dd --no-compass; sleep 6
             xcrun simctl io "$DEVICE" screenshot "$OUT/$P-11-no-compass.png"; xcrun simctl terminate "$DEVICE" $ID || true
             xcrun simctl launch "$DEVICE" $ID --sample --format dd --no-compass --layout extraLarge; sleep 6
             xcrun simctl io "$DEVICE" screenshot "$OUT/$P-14-no-compass-xl.png"; xcrun simctl terminate "$DEVICE" $ID || true
+            # The sample as the App Store screenshots show it (--store, app-store.yml): no Sample pill, and
+            # today's date in the location bar, so it agrees with the date in an iPad's status bar.
+            xcrun simctl launch "$DEVICE" $ID --store --format dd; sleep 6
+            xcrun simctl io "$DEVICE" screenshot "$OUT/$P-17-store.png"; xcrun simctl terminate "$DEVICE" $ID || true
           }
           shoot_layout() {   # $1 = device, $2 = layout id, $3 = file name (no .png)
             # --format dd: the -3-mgrs shot saved MGRS as the format; the layout itself is never saved.
@@ -94,16 +100,18 @@ jobs:
           }
           PHONE=$(pick iPhone)
           run_on "$PHONE" iphone
-          # The iPhone's Text Size turned up (k ≥ 1.3, REFINE.md A.7): the dial stays at least 40% of H; a
-          # three-column compact row becomes two rows (Position full width; Elevation | Sun), times never
-          # break, nothing ends in "…", and the last row ends above the safe bottom.
-          xcrun simctl ui "$PHONE" content_size extra-extra-large || true
+          # Three Text Sizes, each its own setting, so the three pictures show three different things:
+          # 1. One notch above the default (extra-large, k about 1.12): still one screen, the dial at least
+          #    40% of H, times never break, nothing ends in "…", the last row ends above the safe bottom.
+          xcrun simctl ui "$PHONE" content_size extra-large || true
           xcrun simctl launch "$PHONE" $ID --sample --format dd; sleep 6
           xcrun simctl io "$PHONE" screenshot "$OUT/iphone-5-large-text.png"; xcrun simctl terminate "$PHONE" $ID || true
-          # The same Text Size at Extra Large: the planner gives things up (or scrolls as one list), nothing is cut.
+          # 2. Two notches up (extra-extra-large, k about 1.24), in Extra Large: the planner gives things up
+          #    (or scrolls as one list); nothing is cut.
+          xcrun simctl ui "$PHONE" content_size extra-extra-large || true
           shoot_layout "$PHONE" extraLarge iphone-9-xl-large-text
-          # The first accessibility size (AX1): one scrolling list (dial, readout, status, location card,
-          # Targets card, 96 pt tile rows, the Map tile), the indicator flashed (docs/LAYOUTS.md §4).
+          # 3. The first accessibility size (AX1): one scrolling list (location bar, dial, readout, status,
+          #    Targets card, 96 pt tile rows, the Map tile), the indicator flashed (docs/LAYOUTS.md §4).
           xcrun simctl ui "$PHONE" content_size accessibility-medium || true
           xcrun simctl launch "$PHONE" $ID --sample --format dd; sleep 6
           xcrun simctl io "$PHONE" screenshot "$OUT/iphone-12-ax1.png"; xcrun simctl terminate "$PHONE" $ID || true
@@ -119,9 +127,9 @@ jobs:
           xcrun simctl shutdown "$PHONE" || true
           IPAD=$(pick iPad)
           run_on "$IPAD" ipad
-          # iPad in landscape (two panes, no full-width header: dial, readout and status top-aligned on the
-          # left; the location card with ⋯, the Targets card, the grid and a map card on the right), in all
-          # four layouts, which must be four different plans (REFINE.md A.8), and without a compass.
+          # iPad in landscape (two panes: the location bar full width at the top; dial, readout and status on
+          # the left; the Targets card, the grid and a map card on the right), in all four layouts, which
+          # must be four different plans (REFINE.md A.8), and without a compass.
           # If the Simulator window can be rotated here; best effort:
           # simctl has no rotate command, so this goes through the Simulator app's Device menu.
           open -a Simulator --args -CurrentDeviceUDID "$IPAD" || true; sleep 8
@@ -142,6 +150,16 @@ jobs:
             xcrun simctl launch "$IPAD" $ID --sample --format dd --no-compass; sleep 6
             xcrun simctl io "$IPAD" screenshot "$OUT/ipad-16-landscape-no-compass.png"; xcrun simctl terminate "$IPAD" $ID || true
             rotate Right || true
+            # simctl saves the screen as the device holds it in portrait, so these come out on their side
+            # (the top of the app along the right edge). Turn them upright: a quarter turn anticlockwise
+            # (sips turns clockwise, so 270). Only if still taller than wide, in case a later Xcode saves
+            # them upright itself.
+            for F in "$OUT"/ipad-*landscape*.png; do
+              [ -s "$F" ] || continue
+              PW=$(sips -g pixelWidth "$F" | awk '/pixelWidth/ {print $2}')
+              PH=$(sips -g pixelHeight "$F" | awk '/pixelHeight/ {print $2}')
+              if [ "${PH:-0}" -gt "${PW:-0}" ]; then sips -r 270 "$F" >/dev/null || true; fi
+            done
           else
             echo "::notice::The Simulator couldn't be rotated here; no ipad-9-landscape.png"
           fi
@@ -159,14 +177,26 @@ jobs:
       - name: Fail on any failed check
         run: |
           grep -E "^FAIL" "$RUNNER_TEMP/shots/report.txt" | sed 's/^/::error::/' || true
-          # Every layout, the map sheet and the no-compass states photographed on both devices, and larger
-          # and accessibility text on iPhone (docs/LAYOUTS.md §8).
+          # Every layout, the map sheet, the no-compass states and the App Store's sample photographed on
+          # both devices, and larger and accessibility text on iPhone (docs/LAYOUTS.md §8).
           for P in iphone ipad; do
-            for F in 2-sample 6-small 7-large 8-xl 10-map-sheet 11-no-compass 14-no-compass-xl; do
+            for F in 2-sample 6-small 7-large 8-xl 10-map-sheet 11-no-compass 14-no-compass-xl 17-store; do
               [ -s "$RUNNER_TEMP/shots/$P-$F.png" ] || { echo "::error::No $P-$F.png"; exit 1; }
             done
           done
           for F in 5-large-text 9-xl-large-text 12-ax1; do
             [ -s "$RUNNER_TEMP/shots/iphone-$F.png" ] || { echo "::error::No iphone-$F.png"; exit 1; }
+          done
+          # The larger-text and accessibility pictures are taken at different Text Sizes and must not be the
+          # same picture (they once were, byte for byte: both showed the accessibility list).
+          if cmp -s "$RUNNER_TEMP/shots/iphone-5-large-text.png" "$RUNNER_TEMP/shots/iphone-12-ax1.png"; then
+            echo "::error::iphone-5-large-text.png and iphone-12-ax1.png are the same picture"; exit 1
+          fi
+          # iPad landscape pictures are saved upright (wider than tall) when the Simulator could be rotated.
+          for F in "$RUNNER_TEMP"/shots/ipad-*landscape*.png; do
+            [ -s "$F" ] || continue
+            PW=$(sips -g pixelWidth "$F" | awk '/pixelWidth/ {print $2}')
+            PH=$(sips -g pixelHeight "$F" | awk '/pixelHeight/ {print $2}')
+            [ "${PW:-0}" -gt "${PH:-0}" ] || { echo "::error::$(basename "$F") is on its side"; exit 1; }
           done
           head -1 "$RUNNER_TEMP/shots/report.txt" | grep -q "ALL PASSED"

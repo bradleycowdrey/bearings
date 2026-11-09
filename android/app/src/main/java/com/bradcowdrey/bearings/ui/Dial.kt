@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocationOff
+import androidx.compose.material.icons.filled.ExploreOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,8 +53,9 @@ class DialMarks(
  * The compass card: ticks every 2°, numbers every 30°, the points, and on it the sun, the moon, the
  * marked spot's pin and the locked bearing. It turns opposite to the phone under a fixed lubber line at
  * the top; a bubble level sits in the middle. Drawn on a 400-unit square, like the web and Apple versions.
- * With [noCompass] (docs/REFINE.md §4.2) the rose drops to 40%, the lubber line goes, and a "no compass"
- * glyph sits in the middle with "N ↑ fixed" at the top of the ring, so the sun and moon read from north.
+ * With [noCompass] (docs/REFINE.md §4.2) the rose drops to 40%, the lubber line goes, and a crossed-out compass
+ * (not a crossed-out pin: the position still works) sits in the middle with "N ↑ fixed" at the top of the ring, so
+ * the sun and moon read from north. The cross hairs and the level's rings are 1 and 1.5 dp, as on Apple.
  */
 @Composable
 fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float, Float>?, modifier: Modifier = Modifier, noCompass: Boolean = false) {
@@ -79,8 +80,8 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
                 return Offset(c.x + (sin(a) * radius * k).toFloat(), c.y - (cos(a) * radius * k).toFloat())
             }
             // A faint white disc with a 1 dp edge, as Two Degrees' tiles (docs/LOOK.md).
-            drawCircle(Palette.tileFill, radius = 196 * k, center = c)
-            drawCircle(Palette.tileStroke, radius = 196 * k, center = c, style = Stroke(Look.stroke.toPx()))
+            drawCircle(Palette.tileFill, radius = DIAL_RIM * k, center = c)
+            drawCircle(Palette.tileStroke, radius = DIAL_RIM * k, center = c, style = Stroke(Look.stroke.toPx()))
             rotate(rotation.toFloat(), pivot = c) {
                 for (d in 0 until 360 step 2) {
                     val major = d % 30 == 0; val mid = d % 10 == 0
@@ -125,11 +126,14 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
                 val lubber = Path().apply { moveTo(c.x, c.y - 200 * k); lineTo(c.x + 9 * k, c.y - 184 * k); lineTo(c.x - 9 * k, c.y - 184 * k); close() }
                 drawPath(lubber, Color.White)
             }
+            // In dp, not raw pixels (review 2.3.0, 19): a 1 px line all but vanishes on a dense screen.
             val hair = Color.White.copy(alpha = 0.07f)
-            drawLine(hair, Offset(c.x, c.y - 100 * k), Offset(c.x, c.y + 100 * k), 1f)
-            drawLine(hair, Offset(c.x - 100 * k, c.y), Offset(c.x + 100 * k, c.y), 1f)
-            drawCircle(white(Op.TRACK), radius = 40 * k, center = c, style = Stroke(1.5f))
-            drawCircle(white(Op.TRACK), radius = 13 * k, center = c, style = Stroke(1.5f))
+            val hairWidth = 1.dp.toPx()
+            val ringWidth = 1.5.dp.toPx()
+            drawLine(hair, Offset(c.x, c.y - 100 * k), Offset(c.x, c.y + 100 * k), hairWidth)
+            drawLine(hair, Offset(c.x - 100 * k, c.y), Offset(c.x + 100 * k, c.y), hairWidth)
+            drawCircle(white(Op.TRACK), radius = 40 * k, center = c, style = Stroke(ringWidth))
+            drawCircle(white(Op.TRACK), radius = 13 * k, center = c, style = Stroke(ringWidth))
             if (tilt != null) {
                 // The bubble rises to the high side: opposite to gravity, 30° of tilt to the ring's edge.
                 val degX = Math.toDegrees(asin(tilt.first.toDouble().coerceIn(-1.0, 1.0)))
@@ -142,7 +146,7 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
             }
         }
         if (noCompass) {
-            Icon(Icons.Filled.LocationOff, null, tint = Color.White, modifier = Modifier.align(Alignment.Center).size(28.dp))
+            Icon(Icons.Filled.ExploreOff, null, tint = Color.White, modifier = Modifier.align(Alignment.Center).size(28.dp))
             Text("N ↑ fixed", style = text(11f, FontWeight.SemiBold, white(Op.SUB)), textAlign = TextAlign.Center,
                 // Inside the ring, under the N (a quarter of the way down).
                 modifier = Modifier.align(BiasAlignment(0f, -0.5f)).fillMaxWidth())
@@ -150,12 +154,16 @@ fun Dial(rotation: Double, heading: Double?, marks: DialMarks, tilt: Pair<Float,
     }
 }
 
-/** The marked spot: a white teardrop on the outer ring, its point toward the middle (drawn at the top), with a black hole and edge. */
+/**
+ * The marked spot: a white teardrop inside the tick ring, its point toward the middle (drawn at the top), with a
+ * black hole and edge. Its head is centred 176 out with radius 8 and its point is 160 out, as on Apple, so nothing
+ * of it reaches past the dial's rim at 196 (review 2.3.0, 18).
+ */
 private fun DrawScope.pin(c: Offset, k: Float) {
-    val head = Offset(c.x, c.y - 194 * k)
-    val r = 6.5f * k
+    val head = Offset(c.x, c.y - PIN_HEAD * k)
+    val r = PIN_RADIUS * k
     val drop = Path().apply {
-        moveTo(c.x, c.y - 178 * k)
+        moveTo(c.x, c.y - PIN_TIP * k)
         lineTo(c.x - r * 0.92f, head.y + r * 0.4f)
         lineTo(c.x + r * 0.92f, head.y + r * 0.4f)
         close()
@@ -167,6 +175,13 @@ private fun DrawScope.pin(c: Offset, k: Float) {
     drawCircle(Color.White, r, head)
     drawCircle(Color.Black, r * 0.38f, head)
 }
+
+/** The marked spot's pin on the 400-unit dial: the head's centre and radius and the point, from the middle. */
+const val PIN_HEAD = 176f
+const val PIN_RADIUS = 8f
+const val PIN_TIP = 160f
+/** The dial's rim on the 400-unit dial. */
+const val DIAL_RIM = 196f
 
 /** An amber disc with eight short rays. */
 private fun DrawScope.sunGlyph(center: Offset, k: Float, alpha: Float) {

@@ -34,7 +34,9 @@ import kotlin.math.abs
  * never need "…" and never break at text sizes 1.0, 1.3 and 2.0 (measured with the app's own font); "No heading" is
  * rendered and its ink measured (centred, 12 under the dial, cap height 24, 150–200 wide, white 55%, words not a
  * bar); both Position lines share one size; the lock row's label and cue never split or cut; the map labels are one
- * upright colour; coordinates never carry "…"; and night mode's secondary text is 4.5:1 or better. Writes
+ * upright colour; coordinates never carry "…"; night mode's secondary text is 4.5:1 or better; and, on the screen
+ * itself ([drawnChecks]), every layout is shown and must fit without scrolling, and Small's map card is watched and
+ * must not draw place names as solid blocks. Writes
  * files/report.txt, first line "ALL PASSED" or "FAILED …"; CI then photographs the screen.
  */
 object SelfTest {
@@ -283,9 +285,8 @@ object SelfTest {
         check(lockCut.isEmpty(), "Lock row: label and cue never split or cut (${lockCut.firstOrNull() ?: "all plans"})")
         // The map's labels (C3.4 #8): one colour, upright regular, never italic or the style's cyan.
         val font = MapDark.labelFont
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { MapDark.probeAlphaTextures() }
         check(MapDark.labelColor == "#C9D3D6" && font.isNotEmpty() && font.none { "Italic" in it || "Bold" in it },
-            "Map labels ${MapDark.labelColor} in $font; ${MapDark.labelState}")
+            "Map labels ${MapDark.labelColor} in $font")
         // Coordinates are never cut short with "…" (the tiles shrink them to 0.85 and then wrap).
         val points = listOf(39.09898 to -106.94117, -33.86882 to 151.20929, 0.0 to -179.99999, -89.5 to 179.5)
         val cut = Geo.Format.entries.flatMap { fmt ->
@@ -298,8 +299,73 @@ object SelfTest {
         val contrast = NightContrast.secondary
         check(contrast >= 4.5, "Night secondary text contrast ${"%.2f".format(java.util.Locale.US, contrast)}:1 (4.5 or better)")
 
+        drawnChecks(context, nav, ::check)
+
         val head = if (failed == 0) "ALL PASSED (${lines.size} checks)" else "FAILED $failed of ${lines.size} checks"
         File(context.filesDir, "report.txt").writeText((listOf(head) + lines).joinToString("\n") + "\n")
+    }
+
+    /**
+     * What the screen really draws (review 2.3.0, 1 and 2), checked on the screen itself rather than on the plan.
+     *
+     * Every layout is shown in turn, first as it is (live: no Targets card) and then with a spot marked and the
+     * bearing locked (both cleared again): the column must fit the screen, so nothing scrolls and no "more below"
+     * fade is drawn over its last tiles. A pixel or two of rounding goes into the empty end gap; anything over 8 dp
+     * fails. Then Small's map card, the map that shows place names, is watched for nine seconds and its picture
+     * (the map view's own pixels) searched for solid light rectangles: a GPU that can't draw the map's text draws
+     * each word as one. The app hides the labels when it sees that; the check fails if blocks are still in the
+     * picture, or if the picture was never drawn. The layout is put back as it was (never saved).
+     */
+    private suspend fun drawnChecks(context: Context, nav: Navigator, check: (Boolean, String) -> Unit) {
+        val original = nav.layout
+        val density = context.resources.displayMetrics.density
+        val slack = LayoutPlan.OVERFLOW_SLACK
+        val order = listOf(Layout.MEDIUM, Layout.LARGE, Layout.EXTRA_LARGE, Layout.SMALL)
+        val problems = mutableListOf<String>()
+        val seen = mutableListOf<String>()
+        MapDark.auditing = true
+        var smallAt = 0L
+        for (targets in listOf(false, true)) {
+            if (targets) {
+                nav.markHere()
+                if (nav.heading != null && nav.lock == null) nav.toggleLock()
+            }
+            for (l in order) {
+                // Asked for the layout already on screen (the first one), nothing is laid out again: its last
+                // measurement stands. Otherwise wait for the new layout's own.
+                if (nav.layout != l) LayoutPlan.drawnLayout = null
+                nav.setLayout(l, save = false)
+                if (l == Layout.SMALL) smallAt = android.os.SystemClock.uptimeMillis()
+                var waited = 0
+                while (waited < 30 && LayoutPlan.last?.layout != l) { delay(100); waited++ }
+                // The dial's spring settles and the column is measured again.
+                delay(1300)
+                val p = LayoutPlan.last
+                val name = l.id + (if (targets) " with targets" else "")
+                if (p == null || p.layout != l) { problems += "$name was not drawn"; continue }
+                if (p.list || p.twoPane) { seen += "$name: ${if (p.list) "list" else "two panes"}"; continue }
+                if (LayoutPlan.drawnLayout != l) { problems += "$name: the column was not measured"; continue }
+                val over = LayoutPlan.drawnOverflow
+                val scroll = LayoutPlan.drawnScroll
+                seen += "$name ${"%+.1f".format(java.util.Locale.US, over)} dp"
+                if (over > slack || scroll > slack * density) {
+                    problems += "$name runs ${"%.1f".format(java.util.Locale.US, over)} dp past the screen and scrolls $scroll px"
+                }
+            }
+        }
+        nav.clearMark()
+        nav.lock = null
+        check(problems.isEmpty(), "No layout overflows as drawn (${problems.firstOrNull() ?: seen.joinToString("; ")})")
+
+        // Small is on screen now: its map card draws place names. Watch its picture until nine seconds after it appeared.
+        var waited = 0
+        while (waited < 80 && (MapDark.lastAudit?.at ?: 0L) < smallAt + 9000L) { delay(500); waited++ }
+        val audit = MapDark.lastAudit
+        MapDark.auditing = false
+        val clean = audit != null && audit.at >= smallAt && !audit.result.blocks && !audit.result.washed
+        check(clean, "Map draws no blocks where place names should be (${MapDark.labelState})")
+        nav.setLayout(original, save = false)
+        delay(600)
     }
 
     /**
@@ -308,7 +374,8 @@ object SelfTest {
      * mock (Small 124 dp half dial at 170 × 170, Medium 120 at 364 × 170, Large 212 at 364 × 382); and every dial is
      * drawn (files/widget-*.png, which CI keeps as android-widget-*.png) with its marks where they belong: the spot's
      * pin on the rim at 46°, the sun on the disc, the lock's notch at 240°, and on Small's half dial the sun (144°)
-     * and moon below the arc as edge marks past its ends with nothing drawn under the arc between them.
+     * and moon below the arc as edge marks beside its ends (a glyph and one arrow, clear of the edge, only while above
+     * the horizon) with nothing drawn under the arc between them; on Medium the sun and moon stay inside N E S W.
      */
     private fun widgetChecks(context: Context, snapshot: Snapshot, check: (Boolean, String) -> Unit) {
         val spot = 39.1911 to -106.8175
@@ -374,12 +441,53 @@ object SelfTest {
         val small = WidgetDial.draw(124f, half = true, marks = marks(label = true, lock = false), scale = scale)
         save("widget-small", small)
         at(82f, 62f, b, 51.4f).let { (x, y) -> if (!has(small.bitmap, x, y, 3f, WidgetDial.PINK)) problems += "small: no pin on the arc" }
-        val sunSide = if (sun < 180) 82f + 60f + 7f else 82f - 60f - 7f
-        if (sun in 90.0..270.0 && !has(small.bitmap, sunSide, 64f, 3.5f, WidgetDial.AMBER)) problems += "small: no sun edge mark"
-        if (moon in 90.0..270.0) {
-            val moonSide = if (moon < 180) 82f + 60f + 7f else 82f - 60f - 7f
-            if (!has(small.bitmap, moonSide, 64f, 5f, WidgetDial.CREAM) && !has(small.bitmap, moonSide, 50f, 5f, WidgetDial.CREAM)) problems += "small: no moon edge mark"
+        // Edge marks (review 2.3.0, 9): the glyph 8.5 outside the rim and 5 above the horizon, one filled arrow 12
+        // under it; a second mark on the same side 24 higher; only for a body above the horizon.
+        val out = 60f + WidgetDial.EDGE_OUT
+        val edgeY = 62f - WidgetDial.EDGE_RISE
+        val sunSide = if (sun < 180) 82f + out else 82f - out
+        if (sun > 90.0 && sun < 270.0 && entry.sunUp) {
+            if (!has(small.bitmap, sunSide, edgeY, 2f, WidgetDial.AMBER)) problems += "small: no sun edge mark"
+            if (!has(small.bitmap, sunSide, edgeY + WidgetDial.EDGE_ARROW_DROP, 2f, WidgetDial.AMBER)) problems += "small: no arrow under the sun's edge mark"
         }
+        if (moon > 90.0 && moon < 270.0 && entry.moonUp) {
+            val moonSide = if (moon < 180) 82f + out else 82f - out
+            if (!has(small.bitmap, moonSide, edgeY, 3f, WidgetDial.CREAM) && !has(small.bitmap, moonSide, edgeY - WidgetDial.EDGE_PITCH, 3f, WidgetDial.CREAM)) problems += "small: no moon edge mark"
+        }
+        // Nothing within 6 dp of the bitmap's sides (the widget's edge is further out still: 10.9 dp at 170 wide).
+        var nearEdge = 0
+        val band = (6f * scale).toInt()
+        for (py in 0 until small.bitmap.height) for (px in 0 until band) {
+            if ((small.bitmap.getPixel(px, py) and 0xFFFFFF) != 0) nearEdge++
+            if ((small.bitmap.getPixel(small.bitmap.width - 1 - px, py) and 0xFFFFFF) != 0) nearEdge++
+        }
+        if (nearEdge > 0) problems += "small: $nearEdge px of an edge mark within 6 dp of the side"
+        if (WidgetDial.edgeClearance(124f, 170f) < 6f) problems += "small: edge marks ${WidgetDial.edgeClearance(124f, 170f)} dp from the widget's edge"
+        // A sun below the horizon and off the arc is left out: no amber anywhere on the half dial.
+        val below = WidgetDial.draw(124f, half = true, marks = WidgetDial.Marks(sun = 144.0, sunUp = false, moon = 250.0, moonUp = false), scale = scale)
+        var amber = 0
+        for (py in 0 until below.bitmap.height step 2) for (px in 0 until below.bitmap.width step 2) {
+            val c = below.bitmap.getPixel(px, py)
+            if (android.graphics.Color.red(c) > 200 && android.graphics.Color.green(c) > 140 && android.graphics.Color.blue(c) < 110) amber++
+        }
+        if (amber > 0) problems += "small: a sun below the horizon is still drawn beside the arc"
+        // Medium (review 2.3.0, 10): the sun due east and the moon due west stay inside the letters: the E and the W
+        // are still drawn whole (white where the letter's stem is, no amber or cream over it).
+        val cardinal = WidgetDial.draw(120f, half = false, marks = WidgetDial.Marks(sun = 90.0, moon = 270.0, moonPhase = 0.5), scale = scale)
+        val ring = WidgetDial.letterRing(60f - 2f, WidgetDial.Density.MID)
+        val sunOut = WidgetDial.skyDistance(58f, WidgetDial.Density.MID, WidgetDial.sunRadius(WidgetDial.Density.MID) * WidgetDial.SUN_REACH)
+        val moonOut = WidgetDial.skyDistance(58f, WidgetDial.Density.MID, WidgetDial.moonRadius(WidgetDial.Density.MID))
+        if (!has(cardinal.bitmap, 60f + sunOut, 60f, 2f, WidgetDial.AMBER)) problems += "medium: no sun due east"
+        if (has(cardinal.bitmap, 60f + ring, 60f, 5.5f, WidgetDial.AMBER)) problems += "medium: the sun is on the E"
+        // The moon's cream is warm (red well over blue); the white W and its grey edges are not.
+        var creamOnW = 0
+        for (py in ((60f - 5.5f) * scale).toInt()..((60f + 5.5f) * scale).toInt()) for (px in ((60f - ring - 5.5f) * scale).toInt()..((60f - ring + 5.5f) * scale).toInt()) {
+            val c = cardinal.bitmap.getPixel(px, py)
+            if (android.graphics.Color.red(c) > 235 && android.graphics.Color.green(c) > 215 && android.graphics.Color.red(c) - android.graphics.Color.blue(c) >= 14) creamOnW++
+        }
+        if (creamOnW > 0) problems += "medium: the moon is on the W"
+        if (moonOut + WidgetDial.moonRadius(WidgetDial.Density.MID) > ring - 6.6f || sunOut + 8.8f > ring - 6.6f) problems += "medium: sun or moon reaches the letters ($sunOut, $moonOut, letters at $ring)"
+        if (!has(cardinal.bitmap, 60f + ring, 60f, 5f, android.graphics.Color.WHITE) || !has(cardinal.bitmap, 60f - ring, 60f, 5f, android.graphics.Color.WHITE)) problems += "medium: E or W not drawn"
         // Nothing under the arc between its ends (marks never move onto the dial's hidden half).
         var under = 0
         for (py in ((62f + 4f) * scale).toInt() until small.bitmap.height) for (px in ((82f - 50f) * scale).toInt()..((82f + 50f) * scale).toInt()) {

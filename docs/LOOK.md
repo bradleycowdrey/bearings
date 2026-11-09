@@ -4,9 +4,10 @@ Bearings is restyled to look like Two Degrees, the same way Meridian was. This p
 numbers, so the iPhone and iPad, Mac, Android and widget work all build the same thing. DESIGN.md still
 covers what the app does. This page covers how it looks. Features, wording, accessibility labels,
 Dynamic Type and font-scale behaviour, the 44-point targets, night mode, the self-tests and the CI
-launch arguments (`--sample`, `--format`, `--layout`, `--map-sheet`, `--no-compass`, `--show-terms`,
-`--selftest`) stay as they are. Layout (sizes, gaps, the planner and the four layouts) is in LAYOUTS.md,
-which follows REFINE.md "Concept A" (the chosen design, Option 1: the location card below the compass).
+launch arguments (`--sample`, `--format`, `--layout`, `--map-sheet`, `--no-compass`, `--store`,
+`--show-terms`, `--selftest`) stay as they are. Layout (sizes, gaps, the planner and the four layouts) is in
+LAYOUTS.md, which follows REFINE.md "Concept A" with the owner's change: the location card is a slim 40 pt
+bar at the top. **Where this page and LAYOUTS.md differ on a size or a position, LAYOUTS.md wins.**
 
 The tokens are in `Sources/Bearings/Views/Palette.swift` (Apple, shared with the widget extensions) and
 `android/app/src/main/java/com/bradcowdrey/bearings/ui/Theme.kt` (Android). Use the tokens and don't
@@ -38,9 +39,10 @@ the app they are replaced by the new tokens below, except where this page says t
   nothing else. The marked spot, the locked bearing and your position on the map are white.
 - **Functional colours stay**: the sun `#F5B03C` (`SkyMarks.sun`), the moon cream `#FFF1E5`, the level's
   green `#8FC89A` (`Palette.level`), and warnings in amber `#F2A65A` (`Palette.notice`, the same as `warn`).
-- **The warm brand colours stay outside the app's main screen**: on the widgets (`#1A1816` with the
-  crimson `#990F3D` rule), on the Terms screen, and in the app mark.
-- **Shapes**: tiles, the Targets card and the map are rounded 16 (the location card 14 on phones) with continuous corners (`Look.radius`), on
+- **The warm brand colours stay outside the app's main screen**: on the Terms screen and in the app
+  mark. Since 2.3.0 the Home Screen, desktop and Android widgets are black like the app, with no crimson
+  rule, and the icon has no crimson band.
+- **Shapes**: tiles, the Targets card and the map are rounded 16 (the location bar 12) with continuous corners (`Look.radius`), on
   every platform. Tiles are flat white at 8% with a 1-point edge of white at 12% (`frostedTile()`). They
   aren't a blur material, so they draw the same in the self-tests' ImageRenderer and on Android. The
   only material is behind the map's buttons on Apple devices (`.ultraThinMaterial`, dark). Android uses
@@ -78,18 +80,18 @@ decorative and hidden from screen readers. It's 22, white at 85%, in a 32-wide s
 ## Main screen, phone (top to bottom)
 
 Background `Palette.screen` (black) edge to edge. Column margins 16; on iPad the column is
-min(W − 48, 720), centred; on the Mac 24. The order is **dial → readout → status line → location card →
-Targets card → tiles or map** (docs/REFINE.md "Concept A", Option 1). Nothing is pinned to the status bar.
+min(W − 48, 720), centred; on the Mac 24. The order is **location bar → dial → readout → status line →
+Targets card → tiles or map** (docs/LAYOUTS.md §1).
 The gaps are the planner's frozen tokens × k, never widened by spare height (docs/REFINE.md A.1):
 
 | From → to | pt / dp |
 |---|---|
-| safe top → dial top | 18 (12 under pressure); Mac: the 28 title-bar band + 18 |
+| safe top → location bar | 8; Mac: the 28 title-bar band + 8 |
+| location bar → dial top | 12 (8 under pressure) |
 | dial edge → the readout's cap top (line box trimmed) | 12 |
 | readout → status line | 6 × k |
-| status line → location card | 12 (8 under pressure) |
-| location card → Targets card | 8 |
-| Targets card (or location card) → tiles or map | 8 |
+| status line → Targets card | 12 (8 under pressure) |
+| Targets card (or status line) → tiles or map | 8 |
 | between tiles | 8 |
 
 1. **Dial**, on black, sized by the layout's rule, at least 40% of H in portrait. Unchanged by Concept A:
@@ -107,14 +109,14 @@ The gaps are the planner's frozen tokens × k, never widened by spare height (do
 2. **Readout** (unchanged): "228°", 56 (96 on iPad, 64 sp on Android tablets; × 1.25 at Extra Large),
    weight **light** (Android: Normal), tracking −2, white. The point "SW" is half that size, medium, white
    at 60%. **With no compass** the words **"No heading"** replace it (the drawn dash is gone): 34 semibold
-   (34 sp), line 40, tracking −0.2, centred, white at 55% (`Palette.Op.noHeading` / `Op.NO_HEADING`). The
-   slot keeps its height, max(readout height, 40 × k), so nothing below it moves. Spoken "Heading
+   (34 sp), tracking −0.2, centred, white at 55% (`Palette.Op.noHeading` / `Op.NO_HEADING`). The
+   slot is sized to the words, with the status line right under them (docs/LAYOUTS.md §1). Spoken "Heading
    unavailable", announced once, politely.
 3. **Status line** (unchanged): 13 regular, white at 60%, centred. A warning is `Palette.notice` semibold.
    With no compass: "Position, sun and map still work", same style.
-4. **Location card** (the sky card, formerly the header bar; replaces the title row, the sky card and the
-   sky bar on every layout and platform): full column width, 48 high (56 dp on Android; 56 on iPad and
-   Mac) × k, radius 14 (`Look.headerRadius`; 16 on Android, iPad and Mac), on the sky gradient
+4. **Location bar** (the sky card, slim, and since 2.3.0 the first thing on the screen, above the dial;
+   the sizes that follow are the older, taller card's where they differ from docs/LAYOUTS.md §1: 40 high,
+   radius 12, place 15 semibold, date 12, pill 10, 28 circles): full column width, on the sky gradient
    (`skyCard(altitude:)`'s colours, unchanged), no shadow. Padding 14 leading (16 dp), 4 trailing. White type:
    - Line 1: the full place (`nav.placeTitle`), 17 semibold, line 20 (18 sp; 20 on iPad and Mac), never
      truncated; at k ≥ 1.3 it may wrap.
@@ -195,15 +197,15 @@ The same panel in one centred column, min(W − 48, 720), with the regular-width
 (place 20 semibold, date 15 at 85%, pill 13 in a 19 capsule, buttons 48), status 15, Targets rows 52 at 19,
 tiles 96 (caption 13, value 22, secondary 15 at 70%), map card chip 15 and controls 40, readout unchanged
 (96; 64 sp on Android). The dial may be wider than the column, up to its width cap. Wide windows and
-phones on their side use two panes with **no full-width header** (docs/REFINE.md A.8): the dial, readout
-and status top-aligned on the left (dial top at the safe top + 18; Mac 46); on the right, top-aligned with
-the dial, the location card with ⋯, the Targets card, the grid and a map card to the pane's bottom.
+phones on their side use two panes under the **full-width location bar** (docs/LAYOUTS.md §5): the dial,
+readout and status centred in the left pane; on the right, from the panes' top, the Targets card, the grid and a map
+card to the pane's bottom.
 
 - **Mac**: `.windowStyle(.hiddenTitleBar)`; the traffic lights sit over the left pane's top band; the
-  content keeps 24 from the sides and the bottom. The minimum window and the self-test's 420 × 840 drawing
+  content keeps 24 from the sides and the bottom. The minimum window (420 × 780) and the default 440 × 860 window the self-test draws
   fit without scrolling. The Mac has no live compass, so it shows "No heading".
   The update banner ("Bearings 0.2.0 is available."): `frostedTile()`, 44 high, 13 medium white, with
-  "Download" as a compact `LookButtonStyle`, between the location card and the Targets card.
+  "Download" as a compact `LookButtonStyle`, 12 under the status line, above the Targets card.
 - **Footer**: "Made by Bradley Cowdrey" is an item in the ⋯ menu on every layout and platform; there is no
   footer line on the screen.
 - **Map sheet on iPad**: `.presentationSizing(.page)`, so it doesn't cover half the dial as a form sheet.
@@ -230,6 +232,11 @@ the dial, the location card with ⋯, the Targets card, the grid and a map card 
   24 dp outlined `WarningAmber`, `NearMe` and `Map`. The Mac's terms prompt stays as it is.
 
 ## Widgets (Apple devices)
+
+**Since 2.3.0** the Home Screen and Mac desktop widgets are drawn as docs/DESIGN.md "Widgets" describes:
+black, the slim location header, a north-up compass with the sun, moon, marked spot and locked bearing, and
+the app's frosted tiles, with no crimson rule; the time reads "as of 9:41 AM". The notes below are the
+earlier elevation design, which only the **Lock Screen** widgets still use; for the others DESIGN.md wins.
 
 Same data and entries as now. They take Two Degrees' widget layout and type. The background is
 `WidgetBackground` (`#1A1816` with the 3-point crimson rule on top, stepping aside in tinted and clear
@@ -280,6 +287,9 @@ Two Degrees).
     `widgetAccentable` with the other unit 14 medium at 75%. Then the coordinates 12 medium at 75%.
 
 ## Android widget (Glance, resizable)
+
+**Since 2.3.0** the Android widgets show the compass design in docs/DESIGN.md "Widgets" (black, no crimson
+rule); the notes below describe the earlier elevation widget and are kept for its type sizes only.
 
 The same three layouts at the same breakpoints (2 × 2 small, 4 × 2 medium, 4 × 4 large).
 

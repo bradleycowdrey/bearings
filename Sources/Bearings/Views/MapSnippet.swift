@@ -146,6 +146,8 @@ struct MapSnippet: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
+        .modifier(HoverGlow(radius: 18, inset: 4))
+        .tip("More map controls")
         .accessibilityLabel("More Map Controls")
     }
 
@@ -169,9 +171,10 @@ struct MapSnippet: View {
 
 /// The Map tile's picture (C3.4 #9): a dark MKMapSnapshotter image of where you are, north up, your dot
 /// and heading cone in the middle, and a 24 pt band with "MAP", the expand glyph and the Maps attribution.
-/// The snapshot bakes Apple's Maps logo into its bottom-left corner, where it sat under "MAP". So it is
-/// drawn `logoCrop` taller at each end and shown centred: its bottom 24 (the logo) and top 24 fall outside
-/// the tile and the dot stays in the middle. The attribution is still on screen, as Apple-logo "Maps" in the band.
+/// The snapshot bakes Apple's Maps logo and its "Legal" link into its bottom corners, where they sat under
+/// "MAP". So it is drawn `logoCrop` taller at each end and shown centred: its bottom 40 (the logo and the
+/// whole Legal link; 24 left the link's top poking out as scraps of grey text) and top 40 fall outside the
+/// tile and the dot stays in the middle. The attribution is still on screen, as Apple-logo "Maps" in the band.
 private struct MapThumbnail: View {
     var fix: Fix?
     var heading: Double?
@@ -179,8 +182,9 @@ private struct MapThumbnail: View {
     @Environment(\.uiScale) private var k
     @State private var picture: PlatformImage?
 
-    /// Cut off the snapshot's bottom (its baked-in logo) and, to keep you centred, as much off its top.
-    static let logoCrop: CGFloat = 24
+    /// Cut off the snapshot's bottom (its baked-in logo and Legal link, which reach about 30 up from the
+    /// edge) and, to keep you centred, as much off its top.
+    static let logoCrop: CGFloat = 40
 
     var body: some View {
         GeometryReader { geo in
@@ -262,7 +266,9 @@ private struct MapButton: View {
         Button(action: action) {
             MapControlCircle(system: system, highlighted: highlighted)
         }
-        .buttonStyle(.plain)
+        // The shared pressed and hover wash, on the 36 circle inside its 44 target; the label as the tooltip.
+        .buttonStyle(PressStyle(radius: 18, inset: 4))
+        .tip(label)
         .accessibilityLabel(label)
     }
 }

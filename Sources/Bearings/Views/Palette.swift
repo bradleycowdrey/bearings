@@ -73,6 +73,11 @@ enum Palette {
         static let rowFill = 0.07
         /// "No heading" in place of the readout when there is no compass (Concept A).
         static let noHeading = 0.55
+        /// The wash over a control while it is pressed, and under a pointer (the one pressed and hover look).
+        static let press = 0.10
+        static let hover = 0.05
+        /// The wash's opacity for a control's state: pressed wins over hovering; neither is none.
+        static func wash(pressed: Bool, hovering: Bool) -> Double { pressed ? press : (hovering ? hover : 0) }
     }
 
     // MARK: The widgets (docs/DESIGN.md, Widgets; mock W2)

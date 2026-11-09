@@ -18,12 +18,14 @@ A map with your heading, north up or following you, in standard or satellite vie
 
 Honest accuracy: ± for position and heading, a figure-8 hint only when the compass needs it, a warning near magnets and metal, and your speed as you move.
 
+Four layouts, each its own: Small (the compass and a big map), Medium (the compass and tiles for position, elevation, sun and map), Large (six compact tiles) and Extra Large (the biggest compass with one summary row).
+
 Night mode turns everything red to keep your night vision.
 
-Widgets for the Home Screen in small, medium and large, and for the Lock Screen: your place, elevation, coordinates, and the sun and moon.
+Compass widgets for the Home Screen in small, medium and large: a north-up dial showing where the sun, the moon, your marked spot and your locked bearing lie, with your place, elevation and coordinates. On the Lock Screen: your elevation, place and coordinates.
 
 Works offline, except the map and terrain elevation.
 
-Your location stays on your iPhone. Bearings sends only a position rounded to about 100 m to look up the ground elevation. No account, no ads, no tracking.
+Your location stays on your device. Bearings sends only a position rounded to about 100 m to look up the ground elevation. No account, no ads, no tracking.
 
 Free. Also on the Mac, Android and the web. Open source.

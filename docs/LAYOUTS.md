@@ -30,8 +30,9 @@ One fixed screen (only accessibility text sizes scroll), top to bottom:
 - Frozen gaps: safe top → bar 8, bar → dial 12, dial → readout 12, readout → status 6, status → Targets 12,
   → tiles 8, rows 8.
   Margins 16; iPad column min(W − 48, 720); Mac 24.
-- **No compass:** the words **"No heading"** (34 semibold, white 55%) take the readout's slot; the status
-  line says "Position, sun and map still work".
+- **No compass:** the words **"No heading"** (34 semibold, white 55%) take the readout's slot, which is
+  sized to the words; the status line, right under them, says "Position, sun and map still work". The
+  height this frees goes to the dial or the tiles.
 
 ---
 
@@ -70,6 +71,8 @@ same constants and steps. The screens read every frame from the plan.
 
 ## 4. Text size
 
+- **One notch up (k about 1.12, "extra-large"):** still one screen; CI photographs it as
+  `iphone-5-large-text`.
 - **k ≥ 1.3:** every three-column compact row becomes two rows: Position full width, then Elevation | Sun.
   No half-width chips; times never break (non-breaking spaces, 0.85 minimum scale); the last row ends above
   the safe bottom.
@@ -85,10 +88,15 @@ same constants and steps. The screens read every frame from the plan.
 - **iPad portrait:** one column, the location bar, dial 0.40 H (488 on 11"), then Targets, Position |
   Elevation, Sun | Moon and a map card (Medium).
 - **Two panes** (iPad landscape, Mac wide, a phone on its side): the **location bar full width** at the top
-  (as in portrait), then 12 under it, level: left the dial, readout, status; right the Targets card, the
-  grid, and a map card to the bottom (≥ 240). Right-pane spare ≤ 24.
+  (as in portrait), then 12 under it: left the dial, readout and status, centred in the pane's height (as
+  much over the dial as under the status line); right, from the top, the Targets card, the grid, and a map
+  card to the bottom (≥ 240). Right-pane spare ≤ 24.
 - **Mac:** no live compass ("No heading"), hidden title bar (the bar sits under its 28 band), 24 margins;
-  update banner 12 under the status line, above the Targets card.
+  update banner 12 under the status line, above the Targets card. The window opens at 440 × 860 (never
+  under 420 × 780). A window is always filled: spare height over 32 goes to the dial (up to its width cap,
+  8 under the next layout's dial), then to a map card under the grid once one of 72 fits (Medium then shows
+  Sun | Moon; Large and Extra Large show the card instead of the bar's map button); nothing is centred.
+  Tiles, rows and buttons highlight under the pointer (5%) and when pressed (10%) and carry tooltips.
 
 ---
 
@@ -125,26 +133,29 @@ time splits. Also: Large's sixth tile is Pressure when still and Speed when movi
 on the rendered bitmap (centred, 12 under the dial, 34 pt, white 55%).
 
 **Launch arguments** (this launch only, never saved): Apple `--sample`, `--format <id>`, `--layout
-small|medium|large|extraLarge`, `--map-sheet`, `--no-compass` (with `--sample`), `--show-terms`,
-`--selftest`. Android extras: `--ez sample true`, `--es format <id>`, `--es layout <id>`, `--ez mapSheet
+small|medium|large|extraLarge`, `--map-sheet`, `--no-compass` (with `--sample`), `--store` (the sample as
+the App Store screenshots show it: no Sample pill, and today's date at the sample's 9:41 AM, so the
+location bar agrees with the status bar's date; implies `--sample`), `--show-terms`, `--selftest`. Android extras: `--ez sample true`, `--es format <id>`, `--es layout <id>`, `--ez mapSheet
 true`, `--ez noCompass true`, `--ez lock false`, `--ez spot false`, `--es show terms`, `--ez selftest
 true`, `--ez night true`.
 
-**Screenshots** (CI fails if a layout, the map sheet or a no-compass shot is missing):
+**Screenshots** (CI fails if a layout, the map sheet, a no-compass shot or the `--store` shot is missing,
+if the larger-text and accessibility pictures are the same file, or if an iPad landscape picture is saved
+on its side):
 
 | Where | Files |
 |---|---|
-| iPhone and iPad (`ios.yml`, `$P` = iphone / ipad) | `$P-1-terms`, `$P-2-sample` (Medium), `$P-3-mgrs`, `$P-6-small`, `$P-7-large`, `$P-8-xl`, `$P-10-map-sheet`, `$P-11-no-compass`, `$P-14-no-compass-xl`; `iphone-4-live`, `iphone-5-large-text`, `iphone-9-xl-large-text`, `iphone-12-ax1`; landscape when the Simulator can rotate: `ipad-9-landscape` (Medium), `ipad-12-landscape-small`, `ipad-15-landscape-large`, `ipad-13-landscape-xl`, `ipad-16-landscape-no-compass` |
+| iPhone and iPad (`ios.yml`, `$P` = iphone / ipad) | `$P-1-terms`, `$P-2-sample` (Medium), `$P-3-mgrs`, `$P-6-small`, `$P-7-large`, `$P-8-xl`, `$P-10-map-sheet`, `$P-11-no-compass`, `$P-14-no-compass-xl`, `$P-17-store` (`--store`); `iphone-4-live`; three Text Sizes, each its own setting: `iphone-5-large-text` (extra-large, one screen), `iphone-9-xl-large-text` (extra-extra-large, Extra Large), `iphone-12-ax1` (accessibility-medium, the list); landscape when the Simulator can rotate, turned upright with `sips` before upload: `ipad-9-landscape` (Medium), `ipad-12-landscape-small`, `ipad-15-landscape-large`, `ipad-13-landscape-xl`, `ipad-16-landscape-no-compass` |
 | Android (`scripts/android-selftest.sh`) | `android-1-terms`, `-2-live`, `-3-sample` (Medium), `-4-mgrs`, `-5-night`, `-6-large-text`, `-7-small`, `-8-large`, `-9-xl`, `-10-xl-large-text`, `-11-map-sheet`, `-12-no-compass`, `-13-ax-text`, `-14-no-compass-xl`, `-15-unlocked` |
-| Mac (`mac.yml`, ImageRenderer) | `mac-main` (Medium), `mac-night`, `mac-nocompass`, `mac-live`, `mac-layout-small`, `-large`, `-extraLarge`, `mac-layout-extraLarge-min`, `mac-wide-medium`, `mac-wide-large` (two panes). No Mac map-sheet shot: ImageRenderer cannot draw sheets or MapKit. |
-| App Store (`app-store.yml`) | 3 per device, layouts named: Medium, Extra Large, Small (UTM). None may show empty space or "…". |
+| Mac (`mac.yml`, ImageRenderer) | `mac-main` (Medium), `mac-night`, `mac-nocompass` (and `mac-nocompass-small`, `-large`, `-extraLarge`), `mac-live`, `mac-layout-small`, `-large`, `-extraLarge`, `mac-layout-extraLarge-min`, `mac-wide-medium`, `mac-wide-large` (two panes). No Mac map-sheet shot: ImageRenderer cannot draw sheets or MapKit. |
+| App Store (`app-store.yml`) | 3 per device, each launched with `--store` (no Sample pill; the bar's date matches the status bar's): the main screen (Medium), the map sheet (`--map-sheet`), Extra Large. None may show empty space or "…". |
 
 ---
 
 ## 9. Platform notes
 
 - **Apple:** `MainView.swift` reads `LayoutPlan.plan(...)` from the root `GeometryReader`. The Map tile's
-  snapshot is drawn 24 taller at each end and cropped, so Apple's baked-in logo never sits under "MAP" (the
+  snapshot is drawn 40 taller at each end and cropped, so Apple's baked-in logo and Legal link never sit under "MAP" (the
   caption band keeps the Apple-logo "Maps" attribution). `\.flatDetails`
   (set by `Mac/SelfTest.swift`) draws plain stacks, which ImageRenderer can draw. `PhoneLaunch`
   (`BearingsPhoneApp.swift`) and `BearingsMacApp.swift` read the launch arguments.
@@ -153,7 +164,9 @@ true`, `--ez night true`.
   if its first range can't be fetched, `MapDark.probeGlyphs()` hides the symbol layers instead of drawing blocks), 11–12 sp, a 1.5 dp `#0F3B3A`
   halo, 70% in the tile; POI labels hidden under 160 dp of map height, road shields under 200 dp of width.
   Night: the map red-tinted at 35% luminance; the Sample pill a red outline with red text on black.
-- **Web** (`docs/app.html`) follows later with the same table and order.
+- **Web** (`web/app.html`, built into `docs/app.html` by `scripts/build-web.sh`) follows the same order
+  and look: location bar, dial, readout, status line, Targets card, Medium's tiles. The web tests write
+  `docs/screenshot-app.png`, the picture in the README.
 
 Why a fixed panel: instruments are glanced at, so every value is visible without a gesture. Only
 accessibility sizes scroll, as HIG and Material expect.

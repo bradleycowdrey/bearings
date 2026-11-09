@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Runs the Android app in the emulator (in CI): photographs the first-launch terms, runs the self-test
 # with the emulator placed at Maroon Bells, Colorado (live data; the self-test also runs the layout
-# planner's golden table, docs/REFINE.md A.11, and measures the rendered "No heading" words),
+# planner's golden table, docs/REFINE.md A.11, measures the rendered "No heading" words, shows every layout
+# and fails if one overflows the screen, and watches Small's map card and fails if place names are drawn as
+# solid blocks),
 # then photographs the live screen, the sample place (sun, moon, a marked spot and a locked bearing) in two
 # coordinate formats, night mode, larger text, every layout (the "layout" extra: small, medium, large,
 # extraLarge; never saved, so the other shots stay on the Medium default), the map sheet (the "mapSheet"
@@ -38,7 +40,7 @@ adb shell cmd location set-location-enabled true || true
 adb emu geo fix -106.94117 39.09898 2925 || true
 sleep 2; adb emu geo fix -106.94117 39.09898 2925 || true
 launch --ez selftest true
-for i in $(seq 1 100); do adb shell run-as $ID ls files/report.txt >/dev/null 2>&1 && break; adb emu geo fix -106.94117 39.09898 2925 >/dev/null 2>&1; sleep 1; done
+for i in $(seq 1 180); do adb shell run-as $ID ls files/report.txt >/dev/null 2>&1 && break; adb emu geo fix -106.94117 39.09898 2925 >/dev/null 2>&1; sleep 1; done
 sleep 3; shot android-2-live
 adb shell run-as $ID cat files/report.txt > "$OUT/report.txt" || echo "FAILED (no report)" > "$OUT/report.txt"
 # The widget's north-up dials as the self-test drew them (Small's half dial, Medium, Large, Large with no spot).
@@ -68,11 +70,12 @@ adb shell settings put system font_scale 1.0 || true
 # 4. Every layout with the sample place (Medium is android-3-sample): Small (big map card with its band),
 # Large (3 × 2 tiles, the sixth Pressure as the sample is still; map button in the location card) and
 # Extra Large (biggest dial, one summary strip). Each starts with the dial at the status bar + 18 dp.
-launch --ez sample true --es format dd --es layout small; sleep 8; shot android-7-small; stop
+launch --ez sample true --es format dd --es layout small; sleep 14; shot android-7-small; stop
 launch --ez sample true --es format dd --es layout large; sleep 8; shot android-8-large; stop
 launch --ez sample true --es format dd --es layout extraLarge; sleep 8; shot android-9-xl; stop
-# 5. The map sheet (the Map tile's full-height sheet), opened at launch.
-launch --ez sample true --es format dd --ez mapSheet true; sleep 10; shot android-11-map-sheet; stop
+# 5. The map sheet (the Map tile's full-height sheet), opened at launch. The app looks at the map's picture for
+# 14 s after it loads and hides the place names if this GPU draws them as blocks, so the shot waits for that.
+launch --ez sample true --es format dd --ez mapSheet true; sleep 16; shot android-11-map-sheet; stop
 # 6. No compass with the sample place: "No heading" in words (34 sp semibold, white 55%) in the readout's
 # slot, "Position, sun and map still work" under it, the dial's no-compass drawing, the location card and
 # Medium's normal grid (REFINE.md A.2). Then the same in Extra Large (map button in the location card).
@@ -82,6 +85,8 @@ launch --ez sample true --es format dd --ez noCompass true --es layout extraLarg
 # Medium's tiles (row 1 to 88, then row 2; from 150 the Sun tile gains a Moon section); nothing is pinned above
 # the dial.
 launch --ez sample true --es format dd --ez lock false --ez spot false; sleep 8; shot android-15-unlocked; stop
+# 8. The store screenshot's state (the "store" extra, Apple's --store): the sample with no Sample pill, dated today.
+launch --ez sample true --es format dd --ez store true; sleep 8; shot android-16-store; stop
 adb shell getprop ro.build.version.release > "$OUT/device.txt"
 adb shell getprop ro.product.model >> "$OUT/device.txt"
 cat "$OUT/report.txt"

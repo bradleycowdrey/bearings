@@ -120,7 +120,9 @@ enum Layout: String, CaseIterable, Identifiable {
 /// 4. Spare height: first the given-up steps come back (in reverse order, where they fit), then the
 ///    layout's growth (Small's map card; Medium's rows to 88, live row 2 to 176; Large's rows to 104; Extra
 ///    Large's strip to 120), then the dial up to its width cap (Large, Extra Large), then at most 24 at the
-///    bottom; anything still left centres the stack (`centred`).
+///    bottom. More than that (32 or more) first goes to the dial, in every layout, up to its width cap (and 8
+///    under the next layout's dial); a Mac window, which can be any shape, then adds a map card once one of 72
+///    fits (`extraMap`; until then its rows take the rest); anything still left centres the stack (`centred`).
 ///
 /// Top to bottom: location bar → dial → readout → status line → Targets card → grid → map card.
 struct LayoutPlan: Equatable {
@@ -209,6 +211,9 @@ struct LayoutPlan: Equatable {
     var splitPosition = true
     /// The map card's height (0 without one).
     var mapHeight: CGFloat = 0
+    /// A Mac window taller than its layout fills: a map card under the grid takes the height the dial could
+    /// not (Medium's quad is then Sun | Moon; Large and Extra Large show the card instead of the header button).
+    var extraMap = false
     /// The grid's rows, top to bottom.
     var rowHeights: [CGFloat] = []
     /// The Targets card's rows: 0, 1 or 2 (the lock row first).
@@ -228,8 +233,8 @@ struct LayoutPlan: Equatable {
     var gap: CGFloat = 8
     /// Under the stack: 0 over a home indicator, 16 without one, 24 in a Mac window.
     var bottomInset: CGFloat = 0
-    /// Spare added between the location bar and the dial (only when the stack is centred; the bar stays at
-    /// the top).
+    /// Spare added between the location bar and the dial: in one column only when the stack is centred (the
+    /// bar stays at the top); in two panes what centres the dial, readout and status line in the left pane.
     var topExtra: CGFloat = 0
     /// Spare left under the stack: 24 or less unless `centred`.
     var bottomSpare: CGFloat = 0
@@ -246,12 +251,15 @@ struct LayoutPlan: Equatable {
 
     /// The location bar's top: the first thing on screen (full width in two panes).
     var locationTop: CGFloat { topBand + gapTopCard }
-    var dialTop: CGFloat { locationTop + cardHeight + gapCardDial + topExtra }
+    /// Under the bar and its gap: where both panes start (one column: the dial's top before any centring).
+    var paneTop: CGFloat { locationTop + cardHeight + gapCardDial }
+    var dialTop: CGFloat { paneTop + topExtra }
     var readoutTop: CGFloat { dialTop + dial + gapDialReadout }
     var statusTop: CGFloat { readoutTop + readoutSlot + gapReadoutStatus }
     var statusBottom: CGFloat { statusTop + statusHeight }
-    /// Where the lower stack starts: 12 under the status line, or (two panes) the right pane level with the dial.
-    var lowerTop: CGFloat { twoPane ? dialTop : statusBottom + gapStatusTargets }
+    /// Where the lower stack starts: 12 under the status line, or (two panes) the right pane right under the
+    /// bar's gap (the left pane's dial is centred beside it).
+    var lowerTop: CGFloat { twoPane ? paneTop : statusBottom + gapStatusTargets }
     /// The Mac's update banner, first in the lower stack.
     var bannerTop: CGFloat { lowerTop }
     var hasTargets: Bool { targetsRows > 0 }
@@ -273,7 +281,7 @@ struct LayoutPlan: Equatable {
         if gridHeight > 0 { return gridTop + gridHeight }
         if hasTargets { return targetsTop + targetsHeight }
         if hasBanner { return bannerTop + Self.banner }
-        return twoPane ? dialTop : statusBottom
+        return twoPane ? paneTop : statusBottom
     }
     /// The first row's height (for the self-tests' reports).
     var tileHeight: CGFloat { rowHeights.first ?? 0 }
@@ -406,9 +414,10 @@ struct LayoutPlan: Equatable {
     /// the baseline.
     static let readoutCap: CGFloat = 0.72
     static let readoutBelow: CGFloat = 4
-    /// "No heading": 34 semibold on a 40 line.
+    /// "No heading": 34 semibold. Its slot is sized to the words (the capitals' 24.5 and the "g"'s 7 under
+    /// the baseline), so the status line sits right under them and not under a slot made for "228°".
     static let noHeadingSize: CGFloat = 34
-    static let noHeadingLine: CGFloat = 40
+    static let noHeadingSlot: CGFloat = 32
     /// The status line's 13 pt line, unchanged by Concept A (the same 16 line on a tablet).
     static let statusLine: CGFloat = 16
     static let statusLineTablet: CGFloat = 16
@@ -439,6 +448,10 @@ struct LayoutPlan: Equatable {
     static let stripGrown: CGFloat = 120
     /// Small's band along the map card's bottom: 68 × k, 12 padding, three columns 8 apart.
     static let band: CGFloat = 68
+    /// On a tablet the band carries the regular-width ramp (captions 13, values 19): 88 × k.
+    static let bandTablet: CGFloat = 88
+    static let bandValue: CGFloat = 13
+    static let bandValueTablet: CGFloat = 19
     static let bandPadding: CGFloat = 12
     /// The strip's dividers.
     static let divider: CGFloat = 1
@@ -452,6 +465,8 @@ struct LayoutPlan: Equatable {
     static let compactMin: CGFloat = 104
     static let compactShare: CGFloat = 0.27
     static let mapMin: CGFloat = 140
+    /// The least a Mac window's extra map card is (`extraMap`): a strip with its controls in a row.
+    static let mapStrip: CGFloat = 72
     /// Two panes: the map card is at least this tall (Small: also 60% of the pane).
     static let mapPane: CGFloat = 240
     static let mapPaneSmall: CGFloat = 0.60
@@ -483,6 +498,9 @@ struct LayoutPlan: Equatable {
     /// The Mac window's smallest size: every layout with the sample fits without scrolling.
     static let macMinWidth: CGFloat = 420
     static let macMinHeight: CGFloat = 780
+    /// The Mac window's size on first launch: every layout fills it, with or without a compass.
+    static let macDefaultWidth: CGFloat = 440
+    static let macDefaultHeight: CGFloat = 860
 
     // MARK: Heights, shared with MainView so what it draws is what was planned
 
@@ -494,10 +512,20 @@ struct LayoutPlan: Equatable {
     }
     /// The readout's trimmed block: cap height to 4 under the baseline.
     static func readoutHeight(headingSize: CGFloat) -> CGFloat { headingSize * readoutCap + readoutBelow }
-    /// The readout's slot: with no compass it also holds "No heading" on its 40 × k line.
+    /// The readout's slot: with no compass it is sized to the words "No heading" (32), whatever the layout's
+    /// readout size, so nothing floats between them and the status line.
     static func readoutSlot(headingSize: CGFloat, k: CGFloat, noCompass: Bool) -> CGFloat {
-        let readout = readoutHeight(headingSize: headingSize)
-        return noCompass ? max(readout, noHeadingLine * k) : readout
+        noCompass ? noHeadingSlot : readoutHeight(headingSize: headingSize)
+    }
+    /// Small's band: 68 × k (88 × k on a tablet).
+    static func bandHeight(k: CGFloat, tablet: Bool) -> CGFloat { (tablet ? bandTablet : band) * k }
+    /// The band's value size before × k: 13 (19 on a tablet).
+    static func bandValueSize(tablet: Bool) -> CGFloat { tablet ? bandValueTablet : bandValue }
+    /// Extra Large's strip: its values are larger in a grown strip, so it is not hollow: 15 in a strip under
+    /// 104 × k, 17 from there (before × k; the longitude then draws as large as its column allows). A tablet
+    /// keeps its ramp's 22.
+    static func stripValueSize(height: CGFloat, k: CGFloat) -> CGFloat {
+        height >= 104 * k - 0.5 ? 17 : 15
     }
     static func statusHeight(k: CGFloat, lines: CGFloat, tablet: Bool = false) -> CGFloat {
         (tablet ? statusLineTablet : statusLine) * k * lines
@@ -750,6 +778,19 @@ struct LayoutPlan: Equatable {
         let add = max(0, min(grow - dial, spare))
         dial += add
         spare -= add
+        // More than 24 (and a row gap) left: before anything is centred the dial takes it, in every layout, up
+        // to its width cap and one step (8) under the next layout's dial, so neighbours stay apart.
+        if spare > maxSpare + rowGap {
+            let wide: CGFloat = min(p.widthCap, limit - rowGap)
+            let more: CGFloat = max(0, min(wide - dial, spare))
+            dial += more
+            spare -= more
+        }
+        // A Mac window can be any shape: what the dial could not take goes to a map card under the grid once
+        // one of 72 fits (the rows give their growth back for it, then regrow); until then the rows take it.
+        if i.mac && steps.isEmpty && p.map != .card && !p.rowHeights.isEmpty && spare > maxSpare + 0.5 {
+            spare = fillMacWindow(&p, layout: i.layout, spare: spare)
+        }
         // Then at most 24 at the bottom; anything more centres the stack.
         p.bottomSpare = min(maxSpare, spare)
         spare -= p.bottomSpare
@@ -762,6 +803,41 @@ struct LayoutPlan: Equatable {
         p.share = dial / i.h
         p.used = p.contentBottom + p.bottomSpare
         return p
+    }
+
+    /// A Mac window taller than its layout fills (`spare` over 24 after the dial has grown): with room for a
+    /// map card of 72 (counting the rows' growth, which is given back first), the rows regrow to their caps
+    /// and the card takes the rest; with less, the rows share what is over 24. Returns the spare still left.
+    private static func fillMacWindow(_ p: inout LayoutPlan, layout: Layout, spare: CGFloat) -> CGFloat {
+        let k = p.k
+        let n = CGFloat(p.rowHeights.count)
+        let least: [CGFloat] = minRows(p.grid, k: k, tablet: p.tablet, largeText: p.largeText)
+        guard least.count == p.rowHeights.count, let first = least.first else { return spare }
+        let grown: CGFloat = p.rowHeights.reduce(0, +) - least.reduce(0, +)
+        let free: CGFloat = spare + grown
+        if free >= rowGap + mapStrip - 0.5 {
+            var left: CGFloat = free - rowGap - mapStrip
+            var rowCap: CGFloat = first
+            if !p.tablet {
+                if p.grid == .strip {
+                    rowCap = stripGrown * k
+                } else if layout == .large {
+                    rowCap = tileLarge * k
+                } else {
+                    rowCap = tileGrown * k
+                }
+            }
+            let add: CGFloat = max(0, min(rowCap - first, left / n))
+            p.rowHeights = least.map { $0 + add }
+            left -= add * n
+            p.map = .card
+            p.extraMap = true
+            p.mapHeight = mapStrip + left
+            return 0
+        }
+        let each: CGFloat = (spare - maxSpare) / n
+        p.rowHeights = p.rowHeights.map { $0 + each }
+        return maxSpare
     }
 
     /// Accessibility sizes, or nothing fits: one scrolling list. The dial keeps the owner's 0.40 H.
@@ -787,8 +863,9 @@ struct LayoutPlan: Equatable {
     static let gapAboveListMap: CGFloat = 8
 
     /// Two panes (iPad landscape, wide Mac windows, a phone on its side): the location bar full width at the
-    /// top (as in one column), then the dial, readout and status line top-aligned in the left pane; the
-    /// Targets card, the grid and a map card (240 or more) in the right pane, level with the dial.
+    /// top (as in one column), then the dial, readout and status line centred in the left pane (so no empty
+    /// band is left under the status line); the Targets card, the grid and a map card (240 or more) in the
+    /// right pane, from the panes' top to the bottom.
     private static func twoPanePlan(_ i: Input) -> LayoutPlan {
         var p = base(i)
         p.twoPane = true
@@ -809,17 +886,19 @@ struct LayoutPlan: Equatable {
             p.rowHeights = [row, row]
         }
         let group = p.gapDialReadout + p.readoutSlot + p.gapReadoutStatus + p.statusHeight
-        // The bar and its 12 gap sit above both panes (p.dial is still 0, so dialTop is the panes' top).
-        let paneTop: CGFloat = p.dialTop
-        let dial = min(p.leftWidth, p.end - paneTop - group, i.layout.paneShare * i.h)
+        // The bar and its 12 gap sit above both panes.
+        let paneTop: CGFloat = p.paneTop
+        let pane: CGFloat = p.end - paneTop
+        let dial = min(p.leftWidth, pane - group, i.layout.paneShare * i.h)
         if dial < dialMin { return listPlan(i) }
         p.dial = dial
         p.floor = dial
         p.dialCap = dial
         p.share = dial / i.h
+        // The dial, readout and status line centre in the left pane: the same space over and under them.
+        p.topExtra = max(0, (pane - dial - group) / 2)
         // The right pane always ends with a map card (so Medium's quad is Sun | Moon).
         p.map = .card
-        let pane: CGFloat = p.end - paneTop
         // Split up so the type checker never has to solve one long mixed expression. Each block is followed
         // by its 8 gap; the map card comes last.
         let bannerPart: CGFloat = p.hasBanner ? banner + bannerGap : 0
@@ -854,6 +933,7 @@ struct LayoutPlan: Equatable {
         Device(name: "iPad 13 landscape", w: 1376, h: 1032, s: 988),
         Device(name: "Mac 420x780", w: macMinWidth, h: macMinHeight, s: macMinHeight, mac: true),
         Device(name: "Mac 420x840", w: 420, h: 840, s: 840, mac: true),
+        Device(name: "Mac 440x860", w: macDefaultWidth, h: macDefaultHeight, s: macDefaultHeight, mac: true),
         Device(name: "Mac 900x700", w: 900, h: 700, s: 700, mac: true),
         Device(name: "Mac 1200x800", w: 1200, h: 800, s: 800, mac: true),
         Device(name: "Phone landscape", w: 852, h: 393, s: 372),
@@ -1030,14 +1110,19 @@ struct LayoutPlan: Equatable {
         if abs(p.targetsRowHeight - rowBase * k) > 0.5 && abs(p.targetsRowHeight - (rowBase - targetsRowStep) * k) > 0.5 {
             failures.append("\(name): Targets rows \(Int(p.targetsRowHeight))")
         }
-        if (p.layout == .large || p.layout == .extraLarge) && !p.twoPane && p.map != .button {
+        if (p.layout == .large || p.layout == .extraLarge) && !p.twoPane && p.map != .button && !p.extraMap {
             failures.append("\(name): \(p.layout.rawValue) shows the map as \(p.map)")
         }
         if p.twoPane {
             if p.dial < dialMin - 0.5 { failures.append("\(name): two panes, dial \(Int(p.dial))") }
             if p.map != .card || p.mapHeight < mapPane - 0.5 { failures.append("\(name): two panes, map card \(Int(p.mapHeight))") }
-            if abs(p.targetsTop - p.dialTop - (p.hasBanner ? banner + bannerGap : 0)) > 0.01 {
-                failures.append("\(name): two panes, the right pane isn't level with the dial")
+            if abs(p.targetsTop - p.paneTop - (p.hasBanner ? banner + bannerGap : 0)) > 0.01 {
+                failures.append("\(name): two panes, the right pane doesn't start under the bar")
+            }
+            // The left pane: as much under the status line as over the dial (no empty band on one side).
+            let under: CGFloat = p.end - p.statusBottom
+            if abs(under - p.topExtra) > 0.5 {
+                failures.append("\(name): two panes, \(Int(p.topExtra)) over the dial and \(Int(under)) under the status line")
             }
             if abs(p.cardWidth - (d.w - 2 * marginLarge)) > 0.5 { failures.append("\(name): two panes, the location bar isn't full width") }
             if !p.trailingScrolls && p.bottomSpare > maxSpare + 0.5 {
@@ -1048,7 +1133,13 @@ struct LayoutPlan: Equatable {
         // Only the location bar above the dial; the lower stack under the status line.
         if abs(p.lowerTop - (p.statusBottom + p.gapStatusTargets)) > 0.5 { failures.append("\(name): the Targets card isn't under the status line") }
         if abs(p.cardWidth - p.columnWidth) > 0.01 { failures.append("\(name): the location bar isn't the column's width") }
-        if p.map == .card && p.mapHeight < mapMin - 0.5 { failures.append("\(name): map card \(Int(p.mapHeight))") }
+        let leastMap: CGFloat = p.extraMap ? mapStrip : mapMin
+        if p.map == .card && p.mapHeight < leastMap - 0.5 { failures.append("\(name): map card \(Int(p.mapHeight))") }
+        if p.extraMap && !d.mac { failures.append("\(name): an extra map card outside a Mac window") }
+        // A Mac window with nothing given up is filled: never centred, 24 or less empty at the bottom.
+        if d.mac && p.steps.isEmpty && (p.centred || p.bottomSpare > maxSpare + 0.5) {
+            failures.append("\(name): a Mac window with \(Int(p.bottomSpare)) empty at the bottom")
+        }
         if p.bottomSpare > maxSpare + 0.5 && !p.centred { failures.append("\(name): \(Int(p.bottomSpare)) empty at the bottom") }
         if p.used > p.end + 0.5 { failures.append("\(name): \(Int(p.used - p.end)) cut off") }
         if p.used < p.end - 0.5 { failures.append("\(name): \(Int(p.end - p.used)) unaccounted for") }
@@ -1113,7 +1204,7 @@ struct LayoutPlan: Equatable {
         let spare = Int(bottomSpare.rounded())
         let foot: String
         if twoPane {
-            foot = "pane spare \(spare)" + (trailingScrolls ? ", scrolls" : "")
+            foot = "left pane centred by \(Int(topExtra.rounded())), pane spare \(spare)" + (trailingScrolls ? ", scrolls" : "")
         } else {
             foot = "bottom \(spare)" + (centred ? " (centred)" : "")
         }

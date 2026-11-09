@@ -181,7 +181,8 @@ object WidgetData {
             elevationMain = if (feet) ft else m,
             elevationOther = if (feet) m else ft,
             coordinates = coordinates,
-            asOf = clock(s.time),
+            // A widget shows its last reading, not a clock, so the time says so (review 2.3.0, 24; as on Apple).
+            asOf = "as of ${clock(s.time)}",
             sunrise = times.sunrise?.let { clock(it.toLong()) },
             sunset = times.sunset?.let { clock(it.toLong()) },
             sunAllDay = if (times.polar != null) Sky.sunLine(times, clock) else null,
@@ -191,7 +192,7 @@ object WidgetData {
             moonPhase = phase.phase,
             markLine = markLine,
             shortPlace = place.substringBefore(',').trim().ifEmpty { place },
-            asOfLong = "${day.format(Date(s.time))} · ${clock(s.time)}",
+            asOfLong = "${day.format(Date(s.time))} · as of ${clock(s.time)}",
             sunAltitude = sun.altitude,
             moonAzimuth = moon.azimuth,
             moonUp = moon.altitude > 0,

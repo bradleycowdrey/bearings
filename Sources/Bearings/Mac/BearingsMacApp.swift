@@ -5,9 +5,14 @@ import WidgetKit
 
 /// Bearings for Mac: the same one screen as on iPhone. Macs have no compass, so the dial rests at
 /// north with a note; coordinates, elevation and the map work as on a phone.
+/// The window opens at 440 × 860 (LayoutPlan.macDefaultWidth × macDefaultHeight), which every layout fills
+/// with no compass, and is never smaller than 420 × 780; taller windows get a map card under the tiles and
+/// wide ones two panes, so no size leaves a hole. Everything that can be clicked highlights under the
+/// pointer and has a tooltip (`PressStyle`, `.help`).
 /// `--selftest <folder>` runs the checks CI uses (SelfTest) and quits; `--layout <id>` shows a layout
 /// without saving it; `--map-sheet` opens the map sheet; `--sample --no-compass` shows the sample place
-/// without a heading.
+/// without a heading; `--store` shows the sample as the App Store screenshots do (no Sample pill, today's
+/// date).
 @main
 struct BearingsMacApp: App {
     @StateObject private var nav = Navigator.shared
@@ -20,13 +25,14 @@ struct BearingsMacApp: App {
                 .environmentObject(nav)
                 // The smallest window holds every layout with the sample (locked and marked) and 24 at every
                 // edge (LayoutPlan.macMinWidth × macMinHeight: header + dial + grid + insets).
-                .frame(minWidth: LayoutPlan.macMinWidth, idealWidth: 420, minHeight: LayoutPlan.macMinHeight, idealHeight: 840)
+                .frame(minWidth: LayoutPlan.macMinWidth, idealWidth: LayoutPlan.macDefaultWidth,
+                       minHeight: LayoutPlan.macMinHeight, idealHeight: LayoutPlan.macDefaultHeight)
                 .task { await launch() }
         }
         // The screen's header bar takes the title's place; the content stays in the safe area below the
         // window's buttons.
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 420, height: 840)
+        .defaultSize(width: LayoutPlan.macDefaultWidth, height: LayoutPlan.macDefaultHeight)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
@@ -35,6 +41,7 @@ struct BearingsMacApp: App {
                     guard let text = nav.copyText else { return }
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
+                    MainView.announce("Coordinates copied")
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(nav.fix == nil)
@@ -78,6 +85,7 @@ struct BearingsMacApp: App {
                     Button("Medium") { nav.layout = .medium }
                         .keyboardShortcut("0", modifiers: .command)
                 }
+                Button("Show Map") { nav.mapSheet = true }
                 Toggle("Night Mode", isOn: $nav.nightMode)
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                 Toggle("Satellite Map", isOn: $nav.satellite)
@@ -98,10 +106,11 @@ struct BearingsMacApp: App {
             await SelfTest.run(nav: nav, folder: folder)
             return
         }
-        if CommandLine.arguments.contains("--sample") {
+        let store = CommandLine.arguments.contains("--store")
+        if CommandLine.arguments.contains("--sample") || store {
             SharedStore.enabled = false
             let noCompass = CommandLine.arguments.contains("--no-compass")
-            nav.showSample(lock: noCompass ? nil : 240, noCompass: noCompass)
+            nav.showSample(lock: noCompass ? nil : 240, noCompass: noCompass, store: store)
             if CommandLine.arguments.contains("--map-sheet") { nav.mapSheet = true }
             return
         }

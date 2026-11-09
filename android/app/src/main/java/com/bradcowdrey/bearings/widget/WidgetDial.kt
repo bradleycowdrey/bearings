@@ -26,8 +26,11 @@ import kotlin.math.sin
  * 100 to 180 dp 10° / 30° with the letters N E S W; under 100 dp 10° / 30° and N alone.
  *
  * The half dial (Small) is the top half, W → N → E. A mark below it never moves onto the arc: it becomes a small
- * glyph just past the nearer end of the arc (E side for 90–180°, W side for 180–270°) with a chevron pointing its
- * true way. Glance can't draw vectors, so the dial is a bitmap, drawn in dp on a canvas scaled to [Dial.scale]
+ * glyph beside the nearer end of the arc (E side for 90–180°, W side for 180–270°), clear of the rim and of the
+ * widget's edge, with one small filled arrow under it pointing its true way; the sun and the moon are left off
+ * there while they are below the horizon (review 2.3.0, 9; the same numbers as Apple's WidgetDial). On a 100 to
+ * 180 dp dial the sun and the moon sit wholly inside the N E S W letters, so they never cover one when they are due
+ * east, south or west (review 2.3.0, 10). Glance can't draw vectors, so the dial is a bitmap, drawn in dp on a canvas scaled to [Dial.scale]
  * pixels per dp, on the widget's black (RGB 565: half the memory, and a widget update carries every bitmap).
  */
 internal object WidgetDial {
@@ -40,6 +43,44 @@ internal object WidgetDial {
     /** Room either side of a half dial for the edge marks, and under it. */
     const val SIDE = 20f
     const val BELOW = 18f
+    /**
+     * An edge mark's glyph sits [EDGE_OUT] outside the rim, its centre [EDGE_RISE] above the horizon; its arrow's
+     * centre [EDGE_ARROW_DROP] under the glyph's; nothing of either reaches further than [EDGE_REACH] from its own
+     * centre; marks on one side are [EDGE_PITCH] apart (Apple's edgeOut, edgeRise, edgeArrowDrop, edgeReach, edgePitch).
+     */
+    const val EDGE_OUT = 8.5f
+    const val EDGE_RISE = 5f
+    const val EDGE_ARROW_DROP = 12f
+    const val EDGE_REACH = 5.6f
+    const val EDGE_PITCH = 24f
+
+    /** How far an edge mark stays from the side of a widget [width] dp wide whose half dial of [diameter] is centred in it: 10.9 for 124 in 170. */
+    fun edgeClearance(diameter: Float, width: Float): Float = width / 2f - (diameter / 2f - 2f) - EDGE_OUT - EDGE_REACH
+
+    /** The major ticks' length and the sizes of the N and of the other letters, for a density. */
+    private fun majorTick(dens: Density) = if (dens == Density.BIG) 11f else if (dens == Density.MID) 8f else 6f
+    private fun sizeN(dens: Density) = if (dens == Density.BIG) 18f else if (dens == Density.MID) 14f else 11f
+    private fun sizeLetter(dens: Density) = if (dens == Density.BIG) 15f else if (dens == Density.MID) 12f else 11f
+
+    /** How far from the middle the N E S W letters' centres sit, for a rim of radius [r]. */
+    fun letterRing(r: Float, dens: Density): Float = r - 2.5f - majorTick(dens) - 3f - sizeN(dens) * 0.5f
+
+    /**
+     * How far from the middle the sun or the moon is drawn, for a glyph reaching [reach] from its own centre. On a
+     * 100 to 180 dp dial it sits wholly inside the letters with 3 to spare, never closer to the middle than its own
+     * reach + 4.
+     */
+    fun skyDistance(r: Float, dens: Density, reach: Float): Float = when (dens) {
+        Density.BIG -> r * 0.5f
+        Density.SMALL -> r * 0.44f
+        Density.MID -> max(letterRing(r, dens) - sizeLetter(dens) * 0.55f - 3f - reach, reach + 4f)
+    }
+
+    /** The sun's and the moon's radius on the dial for a density; the sun's rays reach [SUN_REACH] times its radius. */
+    fun sunRadius(dens: Density) = if (dens == Density.BIG) 5f else if (dens == Density.MID) 4f else 3f
+    fun moonRadius(dens: Density) = if (dens == Density.BIG) 6.5f else if (dens == Density.MID) 5.2f else 4f
+    const val SUN_REACH = 2.2f
+
     /** The longest side of a dial's bitmap, px (Large's 212 dp at 2 px per dp fits). */
     const val MAX_PX = 440f
 
@@ -117,7 +158,7 @@ internal object WidgetDial {
 
         // Ticks.
         val step = if (big) 2 else 10
-        val lMaj = if (big) 11f else if (mid) 8f else 6f
+        val lMaj = majorTick(dens)
         val lMid = if (big) 7f else if (mid) 4.5f else 3.5f
         val lMin = 3.5f
         val r0 = r - 2.5f
@@ -140,9 +181,9 @@ internal object WidgetDial {
         }
 
         // Letters, and the numbers on the big dial.
-        val fN = if (big) 18f else if (mid) 14f else 11f
-        val fL = if (big) 15f else if (mid) 12f else 11f
-        val rl = r0 - lMaj - 3f - fN * 0.5f
+        val fN = sizeN(dens)
+        val fL = sizeLetter(dens)
+        val rl = letterRing(r, dens)
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
         fun label(t: String, deg: Double, size: Float, face: Typeface, color: Int, radius: Float) {
             text.textSize = size; text.typeface = face; text.color = color
@@ -172,36 +213,44 @@ internal object WidgetDial {
         }
 
         // The sun and the moon on the dial, or as edge marks off a half dial's arc.
-        val ks = if (big) 5f else if (mid) 4f else 3f
-        val km = if (big) 6.5f else if (mid) 5.2f else 4f
+        val ks = sunRadius(dens)
+        val km = moonRadius(dens)
+        // Where the spot's distance pill sits on a full dial (unchanged: half the radius on the big dial).
         val rm = if (big) r * 0.5f else if (mid) r * 0.4f else r * 0.44f
+        val sunAt = skyDistance(r, dens, ks * SUN_REACH)
+        val moonAt = skyDistance(r, dens, km)
         val slots = intArrayOf(0, 0)
-        fun edge(deg: Double, glyph: (Float, Float) -> Unit, color: Int) {
+        // The marked spot's edge mark comes first (nearest the horizon), as on Apple; it is drawn further down.
+        val spotOff = marks.spot?.takeIf { half && !show(it) }
+        val spotSlot = 0
+        if (spotOff != null) slots[if (norm(spotOff) < 180) 1 else 0]++
+        // One edge mark: the glyph beside the arc's end, clear of the rim, and one small filled arrow under it.
+        fun edge(deg: Double, glyph: (Float, Float) -> Unit, color: Int, slot: Int = -1) {
             val right = norm(deg) < 180
             val i = if (right) 1 else 0
-            val ex = if (right) cx + r else cx - r
-            val gx = ex + (if (right) 7f else -7f)
-            val gy = cy + 2f - 18f * slots[i]
-            slots[i]++
+            val gx = if (right) cx + r + EDGE_OUT else cx - r - EDGE_OUT
+            val gy = cy - EDGE_RISE - EDGE_PITCH * (if (slot >= 0) slot else slots[i]++)
             glyph(gx, gy)
             val a = Math.toRadians(deg)
             val dx = sin(a).toFloat(); val dy = -cos(a).toFloat()
-            val ax = gx + dx * 10f; val ay = gy + dy * 10f
+            val ax = gx; val ay = gy + EDGE_ARROW_DROP
             val qx = -dy; val qy = dx
-            val chevron = Path().apply {
-                moveTo(ax - dx * 4f + qx * 3.2f, ay - dy * 4f + qy * 3.2f); lineTo(ax, ay); lineTo(ax - dx * 4f - qx * 3.2f, ay - dy * 4f - qy * 3.2f)
+            val bx = ax - dx * 3.2f; val by = ay - dy * 3.2f
+            val arrow = Path().apply {
+                moveTo(ax + dx * 3.8f, ay + dy * 3.8f); lineTo(bx + qx * 3.2f, by + qy * 3.2f); lineTo(bx - qx * 3.2f, by - qy * 3.2f); close()
             }
-            stroke.color = color; stroke.strokeWidth = 1.6f; stroke.strokeJoin = Paint.Join.ROUND
-            canvas.drawPath(chevron, stroke)
+            fill.color = color
+            canvas.drawPath(arrow, fill)
         }
         marks.sun?.let { az ->
             val alpha = if (marks.sunUp) 1f else 0.45f
-            if (show(az)) sun(canvas, px(az, rm), py(az, rm), ks, withAlpha(AMBER, alpha))
-            else if (half) edge(az, { x, y -> sun(canvas, x, y, 2.8f, withAlpha(AMBER, alpha)) }, withAlpha(AMBER, alpha))
+            if (show(az)) sun(canvas, px(az, sunAt), py(az, sunAt), ks, withAlpha(AMBER, alpha))
+            // Off the arc, only while it is above the horizon.
+            else if (half && marks.sunUp) edge(az, { x, y -> sun(canvas, x, y, 2.5f, AMBER) }, AMBER)
         }
         marks.moon?.let { az ->
-            if (show(az)) moon(canvas, px(az, rm), py(az, rm), km, marks.moonPhase)
-            else if (half) edge(az, { x, y -> moon(canvas, x, y, 4.4f, marks.moonPhase) }, CREAM)
+            if (show(az)) moon(canvas, px(az, moonAt), py(az, moonAt), km, marks.moonPhase)
+            else if (half && marks.moonUp) edge(az, { x, y -> moon(canvas, x, y, 4.2f, marks.moonPhase) }, CREAM)
         }
 
         // The locked bearing: a short arc on the rim and a notch outside it (never on Small's half dial).
@@ -221,7 +270,7 @@ internal object WidgetDial {
         marks.spot?.let { b ->
             if (!show(b)) {
                 if (half) {
-                    edge(b, { x, y -> pin(canvas, x, y - 4f, 4f) }, PINK)
+                    edge(b, { x, y -> pin(canvas, x, y - 1.4f, 3.2f, tipY = y + 4.2f) }, PINK, slot = spotSlot)
                     // The distance still reads, in the arc's middle under the N.
                     marks.spotLabel?.let { pillAt(canvas, it, cx, cy - minOf(r * 0.36f, rl - fN * 0.5f - 9f)) }
                 }

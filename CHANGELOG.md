@@ -3,6 +3,33 @@
 On a Mac, Bearings shows a banner when a new version is out. Every version is on
 [Releases](https://github.com/bradleycowdrey/bearings/releases).
 
+## [2.3.1] - 2026-11-09
+
+Fixes and polish for the new instrument panel, and the Mac and web apps brought up to the same design.
+
+- **Android map**: place names no longer show as white blocks, the Large and Small layouts no longer look
+  cut off at the bottom, and the map sheet keeps its clock, Wi-Fi and battery icons.
+- **Extra Large** shows bigger numbers in its summary row, with the format and moon percentage in the
+  captions, on every platform.
+- **"No heading"** sits right above its status line, and the space it frees goes to the compass. On a Mac
+  and on iPad in landscape the compass now fills the room it has.
+- **Mac**: the window opens at a size every layout fills, a taller window gains a map card, tiles and
+  buttons highlight under the pointer and have tooltips, and View has Show Map.
+- **Small layout**: the moon is drawn in its real phase, and the second line of each value is grey as
+  everywhere else. On iPad its Position, Elevation and Sun band uses iPad-size type.
+- **Widgets**: cleaner sun and moon marks that stay clear of the edge and of N, E, S and W, and the time
+  now reads "as of 6:57 PM", because it is the time of the last reading.
+- **Web app**: redrawn to match the phones: the location bar, the big compass, the Targets card and
+  labelled tiles, in the same colours.
+- **Large text** on iPhone: the Sample label stays on the date line, and the list fades cleanly at the
+  bottom of the screen.
+- **Android**: the marked-spot pin sits inside the dial, the dial's fine lines are visible, the
+  "no compass" dial shows a crossed-out compass, and the sample shows one pressure everywhere.
+- **Screen readers**: VoiceOver announces "Coordinates copied" and layout changes; TalkBack reads only the
+  heading as you turn.
+- App Store listing: new screenshots without the Sample label, and text that mentions the compass widgets
+  and the four layouts.
+
 ## [2.3.0] - 2026-11-08
 
 A new instrument panel, compass widgets and a cleaner icon.

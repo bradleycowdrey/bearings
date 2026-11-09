@@ -27,7 +27,8 @@ import kotlinx.coroutines.launch
  * (small, medium, large, extraLarge) picks the layout, both without saving; `mapSheet` opens the map sheet
  * at launch; `noCompass` (with `sample`) shows the sample place as a phone without a compass shows it;
  * `lock` false and `spot` false (with `sample`) leave out the locked bearing and the marked spot (the live
- * state: no lock row, no spot row); `show` = "terms" shows the terms.
+ * state: no lock row, no spot row); `store` true (with `sample`; Apple's `--store`) hides the Sample pill and dates
+ * the sample today, for store screenshots; `show` = "terms" shows the terms.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var nav: Navigator
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
                 sampleLock = if (intent.getBooleanExtra("lock", true)) 240.0 else null,
                 noCompass = intent.getBooleanExtra("noCompass", false),
                 markSpot = intent.getBooleanExtra("spot", true),
+                forStore = intent.getBooleanExtra("store", false),
             )
             intent.getBooleanExtra("selftest", false) -> lifecycleScope.launch { SelfTest.run(this@MainActivity, nav) }
         }

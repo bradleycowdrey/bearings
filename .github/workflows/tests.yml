@@ -1,10 +1,10 @@
 name: Tests
 
 # Every push and pull request: the Swift unit tests (coordinate formats against Tests/fixtures/geo.json,
-# units, terms schedule, and the layout planner's golden table with Concept A's checks (docs/REFINE.md A.11):
-# the dial at the safe top + 18 and at least 40% of H, the location card below the status line, the Targets
-# card's rows, every gap a token × k, 24 or less spare, rows that add up to C, no "…" in a tile or the
-# location card, Large's sixth tile (pressure or speed), two rows at large text, the four layouts distinct,
+# units, terms schedule, and the layout planner's golden table (docs/LAYOUTS.md §8):
+# the slim location bar first at the safe top + 8, the dial 12 under it and at least 40% of H, the Targets
+# card below the status line with only the rows that exist, every gap a token × k, 24 or less spare, rows that add up to C, no "…" in a tile or the
+# location bar, Large's sixth tile (pressure or speed), two rows at large text, the four layouts distinct,
 # two panes, Mac edges;
 # Tests/BearingsTests/LayoutPlanTests.swift) on a Mac, and the web app's tests at phone, tablet and desktop sizes.
 on:

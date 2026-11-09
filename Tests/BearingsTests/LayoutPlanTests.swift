@@ -27,6 +27,7 @@ final class LayoutPlanTests: XCTestCase {
         TestWindow(name: "Pixel 7", w: 412, h: 915, s: 839, mac: false),
         TestWindow(name: "Mac 420x840", w: 420, h: 840, s: 840, mac: true),
         TestWindow(name: "Mac 420x780", w: 420, h: 780, s: 780, mac: true),
+        TestWindow(name: "Mac 440x860", w: 440, h: 860, s: 860, mac: true),
         TestWindow(name: "iPad 11 portrait", w: 834, h: 1210, s: 1166, mac: false),
         TestWindow(name: "iPad 13 portrait", w: 1032, h: 1376, s: 1332, mac: false),
     ]
@@ -78,8 +79,11 @@ final class LayoutPlanTests: XCTestCase {
                         XCTAssertEqual(p.end, d.s - p.bottomInset, accuracy: 0.01, name)
                         XCTAssertGreaterThanOrEqual(p.dial, p.ownerFloor(h: d.h) - 0.5, "\(name): dial under 0.40 H")
                         // Large and Extra Large put the map in the location card on every device.
-                        if p.layout == .large || p.layout == .extraLarge { XCTAssertEqual(p.map, .button, name) }
-                        if p.map == .card { XCTAssertGreaterThanOrEqual(p.mapHeight, LayoutPlan.mapMin - 0.5, "\(name): map card") }
+                        // (A Mac window taller than the layout fills adds a map card under the grid instead.)
+                        if (p.layout == .large || p.layout == .extraLarge) && !p.extraMap { XCTAssertEqual(p.map, .button, name) }
+                        let leastMap: CGFloat = p.extraMap ? LayoutPlan.mapStrip : LayoutPlan.mapMin
+                        if p.map == .card { XCTAssertGreaterThanOrEqual(p.mapHeight, leastMap - 0.5, "\(name): map card") }
+                        if p.extraMap { XCTAssertTrue(d.mac, "\(name): an extra map card outside a Mac window") }
                         XCTAssertEqual(p.mapInHeader, p.map == .button, name)
                     }
                 }
@@ -462,6 +466,44 @@ final class LayoutPlanTests: XCTestCase {
         let nav = Navigator(defaults: UserDefaults(suiteName: "bearings.tests.drawing") ?? .standard)
         let drawn = MainView.drawingFailures(nav: nav, width: 420, height: 840)
         XCTAssertEqual(drawn.failures, [])
+        // The Mac's default window: also "a Mac window is filled" (24 or less empty at the bottom, drawn).
+        let standard = MainView.drawingFailures(nav: nav, width: LayoutPlan.macDefaultWidth, height: LayoutPlan.macDefaultHeight)
+        XCTAssertEqual(standard.failures, [])
+    }
+
+    /// Two panes as drawn (a wide window): the dial, readout and status line centred in the left pane, the
+    /// map card down to the bottom on the right, in every layout.
+    @MainActor
+    func testDrawnTwoPanes() {
+        let nav = Navigator(defaults: UserDefaults(suiteName: "bearings.tests.drawing") ?? .standard)
+        XCTAssertEqual(MainView.twoPaneFailures(nav: nav, width: 1200, height: 800), [])
+    }
+
+    /// `--store` (the App Store screenshots): the sample without its pill, on today's date at the sample's
+    /// time of day; the plain sample keeps the pill and its fixed time.
+    @MainActor
+    func testStoreSample() {
+        let nav = Navigator(defaults: UserDefaults(suiteName: "bearings.tests.store") ?? .standard)
+        nav.showSample(lock: 240)
+        XCTAssertTrue(nav.showsSamplePill)
+        XCTAssertEqual(nav.now, Navigator.sampleTime)
+        nav.showSample(lock: 240, store: true)
+        XCTAssertTrue(nav.sample)
+        XCTAssertFalse(nav.showsSamplePill)
+        XCTAssertTrue(Calendar.current.isDateInToday(nav.now))
+        XCTAssertEqual(Look.timeText(nav.now), Look.timeText(Navigator.sampleTime))
+        XCTAssertNotNil(nav.sunTimes)
+        // In the sample's own time zone the store time is 9:41 on the day asked for.
+        var denver = Calendar(identifier: .gregorian)
+        denver.timeZone = TimeZone(identifier: "America/Denver") ?? .current
+        let day = Date(timeIntervalSince1970: 1_800_000_000)
+        let time = Navigator.storeTime(on: day, calendar: denver)
+        let clock = denver.dateComponents([.hour, .minute], from: time)
+        XCTAssertEqual(clock.hour, 9)
+        XCTAssertEqual(clock.minute, 41)
+        XCTAssertTrue(denver.isDate(time, inSameDayAs: day))
+        nav.showSample()
+        XCTAssertTrue(nav.showsSamplePill)
     }
 
     /// One time formatter; the day period splits off for the narrow Sun tile.
@@ -537,6 +579,74 @@ final class LayoutPlanTests: XCTestCase {
         }
     }
 
+    /// Review items 12 and 13: with no compass (every Mac, always) the readout's slot is sized to the words
+    /// "No heading" (32, whatever the layout's readout size), so the status line sits right under them; and a
+    /// Mac window is filled: at the default size, the smallest and a tall one, in every layout, with and
+    /// without a marked spot, nothing is centred and 24 or less is left at the bottom.
+    func testNoCompassSlotAndMacWindowFilled() {
+        for layout in Layout.allCases {
+            let phone = LayoutPlan.plan(w: 402, h: 874, s: 778, layout: layout, hasSpot: true, noCompass: true)
+            XCTAssertEqual(phone.readoutSlot, LayoutPlan.noHeadingSlot, accuracy: 0.01, layout.rawValue)
+            XCTAssertEqual(phone.statusTop - phone.readoutTop, LayoutPlan.noHeadingSlot + 6, accuracy: 0.01, layout.rawValue)
+            let ipad = LayoutPlan.plan(w: 834, h: 1210, s: 1166, layout: layout, hasSpot: true, noCompass: true)
+            XCTAssertEqual(ipad.readoutSlot, LayoutPlan.noHeadingSlot, accuracy: 0.01, layout.rawValue)
+        }
+        XCTAssertEqual(LayoutPlan.macDefaultWidth, 440)
+        XCTAssertEqual(LayoutPlan.macDefaultHeight, 860)
+        let sizes: [(CGFloat, CGFloat)] = [(LayoutPlan.macDefaultWidth, LayoutPlan.macDefaultHeight),
+                                           (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight), (420, 840), (480, 1000)]
+        for (w, h) in sizes {
+            for spot in [false, true] {
+                var dials: [CGFloat] = []
+                for layout in Layout.allCases {
+                    let p = LayoutPlan.plan(w: w, h: h, s: h, layout: layout, hasSpot: spot, noCompass: true, mac: true)
+                    let name = "\(Int(w))x\(Int(h)) \(layout.rawValue) spot \(spot)"
+                    XCTAssertFalse(p.list, name)
+                    XCTAssertFalse(p.centred, "\(name): \(p.description)")
+                    XCTAssertEqual(p.topExtra, 0, accuracy: 0.01, name)
+                    XCTAssertLessThanOrEqual(p.bottomSpare, LayoutPlan.maxSpare + 0.5, "\(name): \(p.description)")
+                    XCTAssertEqual(p.used, p.end, accuracy: 0.5, name)
+                    XCTAssertGreaterThanOrEqual(p.dial, p.ownerFloor(h: h) - 0.5, name)
+                    if p.extraMap {
+                        XCTAssertEqual(p.map, .card, name)
+                        XCTAssertGreaterThanOrEqual(p.mapHeight, LayoutPlan.mapStrip - 0.5, name)
+                        XCTAssertFalse(p.mapInHeader, name)
+                    }
+                    dials.append(p.dial)
+                }
+                XCTAssertEqual(dials, dials.sorted(), "\(Int(w))x\(Int(h)): the dials rise")
+            }
+        }
+        // The dial takes spare height before anything is centred: Medium with no compass at the default
+        // window is larger than its 0.40 H cap.
+        let medium = LayoutPlan.plan(w: 440, h: 860, s: 860, hasSpot: true, noCompass: true, mac: true)
+        XCTAssertGreaterThan(medium.dial, LayoutPlan.ceil8(0.40 * 860) + 8)
+        // A Medium window with an extra map card shows Sun | Moon, as on iPad.
+        let tall = LayoutPlan.plan(w: 440, h: 1000, s: 1000, noCompass: true, mac: true)
+        XCTAssertTrue(tall.extraMap)
+        XCTAssertEqual(tall.cells.last?.last?.tile, LayoutPlan.Tile.moon)
+        // Never on a phone.
+        for layout in Layout.allCases {
+            XCTAssertFalse(LayoutPlan.plan(w: 440, h: 956, s: 862, layout: layout).extraMap, layout.rawValue)
+        }
+    }
+
+    /// Review items 11 and 15: Extra Large's strip values are larger in a grown strip (15 → 17), and Small's
+    /// band carries tablet type on iPad (88 high, values 19).
+    func testStripAndBandType() {
+        XCTAssertEqual(LayoutPlan.stripValueSize(height: 88, k: 1), 15)
+        XCTAssertEqual(LayoutPlan.stripValueSize(height: 104, k: 1), 17)
+        XCTAssertEqual(LayoutPlan.stripValueSize(height: 120, k: 1), 17)
+        XCTAssertEqual(LayoutPlan.stripValueSize(height: 110, k: 1.15), 15)
+        // The sample on iPhone 16 Pro: the strip is grown (≈ 120), so its values are the larger ones.
+        let xl = LayoutPlan.plan(w: 402, h: 874, s: 778, layout: .extraLarge, hasSpot: true, locked: true)
+        XCTAssertEqual(LayoutPlan.stripValueSize(height: xl.tileHeight, k: 1), 17)
+        XCTAssertEqual(LayoutPlan.bandHeight(k: 1, tablet: false), 68)
+        XCTAssertEqual(LayoutPlan.bandHeight(k: 1, tablet: true), 88)
+        XCTAssertEqual(LayoutPlan.bandValueSize(tablet: false), 13)
+        XCTAssertEqual(LayoutPlan.bandValueSize(tablet: true), 19)
+    }
+
     /// A.8 with the owner's mod: two panes: the location bar full width at the top (as in portrait), then the
     /// dial and the right pane level 12 under it, the right pane's spare 24 or less, and a map card of 240 or
     /// more; the four plans are four.
@@ -549,8 +659,12 @@ final class LayoutPlanTests: XCTestCase {
                 let name = "\(Int(w))x\(Int(h)) \(layout.rawValue)"
                 XCTAssertTrue(p.twoPane, name)
                 XCTAssertEqual(p.locationTop, p.topBand + 8, accuracy: 0.01, name)
-                XCTAssertEqual(p.dialTop, p.locationTop + 40 + 12, accuracy: 0.01, name)
-                XCTAssertEqual(p.targetsTop, p.dialTop, accuracy: 0.01, name)
+                XCTAssertEqual(p.paneTop, p.locationTop + 40 + 12, accuracy: 0.01, name)
+                XCTAssertEqual(p.targetsTop, p.paneTop, accuracy: 0.01, name)
+                // The left pane: the dial, readout and status line centred, as much over as under (review
+                // item 14: no empty band under the status line).
+                XCTAssertEqual(p.dialTop, p.paneTop + p.topExtra, accuracy: 0.01, name)
+                XCTAssertEqual(p.end - p.statusBottom, p.topExtra, accuracy: 0.5, name)
                 XCTAssertEqual(p.cardWidth, w - 48, accuracy: 0.01, name)
                 XCTAssertGreaterThanOrEqual(p.trailingWidth, LayoutPlan.paneMin - 0.5, name)
                 XCTAssertLessThanOrEqual(p.trailingWidth, LayoutPlan.paneMax + 0.5, name)

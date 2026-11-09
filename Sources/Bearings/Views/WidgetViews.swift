@@ -51,10 +51,13 @@ struct WidgetReadings {
 
     /// "9:41 AM": when the reading is from.
     var asOf: String { Look.timeText(snapshot.time) }
-    /// "Sun, Nov 1 · 9:41 AM": the header's second line on Medium and Large (as the app's location bar).
+    /// "as of 9:41 AM": the Small header's second line. A widget shows its last reading, not a clock, so
+    /// the time says so (review 2.3.0, 24).
+    var asOfLine: String { "as of \(asOf)" }
+    /// "Sun, Nov 1 · as of 9:41 AM": the header's second line on Medium and Large.
     var dateLine: String {
         let day = snapshot.time.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-        return "\(day) · \(asOf)"
+        return "\(day) · \(asOfLine)"
     }
 
     var elevation: (big: String, small: String)? {
@@ -237,8 +240,9 @@ struct WidgetDialMarks {
 /// The app's dial, fixed north-up (DialView's language: a dark disc, white ticks, pink N), drawn as
 /// vectors at the size it's given. Tick density follows the size (mock W2): 180 pt and more, 2° / 10° /
 /// 30° ticks with numbers every 30°; 100–180 pt, 10° / 30° with the four letters; under 100 pt, 10° / 30°.
-/// `half` draws the top half (W → N → E): marks below it become small arrows just past the arc's ends,
-/// pointing their true way. (The Lock Screen has no dial: it keeps the W1 elevation design.)
+/// `half` draws the top half (W → N → E): a mark below it becomes a small glyph beside the arc's nearer
+/// end with one small arrow under it pointing its true way; the sun and moon are left off there while
+/// they are below the horizon. (The Lock Screen has no dial: it keeps the W1 elevation design.)
 struct WidgetDial: View {
     /// How dense the ticks are for a diameter (points).
     enum Density: Equatable {
@@ -265,7 +269,7 @@ struct WidgetDial: View {
     /// A pill with the spot's distance ("9.2 mi").
     var spotLabel: String? = nil
 
-    /// Room drawn around the dial for the lock's notch and the edge arrows, without taking layout space.
+    /// Room drawn around the dial for the lock's notch and the edge marks, without taking layout space.
     private static let overhang: CGFloat = 18
 
     /// Whether a bearing is on the top half (W → N → E).
@@ -276,6 +280,82 @@ struct WidgetDial: View {
 
     /// The default tick step for a diameter.
     static func tickStep(_ diameter: CGFloat) -> Int { Density.of(diameter) == .full ? 2 : 10 }
+
+    /// How far in from the rim's radius `r` the N/E/S/W letters' centres sit, and the letters' size.
+    static func letterRing(radius r: CGFloat, density: Density) -> (distance: CGFloat, size: CGFloat) {
+        let lenMajor: CGFloat = density == .full ? 11 : density == .medium ? 8 : 6
+        let sizeN: CGFloat = density == .full ? 18 : density == .medium ? 14 : 11
+        let sizeL: CGFloat = density == .full ? 15 : density == .medium ? 12 : 11
+        let distance: CGFloat = r - 2.5 - lenMajor - 3 - sizeN * 0.5
+        return (distance, sizeL)
+    }
+
+    /// How far from the middle the sun or moon is drawn, for a glyph reaching `reach` from its own centre.
+    /// On a 100–180 pt dial it sits wholly inside the N/E/S/W letters with 3 pt to spare, so it never
+    /// covers one when it is due east, south or west (review 2.3.0, 10).
+    static func skyDistance(radius r: CGFloat, density: Density, reach: CGFloat) -> CGFloat {
+        switch density {
+        case .full: return r * 0.5
+        case .small: return r * 0.44
+        case .medium:
+            let ring = letterRing(radius: r, density: density)
+            let inner: CGFloat = ring.distance - ring.size * 0.55 - 3
+            return max(inner - reach, reach + 4)
+        }
+    }
+
+    /// A mark a half dial can't show on its arc.
+    struct EdgeMark: Equatable {
+        enum Kind: Equatable { case spot, sun, moon }
+        let kind: Kind
+        /// Its true bearing, 90–270°.
+        let bearing: Double
+        /// East of south: beside the arc's E end. Otherwise beside the W end.
+        let right: Bool
+        /// 0 beside the horizon; each further mark on the same side sits one step higher.
+        let slot: Int
+    }
+
+    /// The edge marks a half dial draws: the marked spot, then the sun and the moon, each only when its
+    /// bearing is off the arc; the sun and moon only while they are above the horizon (review 2.3.0, 9).
+    static func edgeMarks(_ marks: WidgetDialMarks) -> [EdgeMark] {
+        var found: [(EdgeMark.Kind, Double)] = []
+        if let spot = marks.spot, !inUpperHalf(spot) { found.append((EdgeMark.Kind.spot, Geo.normalize(spot))) }
+        if let sun = marks.sun, sun.altitude > 0, !inUpperHalf(sun.azimuth) { found.append((EdgeMark.Kind.sun, Geo.normalize(sun.azimuth))) }
+        if let moon = marks.moon, moon.altitude > 0, !inUpperHalf(moon.azimuth) { found.append((EdgeMark.Kind.moon, Geo.normalize(moon.azimuth))) }
+        var result: [EdgeMark] = []
+        var rightCount = 0, leftCount = 0
+        for (kind, bearing) in found {
+            let right = bearing < 180
+            let slot = right ? rightCount : leftCount
+            if right { rightCount += 1 } else { leftCount += 1 }
+            result.append(EdgeMark(kind: kind, bearing: bearing, right: right, slot: slot))
+        }
+        return result
+    }
+
+    /// An edge mark's glyph sits this far outside the rim, its centre this far above the horizon; its
+    /// arrow's centre this far under the glyph's; nothing of either reaches further than `edgeReach` from
+    /// its own centre; marks on one side are `edgePitch` apart.
+    static let edgeOut: CGFloat = 8.5
+    static let edgeRise: CGFloat = 5
+    static let edgeArrowDrop: CGFloat = 12
+    static let edgeReach: CGFloat = 5.6
+    static let edgePitch: CGFloat = 24
+
+    /// The glyph's centre for an edge mark, on a half dial centred at `c` (on its horizon) with rim radius `r`.
+    static func edgePoint(right: Bool, slot: Int, centre c: CGPoint, radius r: CGFloat) -> CGPoint {
+        let x: CGFloat = right ? c.x + r + edgeOut : c.x - r - edgeOut
+        let y: CGFloat = c.y - edgeRise - CGFloat(slot) * edgePitch
+        return CGPoint(x: x, y: y)
+    }
+
+    /// How far an edge mark stays from the side of a widget `width` wide whose half dial (of `diameter`,
+    /// with no lock) is centred in it: 10.9 pt for the Small widget's 124 pt dial in 170.
+    static func edgeClearance(diameter: CGFloat, in width: CGFloat) -> CGFloat {
+        let r: CGFloat = diameter / 2 - 2
+        return width / 2 - r - edgeOut - edgeReach
+    }
 
     /// The rim's margin inside the frame: room for the lock's notch when there is one.
     private var margin: CGFloat { marks.lock != nil ? 5 : 2 }
@@ -342,7 +422,7 @@ struct WidgetDial: View {
         // N, the other letters and the numbers.
         let sizeN: CGFloat = big ? 18 : mid ? 14 : 11
         let sizeL: CGFloat = big ? 15 : mid ? 12 : 11
-        let rl: CGFloat = r0 - lenMajor - 3 - sizeN * 0.5
+        let rl: CGFloat = Self.letterRing(radius: r, density: density).distance
         func label(_ text: String, _ bearing: Double, size: CGFloat, weight: Font.Weight, color: Color, at distance: CGFloat) {
             let t = Text(text).font(.system(size: size, weight: weight)).foregroundColor(color)
             ctx.draw(t, at: pt(bearing, distance), anchor: .center)
@@ -400,47 +480,57 @@ struct WidgetDial: View {
                    with: .color(mono ? Color.black.opacity(0.6) : white))
         }
 
-        // Off-arc marks on a half dial: a small glyph just past the nearer end of the arc (east for
-        // 90–180°, west for 180–270°) with a chevron pointing its true way; a second one on the same side
-        // sits above the first.
-        var used: [Bool: Int] = [:]
-        func edge(_ bearing: Double, color: Color, glyph: (CGPoint) -> Void) {
-            let right = Geo.normalize(bearing) < 180
-            let slot = used[right] ?? 0
-            used[right] = slot + 1
-            let g = CGPoint(x: right ? c.x + r + 7 : c.x - r - 7, y: c.y + 2 - CGFloat(slot) * 14)
-            glyph(g)
-            let a = bearing * Double.pi / 180
-            let dx = CGFloat(sin(a)), dy = CGFloat(-cos(a))
-            let tip = CGPoint(x: g.x + dx * 10, y: g.y + dy * 10)
+        // One small filled arrow, centred at `a`, pointing along a bearing.
+        func edgeArrow(at a: CGPoint, bearing: Double, color: Color) {
+            let t = bearing * Double.pi / 180
+            let dx = CGFloat(sin(t)), dy = CGFloat(-cos(t))
             let px = -dy, py = dx
-            var chevron = Path()
-            chevron.move(to: CGPoint(x: tip.x - dx * 4 + px * 3.2, y: tip.y - dy * 4 + py * 3.2))
-            chevron.addLine(to: tip)
-            chevron.addLine(to: CGPoint(x: tip.x - dx * 4 - px * 3.2, y: tip.y - dy * 4 - py * 3.2))
-            ctx.stroke(chevron, with: .color(color), style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+            let back = CGPoint(x: a.x - dx * 3.2, y: a.y - dy * 3.2)
+            var arrow = Path()
+            arrow.move(to: CGPoint(x: a.x + dx * 3.8, y: a.y + dy * 3.8))
+            arrow.addLine(to: CGPoint(x: back.x + px * 3.2, y: back.y + py * 3.2))
+            arrow.addLine(to: CGPoint(x: back.x - px * 3.2, y: back.y - py * 3.2))
+            arrow.closeSubpath()
+            ctx.fill(arrow, with: .color(color))
         }
 
         let sunRadius: CGFloat = big ? 5 : mid ? 4 : 3
         let moonRadius: CGFloat = big ? 6.5 : mid ? 5.2 : 4
-        let skyDistance: CGFloat = big ? r * 0.5 : mid ? r * 0.4 : r * 0.44
+        // The sun's rays reach twice its radius.
+        let sunDistance: CGFloat = Self.skyDistance(radius: r, density: density, reach: sunRadius * 2)
+        let moonDistance: CGFloat = Self.skyDistance(radius: r, density: density, reach: moonRadius)
         // As on the app's dial: faint while below the horizon.
-        if let moon = marks.moon {
+        if let moon = marks.moon, shows(moon.azimuth) {
             var g = ctx
             g.opacity = moon.altitude > 0 ? 1 : 0.35
-            if shows(moon.azimuth) {
-                moonGlyph(g, at: pt(moon.azimuth, skyDistance), radius: moonRadius)
-            } else {
-                edge(moon.azimuth, color: mono ? white : Palette.cream) { p in moonGlyph(g, at: p, radius: 4.4) }
-            }
+            moonGlyph(g, at: pt(moon.azimuth, moonDistance), radius: moonRadius)
         }
-        if let sun = marks.sun {
+        if let sun = marks.sun, shows(sun.azimuth) {
             var g = ctx
             g.opacity = sun.altitude > 0 ? 1 : 0.35
-            if shows(sun.azimuth) {
-                sunGlyph(g, at: pt(sun.azimuth, skyDistance), radius: sunRadius)
-            } else {
-                edge(sun.azimuth, color: amber) { p in sunGlyph(g, at: p, radius: 2.8) }
+            sunGlyph(g, at: pt(sun.azimuth, sunDistance), radius: sunRadius)
+        }
+
+        // Off-arc marks on a half dial: a small glyph beside the nearer end of the arc (east for 90–180°,
+        // west for 180–270°), clear of the rim and of the widget's edge, and one small arrow under it
+        // pointing its true way. A second mark on the same side sits above the first.
+        if half {
+            for mark in Self.edgeMarks(marks) {
+                let p = Self.edgePoint(right: mark.right, slot: mark.slot, centre: c, radius: r)
+                let a = CGPoint(x: p.x, y: p.y + Self.edgeArrowDrop)
+                switch mark.kind {
+                case .sun:
+                    sunGlyph(ctx, at: p, radius: 2.6)
+                    edgeArrow(at: a, bearing: mark.bearing, color: amber)
+                case .moon:
+                    moonGlyph(ctx, at: p, radius: 4.2)
+                    edgeArrow(at: a, bearing: mark.bearing, color: mono ? white : Palette.cream)
+                case .spot:
+                    var g = ctx
+                    g.translateBy(x: p.x, y: p.y + 4.2)
+                    g.fill(Self.pinPath(head: 5.6, tip: 0, size: 3.2), with: .color(pink))
+                    edgeArrow(at: a, bearing: mark.bearing, color: pink)
+                }
             }
         }
 
@@ -475,13 +565,6 @@ struct WidgetDial: View {
                     ctx.stroke(line, with: .color(pink.opacity(0.75)), style: StrokeStyle(lineWidth: big ? 1.6 : 1.3, lineCap: .round, dash: dash))
                 }
                 pinGlyph(ctx, bearing: spot, head: head, tip: tip, size: hs)
-            } else {
-                edge(spot, color: pink) { p in
-                    var g = ctx
-                    g.translateBy(x: p.x, y: p.y + 3.5)
-                    let pin = Self.pinPath(head: 7, tip: 0, size: 3.6)
-                    g.fill(pin, with: .color(pink))
-                }
             }
         }
 
@@ -594,7 +677,7 @@ private struct MoonMark: View {
 }
 
 /// The app's slim location header: the sky for the sun's altitude behind the place (15 semibold) and the
-/// time of the reading (12, white at 75%), 40 high. One colour at 14% in the tinted modes.
+/// time of the reading ("as of 9:41 AM", 12, white at 75%), 40 high. One colour at 14% in the tinted modes.
 private struct WidgetHeader: View {
     let r: WidgetReadings
     let ink: WidgetInk
@@ -607,7 +690,7 @@ private struct WidgetHeader: View {
             Text(short ? r.shortPlace : r.place)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(ink.primary)
-            Text(short ? r.asOf : r.dateLine)
+            Text(short ? r.asOfLine : r.dateLine)
                 .font(.system(size: 12))
                 .foregroundStyle(ink.sub)
                 .monospacedDigit()
@@ -754,8 +837,8 @@ private struct SunTimes: View {
 // MARK: - Home Screen and desktop
 
 /// Small (170 × 170): the header, the top half of the dial (W → N → E, 124 wide) with the spot's pin and
-/// distance, the sun and moon as edge arrows when they're below the arc, and the elevation at 30 pt under
-/// it. No locked bearing at this size.
+/// distance, the sun and moon as edge marks when they're up but off the arc, and the elevation at 30 pt
+/// under it. No locked bearing at this size.
 private struct SmallWidget: View {
     let r: WidgetReadings
     let ink: WidgetInk
@@ -859,16 +942,37 @@ private struct MediumWidget: View {
 
 /// Large (364 × 382): the header; a 212 pt dial with the app's full scale and every mark, Elevation, Sun
 /// and Moon stacked beside it; Position and the marked spot (with the lock) full width below. Without a
-/// spot or a lock that row drops out and the dial's row takes the room.
+/// spot or a lock that row drops out and, at the full 364 × 382, the freed 50 pt goes to the dial (228 pt,
+/// the tiles beside it 112 wide) and to Position, which becomes a tile of the usual kind, 60 high (review
+/// 2.3.0, 37). A smaller large widget keeps the 212 pt dial and the one-line Position.
 private struct LargeWidget: View {
     let r: WidgetReadings
     let ink: WidgetInk
 
+    /// The dial's diameter with the spot or lock row under it, and without.
+    static let dialWithRow: CGFloat = 212
+    static let dialAlone: CGFloat = 228
+
+    private var hasRow: Bool { r.spotText != nil || r.lockText != nil }
+
+    /// Whether a widget of this size, with no spot or lock row, has room for the bigger dial: 112 pt left
+    /// for the tiles beside it, and its 228 pt between the header and the 60 pt Position tile.
+    static func roomy(_ size: CGSize, hasRow: Bool) -> Bool {
+        !hasRow && size.width >= 363.5 && size.height >= 360
+    }
+
     var body: some View {
-        VStack(spacing: Palette.widgetInset) {
+        GeometryReader { geo in
+            content(roomy: Self.roomy(geo.size, hasRow: hasRow))
+        }
+    }
+
+    private func content(roomy: Bool) -> some View {
+        let diameter: CGFloat = roomy ? Self.dialAlone : Self.dialWithRow
+        return VStack(spacing: Palette.widgetInset) {
             WidgetHeader(r: r, ink: ink)
             HStack(alignment: .center, spacing: Palette.widgetInset) {
-                WidgetDial(diameter: 212, mono: ink.tinted, numbers: true, marks: r.marks, spotLine: true, spotLabel: r.spotDistance)
+                WidgetDial(diameter: diameter, mono: ink.tinted, numbers: true, marks: r.marks, spotLine: true, spotLabel: r.spotDistance)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(r.spokenDial())
                 VStack(spacing: Palette.widgetInset) {
@@ -879,6 +983,7 @@ private struct LargeWidget: View {
                     }
                     WidgetTile(ink: ink) {
                         captionText("Sun · \(r.sunDirection)")
+                            .minimumScaleFactor(0.85)
                     } value: {
                         SunTimes(r: r, ink: ink, stacked: true)
                     }
@@ -905,10 +1010,32 @@ private struct LargeWidget: View {
                 }
             }
             .frame(maxHeight: .infinity)
-            position
-            if r.spotText != nil || r.lockText != nil { spotRow }
+            if hasRow {
+                position
+                spotRow
+            } else if roomy {
+                positionTile
+            } else {
+                position
+            }
         }
         .padding(Palette.widgetInset)
+    }
+
+    /// Position as a tile, caption over value, when there is no spot or lock row under it.
+    private var positionTile: some View {
+        WidgetTile(ink: ink) {
+            captionText("Position")
+        } value: {
+            Text(r.coordinates.joined(separator: "  "))
+                .font(.system(size: Look.tileValueSize, weight: .medium))
+                .foregroundStyle(ink.primary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(height: 60)
+        .accessibilityElement(children: .combine)
     }
 
     private var position: some View {

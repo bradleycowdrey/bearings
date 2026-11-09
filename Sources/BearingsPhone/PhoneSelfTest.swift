@@ -76,6 +76,18 @@ enum PhoneSelfTest {
             check(drawn.failures.isEmpty, "Screen drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "location bar at the top and 40 high as planned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
             lines += drawn.info.map { "INFO \($0)" }
         }
+        // iPad landscape (two panes) as drawn: the dial, readout and status line centred in the left pane
+        // (no empty band under the status line), the map card down to the bottom on the right.
+        let wide = MainView.twoPaneFailures(nav: drawNav, width: 1210, height: 834)
+        check(wide.isEmpty, "Two panes drawn as planned at 1210 × 834 (\(wide.isEmpty ? "left pane centred, right pane to the bottom" : wide.prefix(3).joined(separator: "; ")))")
+        // `--store` (the App Store screenshots): no Sample pill, today's date at the sample's time of day.
+        drawNav.showSample(lock: 240, store: true)
+        let storeDay: Bool = Calendar.current.isDateInToday(drawNav.now)
+        let storeClock: Bool = Look.timeText(drawNav.now) == Look.timeText(Navigator.sampleTime)
+        check(drawNav.sample && !drawNav.showsSamplePill && storeDay && storeClock,
+              "Store sample: no Sample pill, today's date, the sample's time (\(MainView.dateLines(drawNav.now).full))")
+        drawNav.showSample(lock: 240)
+        check(drawNav.showsSamplePill, "The plain sample keeps its Sample pill")
         // Night secondary text: at least 4.5:1 on black (§4.3).
         let contrast = Palette.nightSecondaryContrast()
         check(contrast >= 4.5, String(format: "Night secondary text contrast %.2f:1", contrast))

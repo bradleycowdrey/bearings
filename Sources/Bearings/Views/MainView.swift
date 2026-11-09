@@ -27,6 +27,8 @@ struct MainView: View {
     /// "Bearings 0.2.0 is available" on the Mac (nil elsewhere).
     var update: (version: String, url: URL)?
     @State private var toast: String?
+    /// Counts the toasts shown, so an earlier one's timer never clears a later one with the same words.
+    @State private var toastCount = 0
     @State private var showAbout = false
     @State private var showDetails = false
     @Environment(\.openURL) private var openURL
@@ -94,7 +96,7 @@ struct MainView: View {
             let plan = makePlan(for: geo)
             Group {
                 if plan.list {
-                    listScreen(plan)
+                    listScreen(plan, bottomInset: geo.safeAreaInsets.bottom)
                 } else if plan.twoPane {
                     twoPanes(plan)
                 } else {
@@ -116,6 +118,8 @@ struct MainView: View {
         .environment(\.colorScheme, .dark)
         // Night mode covers the whole screen: the cards, the dial, the tiles and the map.
         .colorMultiply(nav.nightMode ? Self.nightTint : .white)
+        // VoiceOver hears a new layout however it was chosen (the ⋯ menu, a pinch, ⌘= and ⌘−).
+        .onChange(of: nav.layout) { Self.announce("Layout: \(nav.layout.name)") }
         #if os(iOS)
         .onChange(of: nav.heading.map { Int($0 / 15) }) { announceHeading() }
         .onChange(of: nav.noCompass) { announceNoCompass() }
@@ -208,8 +212,9 @@ struct MainView: View {
     }
 
     /// Two panes (iPad landscape, wide Mac windows, a phone on its side): the location bar full width at the
-    /// top, as in one column; under it the dial, readout and status line top-aligned on the left, and the
-    /// Targets card, the grid and a map card to the bottom on the right (level with the dial's top).
+    /// top, as in one column; under it the dial, readout and status line centred in the left pane (the plan's
+    /// `topExtra` over the dial, the same under the status line), and the Targets card, the grid and a map
+    /// card from the panes' top to the bottom on the right.
     private func twoPanes(_ plan: LayoutPlan) -> some View {
         VStack(spacing: 0) {
             locationCard(plan)
@@ -220,6 +225,7 @@ struct MainView: View {
                     readoutGroup(plan)
                         .padding(.top, plan.gapDialReadout)
                 }
+                .padding(.top, plan.topExtra)
                 .frame(width: plan.leftWidth)
                 trailingPane(plan)
                     .frame(width: plan.columnWidth)
@@ -249,10 +255,11 @@ struct MainView: View {
     /// Accessibility text sizes, or nothing fits even with every step given up: one scrolling list in
     /// which every block is complete: the location bar (wrapping, at least 40), the dial (0.40 H), the
     /// readout, the status line, the Targets card (the cue on line 2), the tiles as 96 rows (caption leading,
-    /// value trailing) and a 176 Map tile. The indicator flashes on appear and a 24 pt fade at the bottom is the
-    /// cue that it continues. For ImageRenderer, the same stack, clipped.
+    /// value trailing) and a 176 Map tile. The indicator flashes on appear and a fade at the bottom is the
+    /// cue that it continues: 24 pt above the safe bottom and on through the home indicator's inset to the
+    /// screen's edge, so no hard line cuts the last card. For ImageRenderer, the same stack, clipped.
     @ViewBuilder
-    private func listScreen(_ plan: LayoutPlan) -> some View {
+    private func listScreen(_ plan: LayoutPlan, bottomInset: CGFloat) -> some View {
         if flatDetails {
             listContent(plan)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -265,7 +272,9 @@ struct MainView: View {
             .scrollIndicatorsFlash(onAppear: true)
             .overlay(alignment: .bottom) {
                 LinearGradient(colors: [Palette.screen.opacity(0), Palette.screen], startPoint: .top, endPoint: .bottom)
-                    .frame(height: LayoutPlan.maxSpare)
+                    .frame(height: LayoutPlan.maxSpare + bottomInset)
+                    // Drawn down over the bottom inset, to the very edge of the screen.
+                    .offset(y: bottomInset)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -311,22 +320,20 @@ struct MainView: View {
     /// (16), the map button (Large and Extra Large, and wherever the map gave way; hidden with its slot kept
     /// in two panes, where a map card is on screen) and ⋯ as 28 circles whose 44 × 44 targets reach past the
     /// bar (an overlay outside the bar's clip). In the list (accessibility sizes) the text wraps and the bar
-    /// grows from 40. Nothing in it is ever ellipsized: the date shortens first ("Nov 1"), then goes; the
-    /// place scales down rather than lose ", Colorado".
+    /// grows from 40, and the Sample pill stays on the date line as at normal sizes (so it never pushes the
+    /// place onto two lines). Nothing in it is ever ellipsized: the date shortens first ("Nov 1"), then goes;
+    /// the place scales down rather than lose ", Colorado".
     private func locationCard(_ plan: LayoutPlan) -> some View {
         let k = plan.k
         let titleSize: CGFloat = plan.list ? Ramp.list.title : LayoutPlan.cardPlace * k
         let dateSize: CGFloat = plan.list ? Ramp.list.subtitle : LayoutPlan.cardDate * k
-        let pillOnPlaceLine = nav.sample && plan.list
+        let pill: Bool = nav.showsSamplePill
         let trailing: CGFloat = LayoutPlan.cardTrailing(mapButton: plan.mapButtonSlot)
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                placeLine(size: titleSize, wraps: plan.list)
-                if pillOnPlaceLine { sampleBadge(plan) }
-            }
+            placeLine(size: titleSize, wraps: plan.list)
             HStack(spacing: 6) {
                 dateText(size: dateSize, wraps: plan.list)
-                if nav.sample && !pillOnPlaceLine { sampleBadge(plan) }
+                if pill { sampleBadge(plan) }
             }
         }
         // One element: where and when, then the buttons after it.
@@ -416,7 +423,7 @@ struct MainView: View {
     /// "Maroon Bells, Colorado, Sunday November 1, 9:41 AM, sample data".
     private var locationSpoken: String {
         let day = nav.now.formatted(.dateTime.weekday(.wide).month(.wide).day())
-        return "\(nav.placeTitle), \(day), \(Look.timeText(nav.now))\(nav.sample ? ", sample data" : "")"
+        return "\(nav.placeTitle), \(day), \(Look.timeText(nav.now))\(nav.showsSamplePill ? ", sample data" : "")"
     }
 
     /// The sun, sunrise or sunset, or moon symbol (decorative): 16 pt at white 85% in a 24 slot.
@@ -439,12 +446,16 @@ struct MainView: View {
             .contentShape(Rectangle())
     }
 
+    /// The 28 circle inside its 44 target: where a bar button's pressed and hover highlight is drawn.
+    static let cardCircleInset: CGFloat = (LayoutPlan.cardTarget - LayoutPlan.cardButton) / 2
+
     /// The location bar's map button (Large and Extra Large): a 28 circle in a 44 target.
     private func mapButton(_ plan: LayoutPlan) -> some View {
         Button { nav.mapSheet = true } label: {
             cardCircle("map")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle(radius: LayoutPlan.cardButton / 2, inset: Self.cardCircleInset))
+        .tip("Open the map")
         .accessibilityLabel("Map")
         .accessibilityHint("Opens the map")
     }
@@ -567,6 +578,8 @@ struct MainView: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
+        .modifier(HoverGlow(radius: LayoutPlan.cardButton / 2, inset: Self.cardCircleInset))
+        .tip("Settings and more")
         .accessibilityLabel("Settings and more")
     }
 
@@ -594,7 +607,9 @@ struct MainView: View {
     /// The dial: tap to lock or unlock the bearing; pinch to step the layout; VoiceOver reads it as one
     /// element with its custom actions.
     private func dial(side: CGFloat) -> some View {
-        Button { nav.toggleLock() } label: {
+        // The Mac's tooltip (none without a compass, where a click does nothing).
+        let tip: String = nav.heading == nil ? "" : (nav.lock == nil ? "Click to lock this bearing" : "Click to clear the locked bearing")
+        return Button { nav.toggleLock() } label: {
             DialView(rotation: nav.cardRotation, heading: nav.heading, lock: nav.lock, tilt: nav.tilt,
                      sun: nav.sunPosition.map { DialView.SkyMark(angle: nav.cardAngle($0.azimuth), aboveHorizon: $0.altitude > 0) },
                      moon: nav.moonPosition.map { DialView.SkyMark(angle: nav.cardAngle($0.azimuth), aboveHorizon: $0.altitude > 0) },
@@ -606,6 +621,7 @@ struct MainView: View {
         .buttonStyle(.plain)
         // A pinch steps one layout (only a shortcut: the setting is in the ⋯ menu).
         .simultaneousGesture(MagnifyGesture().onEnded { pinch($0.magnification) })
+        .tip(tip)
         .accessibilityLabel("Compass")
         .accessibilityValue(dialValue)
         .accessibilityHint(nav.heading == nil ? "" : (nav.lock == nil ? "Locks this bearing" : "Clears the locked bearing"))
@@ -632,7 +648,8 @@ struct MainView: View {
         #if os(iOS)
         UISelectionFeedbackGenerator().selectionChanged()
         #endif
-        show("Layout: \(nav.layout.name)")
+        // (VoiceOver hears it from the layout's own change.)
+        show("Layout: \(nav.layout.name)", announce: false)
     }
 
     /// "Heading 228 degrees, southwest. True north. Sun 245 degrees, up. Moon 110 degrees, down. Marked
@@ -862,7 +879,7 @@ struct MainView: View {
             targetsGlyph("lock.fill", plan: plan)
             TwoColumnText(label: label, value: parts.cue, size: targetsSize(plan), wraps: plan.list)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            closeButton(plan) { nav.toggleLock() }
+            closeButton(plan, help: "Clear the locked bearing") { nav.toggleLock() }
         }
         .foregroundStyle(.white)
         .padding(.leading, plan.tablet ? 16 : 14)
@@ -879,7 +896,7 @@ struct MainView: View {
         HStack(spacing: plan.tablet ? 10 : 8) {
             targetsGlyph("mappin", plan: plan)
             spotLabel(plan)
-            closeButton(plan) { nav.clearSpot() }
+            closeButton(plan, help: "Clear the marked spot") { nav.clearSpot() }
         }
         .padding(.leading, plan.tablet ? 16 : 14)
         .padding(.trailing, 4)
@@ -889,8 +906,9 @@ struct MainView: View {
         .accessibilityAction(named: "Lock to spot") { nav.lockToSpot() }
     }
 
-    /// The ✕ of a Targets row: a 14 glyph at white 60% (90% at night) in a 44 target.
-    private func closeButton(_ plan: LayoutPlan, action: @escaping () -> Void) -> some View {
+    /// The ✕ of a Targets row: a 14 glyph at white 60% (90% at night) in a 44 target, with the shared pressed
+    /// and hover highlight and a tooltip.
+    private func closeButton(_ plan: LayoutPlan, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: "xmark")
                 .font(.system(size: 14 * plan.k, weight: .semibold))
@@ -898,7 +916,8 @@ struct MainView: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle(radius: 14, inset: 8))
+        .tip(help)
     }
 
     /// "0.4 miles, 245 degrees southwest" (the point in words, as the dial's value says it).
@@ -930,6 +949,8 @@ struct MainView: View {
             .menuStyle(.button)
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
+            .modifier(HoverGlow(radius: 8, inset: 2))
+            .tip("Lock to the spot, or clear it")
         }
     }
 
@@ -1064,14 +1085,13 @@ struct MainView: View {
         let position = positionLines()
         let single = position.lines.count == 1 && nav.fix != nil
         let size = single && (plan.tablet || plan.list) ? Self.ramp(plan).singleValue : sizes(plan).position
-        return CoordinateText(copy: copyCoordinates, details: { showDetails = true }) {
+        return CoordinateText(label: "Position, \(position.spoken), \(formatWords)", copy: copyCoordinates,
+                              details: { showDetails = true }) {
             PanelTile("Position · \(Self.shortName(nav.format))", secondary: nav.fix == nil ? waitingText : nil,
                       insetH: tileInset(plan)) {
                 PositionValue(lines: position.lines, size: size * plan.k, weight: Self.ramp(plan).valueWeight, wraps: plan.list)
                     .foregroundStyle(stale ? secondary : .white)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Position, \(position.spoken), \(formatWords)")
         }
     }
 
@@ -1087,13 +1107,12 @@ struct MainView: View {
         let word = parts.last.flatMap { hemispheres[$0] }
         let number = word == nil ? line : parts.dropLast().joined(separator: " ")
         let caption = latitude ? "Latitude" : "Longitude"
-        return CoordinateText(copy: copyCoordinates, details: { showDetails = true }) {
+        return CoordinateText(label: "\(caption), \(Self.spokenCoordinate(line))", copy: copyCoordinates,
+                              details: { showDetails = true }) {
             PanelTile(caption, secondary: word ?? (nav.fix == nil ? waitingText : nil), insetH: tileInset(plan)) {
                 valueText(number, plan: plan, stale: stale, size: sizes(plan).value)
                     .tracking(-0.2)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(caption), \(Self.spokenCoordinate(line))")
         }
     }
 
@@ -1296,38 +1315,44 @@ struct MainView: View {
         .panelAction("\(caption), \(spokenValue)", hint: "Shows the details") { showDetails = true }
     }
 
-    /// Extra Large's one summary strip: POSITION | ELEVATION | SUN in columns 1.2 | 1 | 1 split by 1 pt
-    /// dividers, each 12 across and 14 down. Position taps for the next format; the others open Details.
+    /// Extra Large's one summary strip: POSITION · DD | ELEVATION | SUN · ◐ 53% in columns 1.2 | 1 | 1 split
+    /// by 1 pt dividers, each 12 across and 14 down, with the same captions as the other layouts. The values
+    /// sit right under their caption (not at the bottom of a grown strip, which left it hollow) and are larger
+    /// in a grown strip (17 from 104 × k; Position as large as its column allows). Position taps for the next
+    /// format; the others open Details.
     private func summaryStrip(_ plan: LayoutPlan, stale: Bool) -> some View {
         let widths = plan.stripWidths
         let k = plan.k
         let position = positionLines()
         let values = elevationValues()
         let times = nav.sunTimes
-        let size = sizes(plan).value
+        let base: CGFloat = sizes(plan).value
+        let size: CGFloat = plan.tablet ? base : LayoutPlan.stripValueSize(height: plan.tileHeight, k: k)
         let weight = Self.ramp(plan).valueWeight
+        let phase = nav.moonPhase
+        let percent = Int(Geo.jsRound(phase.fraction * 100))
+        let secondSize: CGFloat = Self.ramp(plan).secondary * k
         return HStack(spacing: 0) {
-            CoordinateText(copy: copyCoordinates, details: { showDetails = true }) {
-                stripColumn("Position", plan: plan) {
-                    PositionValue(lines: position.lines, size: size * k, weight: weight)
+            CoordinateText(label: "Position, \(position.spoken), \(formatWords)", copy: copyCoordinates,
+                           details: { showDetails = true }, radius: 10, inset: 4) {
+                stripColumn("Position · \(Self.shortName(nav.format))", plan: plan) {
+                    PositionValue(lines: position.lines, size: base * k, weight: weight, upTo: size * k)
                         .foregroundStyle(stale ? secondary : .white)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Position, \(position.spoken), \(formatWords)")
             }
             .frame(width: widths[0])
             stripDivider
             stripColumn("Elevation", plan: plan) {
                 VStack(alignment: .leading, spacing: 0) {
                     valueText(values.main, plan: plan, stale: stale, size: size)
-                    FitText(text: values.second, size: Look.tileSecondarySize * k)
+                    FitText(text: values.second, size: secondSize)
                         .foregroundStyle(secondary)
                 }
             }
-            .panelAction(values.spoken, hint: "Shows the details") { showDetails = true }
+            .panelAction(values.spoken, hint: "Shows the details", radius: 10, inset: 4) { showDetails = true }
             .frame(width: widths[1])
             stripDivider
-            stripColumn("Sun", plan: plan) {
+            stripColumn("Sun", moon: phase, plan: plan) {
                 if let rise = times?.sunriseDate, let down = times?.sunsetDate {
                     VStack(alignment: .leading, spacing: -2) {
                         SunTime(arrow: "↑", time: Look.time(rise), size: size * k, weight: weight, k: k)
@@ -1338,7 +1363,8 @@ struct MainView: View {
                     valueText(times.map { $0.polar == .day ? "Up all day" : "Down all day" } ?? "—", plan: plan, size: size)
                 }
             }
-            .panelAction(sunSpoken, hint: "Shows the details") { showDetails = true }
+            .panelAction("\(sunSpoken). Moon \(percent) percent lit, \(Look.phaseName(phase).lowercased())",
+                         hint: "Shows the details", radius: 10, inset: 4) { showDetails = true }
             .frame(width: widths[2])
         }
         .frostedTile()
@@ -1350,17 +1376,38 @@ struct MainView: View {
             .accessibilityHidden(true)
     }
 
-    /// One column of the strip: the caption at the top, the values at the bottom.
-    private func stripColumn<V: View>(_ caption: String, plan: LayoutPlan, @ViewBuilder value: () -> V) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+    /// A caps caption for the strip and the band, as the tiles write theirs: "POSITION · DD", or with the
+    /// moon's real phase and percentage after it, "SUN · ◐ 53%". Scaled to 0.85 when too wide; never cut.
+    private func captionLine(_ caption: String, moon: Sky.Phase?, size: CGFloat) -> some View {
+        let row = HStack(spacing: 3) {
             Text(caption.uppercased())
-                .font(.system(size: Self.ramp(plan).caption * plan.k, weight: .semibold))
                 .tracking(Look.tileCaptionTracking)
-                .foregroundStyle(secondary)
-                .lineLimit(1)
-                .fixedSize()
-            Spacer(minLength: 2)
+            if let moon {
+                Text("·")
+                MoonGlyph(phase: moon.phase, size: size)
+                Text("\(Int(Geo.jsRound(moon.fraction * 100)))%")
+                    .monospacedDigit()
+            }
+        }
+        .font(.system(size: size, weight: .semibold))
+        .lineLimit(1)
+        .fixedSize()
+        return ViewThatFits(in: .horizontal) {
+            row
+            row.scaleEffect(Look.minScale, anchor: .leading)
+        }
+        .foregroundStyle(secondary)
+    }
+
+    /// One column of the strip: the caption at the top, the values 6 under it; what a grown strip has left
+    /// stays at the bottom.
+    private func stripColumn<V: View>(_ caption: String, moon: Sky.Phase? = nil, plan: LayoutPlan,
+                                      @ViewBuilder value: () -> V) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            captionLine(caption, moon: moon, size: Self.ramp(plan).caption * plan.k)
             value()
+                .padding(.top, 6)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, LayoutPlan.stripInset)
         .padding(.vertical, 14)
@@ -1377,8 +1424,9 @@ struct MainView: View {
     }
 
     /// Small's band along the map card's bottom: 68 × k on near-black at 78% with a 1 pt top edge; three
-    /// columns 1.15 | 1 | 1, 8 apart, 12 across and 10 down: POSITION · DD | ELEVATION | SUN · ◐ 53%, each
-    /// two lines of 13 semibold.
+    /// columns 1.15 | 1 | 1, 8 apart, 12 across and 10 down: POSITION · DD | ELEVATION | SUN · ◐ 53% (the
+    /// moon's real phase, as Medium draws it), each two lines of 13 semibold with the second unit in grey as
+    /// in every other layout. On a tablet the band is 88 × k with captions 13 and values 19.
     private func band(_ plan: LayoutPlan) -> some View {
         let widths = plan.bandWidths
         let k = plan.k
@@ -1387,18 +1435,22 @@ struct MainView: View {
         let times = nav.sunTimes
         let phase = nav.moonPhase
         let percent = Int(Geo.jsRound(phase.fraction * 100))
+        let size: CGFloat = LayoutPlan.bandValueSize(tablet: plan.tablet) * k
+        let captionSize: CGFloat = Self.ramp(plan).caption * k
         return HStack(alignment: .top, spacing: LayoutPlan.rowGap) {
-            CoordinateText(copy: copyCoordinates, details: { showDetails = true }) {
-                bandColumn("Position · \(Self.shortName(nav.format))", lines: position.lines, k: k)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Position, \(position.spoken), \(formatWords)")
+            CoordinateText(label: "Position, \(position.spoken), \(formatWords)", copy: copyCoordinates,
+                           details: { showDetails = true }, radius: 8, inset: -4) {
+                bandColumn("Position · \(Self.shortName(nav.format))", lines: position.lines, size: size, captionSize: captionSize)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(width: widths[0], alignment: .leading)
-            bandColumn("Elevation", lines: [values.main, values.second], k: k)
-                .panelAction(values.spoken, hint: "Shows the details") { showDetails = true }
+            bandColumn("Elevation", lines: [values.main, values.second], size: size, captionSize: captionSize, secondGrey: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .panelAction(values.spoken, hint: "Shows the details", radius: 8, inset: -4) { showDetails = true }
                 .frame(width: widths[1], alignment: .leading)
-            bandColumn("Sun · ◐\u{00A0}\(percent)%", lines: sunLines(times), k: k)
-                .panelAction("\(sunSpoken). Moon \(percent) percent lit", hint: "Shows the details") { showDetails = true }
+            bandColumn("Sun", moon: phase, lines: sunLines(times), size: size, captionSize: captionSize)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .panelAction("\(sunSpoken). Moon \(percent) percent lit", hint: "Shows the details", radius: 8, inset: -4) { showDetails = true }
                 .frame(width: widths[2], alignment: .leading)
         }
         .padding(.horizontal, LayoutPlan.bandPadding)
@@ -1417,19 +1469,17 @@ struct MainView: View {
         return ["—"]
     }
 
-    private func bandColumn(_ caption: String, lines: [String], k: CGFloat) -> some View {
+    /// One column of the band: the caption, then its lines at one size, the main one white; `secondGrey`
+    /// draws the lines after the first in the secondary grey (Elevation's other unit).
+    private func bandColumn(_ caption: String, moon: Sky.Phase? = nil, lines: [String], size: CGFloat,
+                            captionSize: CGFloat, secondGrey: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(caption.uppercased())
-                .font(.system(size: Look.tileCaptionSize * k, weight: .semibold))
-                .tracking(Look.tileCaptionTracking)
-                .foregroundStyle(secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(Look.minScale)
+            captionLine(caption, moon: moon, size: captionSize)
                 .padding(.bottom, 3)
-            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                FitText(text: line, size: 13 * k, weight: .semibold)
+            ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                FitText(text: line, size: size, weight: .semibold)
                     .monospacedDigit()
-                    .foregroundStyle(.white)
+                    .foregroundStyle(secondGrey && index > 0 ? secondary : Color.white)
             }
         }
     }
@@ -1449,7 +1499,7 @@ struct MainView: View {
             }
             // The picture takes no touches; this clear layer takes the tap for the whole tile.
             .overlay { Color.clear.contentShape(Rectangle()) }
-            .panelAction("Map, opens full map", hint: "Opens the map") { nav.mapSheet = true }
+            .panelAction("Map, opens full map", hint: "Opens the map", help: "Open the map") { nav.mapSheet = true }
     }
 
     /// "3.2 mph" while moving (0.5 m/s or more), else nil.
@@ -1469,12 +1519,12 @@ struct MainView: View {
             .accessibilityLabel("Speed, \(text)")
     }
 
-    /// The map card (Small, iPad, two panes), with its controls and the speed chip while moving. Small's card
+    /// The map card (Small, iPad, two panes, a tall Mac window), with its controls and the speed chip while moving. Small's card
     /// carries the band along its bottom, under the map so the map's own logo and Legal link stay clear.
     @ViewBuilder
     private func mapCard(_ plan: LayoutPlan) -> some View {
         if plan.grid == .band {
-            let bandHeight = LayoutPlan.band * plan.k
+            let bandHeight = LayoutPlan.bandHeight(k: plan.k, tablet: plan.tablet)
             let shape = RoundedRectangle(cornerRadius: Look.radius, style: .continuous)
             VStack(spacing: 0) {
                 MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
@@ -1655,12 +1705,37 @@ struct MainView: View {
         show("Coordinates copied", for: 1.2)
     }
 
-    private func show(_ text: String, for seconds: Double = 1.6) {
+    /// Shows a toast and tells VoiceOver the same words (`announce`: false where something else already
+    /// does). Each toast has its own number, so the timer of an earlier one never clears a later one early,
+    /// even when both say the same thing.
+    private func show(_ text: String, for seconds: Double = 1.6, announce: Bool = true) {
+        toastCount += 1
+        let number = toastCount
         withAnimation(.easeOut(duration: 0.15)) { toast = text }
+        if announce { Self.announce(text) }
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(seconds))
-            withAnimation(.easeIn(duration: 0.2)) { if toast == text { toast = nil } }
+            guard toastCount == number else { return }
+            withAnimation(.easeIn(duration: 0.2)) { toast = nil }
         }
+    }
+
+    /// Says `text` through VoiceOver (it never sees a toast): "Coordinates copied", "Layout: Large". A moment
+    /// late on iOS, so the menu or gesture that caused it has finished speaking.
+    static func announce(_ text: String) {
+        #if os(iOS)
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            UIAccessibility.post(notification: .announcement, argument: text)
+        }
+        #else
+        guard NSWorkspace.shared.isVoiceOverEnabled, let window = NSApplication.shared.keyWindow else { return }
+        let info: [NSAccessibility.NotificationUserInfoKey: Any] = [
+            NSAccessibility.NotificationUserInfoKey.announcement: text,
+            NSAccessibility.NotificationUserInfoKey.priority: NSAccessibilityPriorityLevel.high.rawValue,
+        ]
+        NSAccessibility.post(element: window, notification: .announcementRequested, userInfo: info)
+        #endif
     }
 
     @ViewBuilder
@@ -1679,33 +1754,124 @@ struct MainView: View {
 
 
 /// The Position tile's gestures: tap for the next of the six formats; long-press (right-click on a Mac)
-/// for a menu of Copy and Details…; the same as VoiceOver actions. The content is expected to be one
-/// accessibility element already.
+/// for a menu of Copy and Details…; the same as VoiceOver actions. A button with the shared pressed and
+/// hover highlight (`PressStyle`; `radius` and `inset` shape it) and a tooltip; one accessibility element,
+/// read as `label`.
 struct CoordinateText<Content: View>: View {
     @EnvironmentObject private var nav: Navigator
+    private let label: String
     private let copy: () -> Void
     private let details: () -> Void
+    private let radius: CGFloat
+    private let inset: CGFloat
     private let content: Content
 
-    init(copy: @escaping () -> Void, details: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+    init(label: String, copy: @escaping () -> Void, details: @escaping () -> Void, radius: CGFloat = Look.radius,
+         inset: CGFloat = 0, @ViewBuilder content: () -> Content) {
+        self.label = label
         self.copy = copy
         self.details = details
+        self.radius = radius
+        self.inset = inset
         self.content = content()
     }
 
     var body: some View {
-        content
-            .contentShape(Rectangle())
-            .onTapGesture { nav.cycleFormat() }
-            .contextMenu {
-                Button("Copy", systemImage: "doc.on.doc") { copy() }
-                Button("Details…", systemImage: "info.circle") { details() }
+        Button {
+            nav.cycleFormat()
+        } label: {
+            content
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle(radius: radius, inset: inset))
+        .contextMenu {
+            Button("Copy", systemImage: "doc.on.doc") { copy() }
+            Button("Details…", systemImage: "info.circle") { details() }
+        }
+        .tip("Click for the next format")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Changes the coordinate format")
+        .accessibilityAction(.default) { nav.cycleFormat() }
+        .accessibilityAction(named: "Next Format") { nav.cycleFormat() }
+        .accessibilityAction(named: "Copy Coordinates") { copy() }
+        .accessibilityAction(named: "Details") { details() }
+    }
+}
+
+/// The one pressed and hover look of everything that can be tapped or clicked (tiles, the strip's and the
+/// band's columns, the bar's buttons, the ✕ of a Targets row, the map's controls): a light white wash over
+/// the control's own shape, 10% while pressed and 5% under a pointer (a Mac, or an iPad with a trackpad).
+/// `radius` rounds the wash and `inset` draws it inside the hit area (a 28 circle in its 44 target: radius
+/// 14, inset 8) or, negative, a little outside it.
+struct PressStyle: ButtonStyle {
+    var radius: CGFloat = Look.radius
+    var inset: CGFloat = 0
+
+    func makeBody(configuration: Configuration) -> some View {
+        PressWash(label: configuration.label, pressed: configuration.isPressed, radius: radius, inset: inset)
+    }
+}
+
+/// `PressStyle`'s drawing: it keeps whether a pointer is over the control.
+private struct PressWash<Label: View>: View {
+    let label: Label
+    let pressed: Bool
+    let radius: CGFloat
+    let inset: CGFloat
+    @State private var hovering = false
+
+    var body: some View {
+        label
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(Color.white.opacity(Palette.Op.wash(pressed: pressed, hovering: hovering)))
+                    .padding(inset)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityHint("Changes the coordinate format")
-            .accessibilityAction(named: "Next Format") { nav.cycleFormat() }
-            .accessibilityAction(named: "Copy Coordinates") { copy() }
-            .accessibilityAction(named: "Details") { details() }
+            .onHover { hovering = $0 }
+    }
+}
+
+/// A Mac tooltip (`.help`), left out of the self-tests' flat drawings (`flatDetails`), where ImageRenderer
+/// must draw nothing but plain SwiftUI.
+struct Tip: ViewModifier {
+    let text: String
+    @Environment(\.flatDetails) private var flat
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if flat || text.isEmpty {
+            content
+        } else {
+            content.help(text)
+        }
+    }
+}
+
+extension View {
+    /// The tooltip under a resting pointer: "Click for the next format", "Open the map".
+    func tip(_ text: String) -> some View { modifier(Tip(text: text)) }
+}
+
+/// The same hover wash for what is not a plain button (a menu's label: ⋯, the marked spot's row).
+struct HoverGlow: ViewModifier {
+    var radius: CGFloat = Look.radius
+    var inset: CGFloat = 0
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(Color.white.opacity(Palette.Op.wash(pressed: false, hovering: hovering)))
+                    .padding(inset)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .onHover { hovering = $0 }
     }
 }
 
@@ -1837,11 +2003,30 @@ struct PositionValue: View {
     let size: CGFloat
     var weight: Font.Weight = .medium
     var wraps = false
+    /// A larger size to try first (the grown strip): this, then halfway down to `size`, then the usual steps.
+    var upTo: CGFloat? = nil
 
     var body: some View {
         if wraps {
             stack(size)
                 .fixedSize(horizontal: false, vertical: true)
+        } else if let upTo, upTo > size + 0.5 {
+            ViewThatFits(in: .horizontal) {
+                stack(upTo)
+                    .lineLimit(1)
+                    .fixedSize()
+                stack((upTo + size) / 2)
+                    .lineLimit(1)
+                    .fixedSize()
+                stack(size)
+                    .lineLimit(1)
+                    .fixedSize()
+                stack(size * Look.minScale)
+                    .lineLimit(1)
+                    .fixedSize()
+                stack(size * Look.minScale)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         } else {
             ViewThatFits(in: .horizontal) {
                 stack(size)
@@ -2131,9 +2316,10 @@ extension MainView {
                     // (At k 1.3 Small has no band: it takes two rows; the band's text is 13 × k wherever it shows.)
                     if p.grid == .band {
                         let w = p.bandWidths
-                        let lonWidth = textWidth(longitude, size: 13 * k * Look.minScale, weight: .semibold)
+                        let bandSize: CGFloat = LayoutPlan.bandValueSize(tablet: p.tablet) * k * Look.minScale
+                        let lonWidth = textWidth(longitude, size: bandSize, weight: .semibold)
                         if lonWidth > w[0] + 0.5 { failures.append("\(name): the band's \(longitude) needs \(Int(lonWidth)) of \(Int(w[0])) pt") }
-                        let timeWidth = textWidth("↓\u{00A0}\(Look.timeText(sunset))", size: 13 * k * Look.minScale, weight: .semibold)
+                        let timeWidth = textWidth("↓\u{00A0}\(Look.timeText(sunset))", size: bandSize, weight: .semibold)
                         if timeWidth > w[2] + 0.5 { failures.append("\(name): the band's sunset needs \(Int(timeWidth)) of \(Int(w[2])) pt") }
                     }
                     if p.grid == .strip && k == 1 {
@@ -2319,6 +2505,11 @@ extension MainView {
                     if !plan.centred && band > plan.bottomInset + LayoutPlan.maxSpare + 1 {
                         failures.append(String(format: "%@: %.0f empty at the bottom", name, band))
                     }
+                    // A Mac window (never a compass) is filled in every state: the dial grows, then a map card
+                    // takes the rest, so the drawing ends within 24 of the 24 pt bottom margin.
+                    if isMac && plan.steps.isEmpty && band > plan.bottomInset + LayoutPlan.maxSpare + 1 {
+                        failures.append(String(format: "%@: a Mac window with %.0f empty at the bottom", name, band))
+                    }
                     if plan.centred { info.append(String(format: "%@: centred, %.0f over and under the stack", name, plan.topExtra)) }
                 }
                 info.append("\(name): \(plan.description)")
@@ -2334,6 +2525,59 @@ extension MainView {
             }
         }
         return (failures, info)
+    }
+
+    /// Two panes as drawn (a wide Mac window, iPad landscape), with the sample, in every layout: in the left
+    /// pane the dial starts where planned and there is as much empty over it as under the status line (no
+    /// empty band on one side, review item 14); in the right pane the map card ends at the planned bottom.
+    /// `nav` is a navigator of its own. Each failure is one line; empty when all is well.
+    @MainActor
+    static func twoPaneFailures(nav: Navigator, width: CGFloat, height: CGFloat) -> [String] {
+        var failures: [String] = []
+        nav.showSample(lock: 240)
+        for layout in Layout.allCases {
+            nav.showLayout(layout.rawValue)
+            let plan = LayoutPlan.plan(w: width, h: height, s: height, layout: layout,
+                                       hasSpot: nav.spot != nil && nav.fix != nil, locked: nav.lockText != nil,
+                                       noCompass: nav.noCompass, mac: isMac, speed: nav.speed,
+                                       splitPosition: nav.format == .dd)
+            let name = "\(Int(width)) × \(Int(height)) \(layout.rawValue)"
+            guard plan.twoPane else {
+                failures.append("\(name): not two panes")
+                continue
+            }
+            let screen = MainView()
+                .environmentObject(nav)
+                .environment(\.flatDetails, true)
+                .frame(width: width, height: height)
+            guard let px = Pixels(render: screen) else {
+                failures.append("\(name): nothing drawn")
+                continue
+            }
+            let left0: CGFloat = plan.margin
+            let left1: CGFloat = plan.margin + plan.leftWidth
+            guard let ink = px.inkRows(x0: left0, x1: left1, y0: plan.paneTop, y1: height, threshold: 12) else {
+                failures.append("\(name): nothing drawn in the left pane")
+                continue
+            }
+            if abs(ink.top - plan.dialTop) > 4 {
+                failures.append(String(format: "%@: the dial starts at %.1f, planned %.1f", name, ink.top, plan.dialTop))
+            }
+            let over: CGFloat = ink.top - plan.paneTop
+            let under: CGFloat = plan.end - ink.bottom
+            if abs(over - under) > 10 {
+                failures.append(String(format: "%@: left pane has %.0f over the dial and %.0f under the status line", name, over, under))
+            }
+            // The right pane: its last block (the map card) ends at the planned bottom.
+            let right0: CGFloat = width - plan.margin - plan.columnWidth
+            if !plan.trailingScrolls, let pane = px.inkRows(x0: right0 + 8, x1: width - plan.margin - 8, y0: plan.paneTop, y1: height, threshold: 12) {
+                let planned: CGFloat = plan.end - plan.bottomSpare
+                if abs(pane.bottom - planned) > 3 {
+                    failures.append(String(format: "%@: the right pane ends at %.1f, planned %.1f", name, pane.bottom, planned))
+                }
+            }
+        }
+        return failures
     }
 }
 
@@ -2507,16 +2751,22 @@ struct Pixels {
 }
 
 extension View {
-    /// A tile that does one thing when tapped, read by VoiceOver as one button with this label.
-    func panelAction(_ label: String, hint: String, action: @escaping () -> Void) -> some View {
-        self
-            .contentShape(Rectangle())
-            .onTapGesture(perform: action)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(label)
-            .accessibilityHint(hint)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction(.default, action)
+    /// A tile that does one thing when tapped: a button with the shared pressed and hover highlight
+    /// (`PressStyle`; `radius` and `inset` shape it) and a tooltip, read by VoiceOver as one button with this
+    /// label.
+    func panelAction(_ label: String, hint: String, help: String = "Show the details", radius: CGFloat = Look.radius,
+                     inset: CGFloat = 0, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            self
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle(radius: radius, inset: inset))
+        .tip(help)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityHint(hint)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default, action)
     }
 
     /// iPad: the map sheet is page-sized rather than a form sheet over half the dial (iOS 18 and later;

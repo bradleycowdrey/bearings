@@ -53,22 +53,48 @@ enum SelfTest {
         // neighbouring layouts never the same plan; the golden phones keep band / quad / six / strip.
         let planFailures = LayoutPlan.tableFailures()
         check(planFailures.isEmpty, "Layout planner table (\(planFailures.isEmpty ? "gaps are tokens, the 40 pt location bar first, the dial 12 under it, Targets under the status line, nothing empty or cut, rows add up to C, layouts distinct" : planFailures.prefix(3).joined(separator: "; ")))")
-        let mac = LayoutPlan.plan(w: 420, h: 840, s: 840, hasSpot: true, locked: true, mac: true)
-        let macLarge = LayoutPlan.plan(w: 420, h: 840, s: 840, layout: .large, hasSpot: true, locked: true, mac: true)
-        check(abs(mac.dial - 336) < 1 && mac.layout == .medium && mac.grid == .quad && mac.map == .tile && mac.bottomSpare <= LayoutPlan.maxSpare,
-              "Medium at 420 × 840 with the sample: dial \(Int(mac.dial.rounded())) pt, 2 × 2 with the Map tile, \(Int(mac.bottomSpare.rounded())) pt spare")
+        // The default window (440 × 860): what a new user sees first.
+        let dw: CGFloat = LayoutPlan.macDefaultWidth, dh: CGFloat = LayoutPlan.macDefaultHeight
+        let size = "\(Int(dw)) × \(Int(dh))"
+        let mac = LayoutPlan.plan(w: dw, h: dh, s: dh, hasSpot: true, locked: true, mac: true)
+        let macLarge = LayoutPlan.plan(w: dw, h: dh, s: dh, layout: .large, hasSpot: true, locked: true, mac: true)
+        let mediumDial: Bool = mac.dial >= LayoutPlan.ceil8(LayoutPlan.ownerShare * dh) - 0.5
+        let mediumSurface: Bool = mac.layout == .medium && mac.grid == .quad && mac.map == .tile
+        check(mediumDial && mediumSurface && !mac.centred && mac.bottomSpare <= LayoutPlan.maxSpare + 0.5,
+              "Medium at \(size) with the sample: dial \(Int(mac.dial.rounded())) pt, 2 × 2 with the Map tile, \(Int(mac.bottomSpare.rounded())) pt spare")
         check(macLarge.grid == .six && macLarge.map == .button && macLarge.dial >= mac.dial - 0.5,
-              "Large at 420 × 840 with the sample: 3 × 2, the map in the location card, dial \(Int(macLarge.dial.rounded())) pt (at least Medium's)")
+              "Large at \(size) with the sample: 3 × 2, the map in the location card, dial \(Int(macLarge.dial.rounded())) pt (at least Medium's)")
+        // A Mac never has a compass. In that state the window must not look like a fault or leave holes: the
+        // "No heading" slot is sized to the words (32) with the status line 6 under it, the dial grows into
+        // spare height, and nothing is centred with more than 24 pt empty at the bottom, at the default
+        // window and the smallest, with and without a marked spot.
+        var noCompassFailures: [String] = []
+        for (w, h) in [(dw, dh), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
+            for spot in [false, true] {
+                for layout in Layout.allCases {
+                    let p = LayoutPlan.plan(w: w, h: h, s: h, layout: layout, hasSpot: spot, noCompass: true, mac: true)
+                    let name = "\(Int(w)) × \(Int(h)) \(layout.rawValue)\(spot ? " marked" : "")"
+                    if abs(p.readoutSlot - LayoutPlan.noHeadingSlot) > 0.01 {
+                        noCompassFailures.append("\(name): the No heading slot is \(Int(p.readoutSlot))")
+                    }
+                    if p.list || p.centred || p.bottomSpare > LayoutPlan.maxSpare + 0.5 {
+                        noCompassFailures.append("\(name): \(p.description)")
+                    }
+                    lines.append("INFO \(name), no compass: \(p.description)")
+                }
+            }
+        }
+        check(noCompassFailures.isEmpty, "No compass on a Mac: the slot fits the words, the dial takes spare height, 24 pt or less empty at the bottom (\(noCompassFailures.isEmpty ? "every layout at \(size) and the smallest window" : noCompassFailures.prefix(3).joined(separator: "; ")))")
         let macBarTop: CGFloat = LayoutPlan.macTitleBand + LayoutPlan.topGap
         let macDialTop: CGFloat = macBarTop + LayoutPlan.card + LayoutPlan.cardToDial
         let macTops: Bool = abs(mac.locationTop - macBarTop) < 0.5 && abs(mac.dialTop - mac.topExtra - macDialTop) < 0.5
         check(mac.margin == LayoutPlan.macInset && macTops && mac.bottomInset == LayoutPlan.macInset,
               "Mac window: sides \(Int(mac.margin)), location bar at \(Int(mac.locationTop)) (28 + 8), dial top \(Int(mac.dialTop)) (+ 40 + 12), bottom \(Int(mac.bottomInset)) pt")
-        // The owner's hard rule: the compass takes up at least 40% of the window. At 420 × 840 and the smallest
+        // The owner's hard rule: the compass takes up at least 40% of the window. At the default and the smallest
         // window, at Text Size 1.0 and 1.3, every layout's dial is at least min(0.40 H, its width cap) with the
         // sample (locked and marked) and live; a dial under it fails.
         var ownerFailures: [String] = []
-        for (w, h) in [(CGFloat(420), CGFloat(840)), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
+        for (w, h) in [(dw, dh), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
             for (state, both) in [("sample", true), ("live", false)] {
                 for k in [CGFloat(1), 1.3] {
                     for layout in Layout.allCases {
@@ -81,7 +107,7 @@ enum SelfTest {
             }
         }
         check(ownerFailures.isEmpty, "Owner's rule: dial ≥ 40% of H (\(ownerFailures.isEmpty ? "every layout, sample and live, Text Size 1.0 and 1.3" : ownerFailures.prefix(3).joined(separator: "; ")))")
-        for (w, h) in [(CGFloat(420), CGFloat(840)), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
+        for (w, h) in [(dw, dh), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
             for line in LayoutPlan.summary(w: w, h: h, s: h, hasSpot: true, locked: true, mac: true) {
                 lines.append("INFO \(Int(w)) × \(Int(h)), sample: \(line)")
             }
@@ -107,10 +133,16 @@ enum SelfTest {
         let position = MainView.positionSizeFailures()
         check(position.isEmpty, "Both Position lines drawn at one size\(position.isEmpty ? "" : " (\(position.joined(separator: "; ")))")")
         let drawNav = Navigator(defaults: UserDefaults(suiteName: "bearings.selftest.drawing") ?? .standard)
-        for (w, h) in [(CGFloat(420), CGFloat(840)), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
+        for (w, h) in [(dw, dh), (LayoutPlan.macMinWidth, LayoutPlan.macMinHeight)] {
             let drawn = MainView.drawingFailures(nav: drawNav, width: w, height: h)
-            check(drawn.failures.isEmpty, "Window drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "location bar at the top and 40 high as planned, grids as planned and distinct, bottom as planned" : drawn.failures.prefix(3).joined(separator: "; ")))")
+            check(drawn.failures.isEmpty, "Window drawn as planned at \(Int(w)) × \(Int(h)) (\(drawn.failures.isEmpty ? "location bar at the top and 40 high as planned, grids as planned and distinct, bottom as planned, no compass: 24 pt or less empty at the bottom" : drawn.failures.prefix(3).joined(separator: "; ")))")
             lines += drawn.info.map { "INFO \($0)" }
+        }
+        // Wide windows (two panes) as drawn: the dial, readout and status line centred in the left pane, the
+        // map card down to the bottom margin on the right.
+        for (w, h) in [(CGFloat(1200), CGFloat(800)), (CGFloat(900), CGFloat(700))] {
+            let wide = MainView.twoPaneFailures(nav: drawNav, width: w, height: h)
+            check(wide.isEmpty, "Wide window drawn as planned at \(Int(w)) × \(Int(h)) (\(wide.isEmpty ? "left pane centred, right pane to the bottom" : wide.prefix(3).joined(separator: "; ")))")
         }
         // Night secondary text: at least 4.5:1 on black (§4.3).
         let contrast = Palette.nightSecondaryContrast()
@@ -130,23 +162,40 @@ enum SelfTest {
         // The main drawings are Medium (or `--layout`), shown without saving; the setting is put back after.
         let chosen = nav.layout
         nav.showLayout(argument(after: "--layout") ?? Layout.default.rawValue)
-        check(render(screen(nav, width: 420, height: 840), to: folder.appendingPathComponent("mac-main.png")),
+        check(render(screen(nav, width: dw, height: dh), to: folder.appendingPathComponent("mac-main.png")),
               "Drew the screen (mac-main.png)")
         let night = nav.nightMode
         nav.nightMode = true
-        check(render(screen(nav, width: 420, height: 840), to: folder.appendingPathComponent("mac-night.png")),
+        check(render(screen(nav, width: dw, height: dh), to: folder.appendingPathComponent("mac-night.png")),
               "Drew night mode (mac-night.png)")
         nav.nightMode = night
         // No compass (as on every Mac): "No heading", the rose at 40% and the note.
         nav.showSample(noCompass: true)
         check(nav.noCompass && nav.heading == nil, "Sample without a compass has no heading")
-        check(render(screen(nav, width: 420, height: 840), to: folder.appendingPathComponent("mac-nocompass.png")),
+        check(render(screen(nav, width: dw, height: dh), to: folder.appendingPathComponent("mac-nocompass.png")),
               "Drew the no-compass state (mac-nocompass.png)")
+        // The same in the other layouts (what a Mac really shows in each).
+        for layout in Layout.allCases where layout != nav.layout {
+            let before = nav.layout
+            nav.showLayout(layout.rawValue)
+            let name = "mac-nocompass-\(layout.rawValue).png"
+            check(render(screen(nav, width: dw, height: dh), to: folder.appendingPathComponent(name)),
+                  "Drew the no-compass state in \(layout.name) (\(name))")
+            nav.showLayout(before.rawValue)
+        }
+        // `--store` (the App Store screenshots): no Sample pill, today's date at the sample's time of day.
+        nav.showSample(lock: 240, store: true)
+        let storeDay: Bool = Calendar.current.isDateInToday(nav.now)
+        let storeClock: Bool = Look.timeText(nav.now) == Look.timeText(Navigator.sampleTime)
+        check(nav.sample && !nav.showsSamplePill && storeDay && storeClock,
+              "Store sample: no Sample pill, today's date, the sample's time (\(MainView.dateLines(nav.now).full))")
+        nav.showSample(noCompass: true)
+        check(nav.showsSamplePill, "The plain sample keeps its Sample pill")
         // Live: nothing locked or marked (C3.4 #14), on a navigator of its own so the sample's spot stays.
         drawNav.showSample()
         drawNav.clearSpot()
         drawNav.showLayout(nav.layout.rawValue)
-        check(render(screen(drawNav, width: 420, height: 840), to: folder.appendingPathComponent("mac-live.png")),
+        check(render(screen(drawNav, width: dw, height: dh), to: folder.appendingPathComponent("mac-live.png")),
               "Drew the live state (mac-live.png)")
         nav.showSample(lock: 240)
         // Each other layout at the default window, and Extra Large at the smallest.
@@ -172,7 +221,37 @@ enum SelfTest {
               && WidgetDial.Density.of(120) == .medium && WidgetDial.Density.of(80) == .small && WidgetDial.tickStep(212) == 2 && WidgetDial.tickStep(120) == 10,
               "Widget dial tick density (2° from 180 pt, 10° below)")
         check(WidgetDial.inUpperHalf(46) && WidgetDial.inUpperHalf(270) && !WidgetDial.inUpperHalf(144) && !WidgetDial.inUpperHalf(258),
-              "Half dial keeps W → N → E; the sun at 144° and the moon at 258° become edge arrows")
+              "Half dial keeps W → N → E; a sun at 144° and a moon at 258° are off the arc")
+        // The Small widget's edge marks (review 2.3.0, 9): the sample's sun and moon are up and off the arc,
+        // one on each side; a body below the horizon gets none; all stay 10 pt from the widget's edge.
+        let edges = WidgetDial.edgeMarks(readings.marks)
+        let sunOff: Bool = readings.sun.altitude > 0 && !WidgetDial.inUpperHalf(readings.sun.azimuth)
+        let hasSunEdge: Bool = edges.contains { $0.kind == .sun }
+        let sidesRight: Bool = edges.allSatisfy { $0.right == ($0.bearing < 180) && $0.bearing >= 90 && $0.bearing <= 270 }
+        var sunk = WidgetDialMarks()
+        sunk.sun = Sky.Position(azimuth: 144, altitude: -3)
+        sunk.moon = Sky.Position(azimuth: 200, altitude: 0)
+        sunk.spot = 150
+        let sunkEdges = WidgetDial.edgeMarks(sunk)
+        let sunkOnlySpot: Bool = sunkEdges.count == 1 && sunkEdges.first?.kind == .spot && sunkEdges.first?.right == true
+        var risen = sunk
+        risen.sun = Sky.Position(azimuth: 144, altitude: 20)
+        risen.moon = Sky.Position(azimuth: 200, altitude: 10)
+        let risenEdges = WidgetDial.edgeMarks(risen)
+        let risenSlots: [Int] = risenEdges.map { $0.slot }
+        let risenStacked: Bool = risenEdges.count == 3 && risenSlots == [0, 1, 0]
+        let edgeGap: CGFloat = WidgetDial.edgeClearance(diameter: 124, in: 170)
+        check(hasSunEdge == sunOff && sidesRight && sunkOnlySpot && risenStacked && edgeGap >= 10,
+              "Small widget edge marks: \(edges.count) for the sample, none for a body below the horizon, \(Int(edgeGap.rounded())) pt from the edge")
+        // Medium (120 pt, with a lock): the sun and moon stay inside the N/E/S/W letters (review 2.3.0, 10).
+        let mediumRing = WidgetDial.letterRing(radius: 55, density: .medium)
+        let lettersInner: CGFloat = mediumRing.distance - mediumRing.size * 0.55
+        let sunOuter: CGFloat = WidgetDial.skyDistance(radius: 55, density: .medium, reach: 8) + 8
+        let moonOuter: CGFloat = WidgetDial.skyDistance(radius: 55, density: .medium, reach: 5.2) + 5.2
+        check(sunOuter < lettersInner && moonOuter < lettersInner && sunOuter > 16,
+              "Medium widget: the sun and moon sit inside the letters (\(Int(sunOuter.rounded())) and \(Int(moonOuter.rounded())) of \(Int(lettersInner.rounded())) pt)")
+        check(readings.asOfLine == "as of \(readings.asOf)" && readings.dateLine.hasSuffix(readings.asOfLine),
+              "Widget time reads \"\(readings.asOfLine)\"")
         var plain = snapshot
         plain.spotLatitude = nil
         plain.spotLongitude = nil
@@ -195,9 +274,9 @@ enum SelfTest {
     /// The layouts drawn besides Medium (docs/REFINE.md §3.4), Extra Large at the smallest window, and two
     /// panes (a wide window, as iPad landscape) in Medium and Large.
     static let layoutShots: [(Layout, CGFloat, CGFloat, String)] = [
-        (.small, 420, 840, "mac-layout-small.png"),
-        (.large, 420, 840, "mac-layout-large.png"),
-        (.extraLarge, 420, 840, "mac-layout-extraLarge.png"),
+        (.small, LayoutPlan.macDefaultWidth, LayoutPlan.macDefaultHeight, "mac-layout-small.png"),
+        (.large, LayoutPlan.macDefaultWidth, LayoutPlan.macDefaultHeight, "mac-layout-large.png"),
+        (.extraLarge, LayoutPlan.macDefaultWidth, LayoutPlan.macDefaultHeight, "mac-layout-extraLarge.png"),
         (.extraLarge, LayoutPlan.macMinWidth, LayoutPlan.macMinHeight, "mac-layout-extraLarge-min.png"),
         (.medium, 1200, 800, "mac-wide-medium.png"),
         (.large, 1200, 800, "mac-wide-large.png"),
