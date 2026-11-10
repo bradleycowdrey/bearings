@@ -15,8 +15,22 @@ Made by <a href="https://bradcowdrey.com">Bradley Cowdrey · bradcowdrey.com</a>
 </p>
 
 <p align="center">
-  <a href="https://bradcowdrey.com/bearings"><img src="docs/screenshot-app.png" width="360" alt="Bearings on a phone, at the sample place: a slim location bar reading Maroon Bells, Colorado; a large compass dial reading 228° SW; the status line; a Targets card with a bearing locked at 240° and a marked spot; and tiles for position, elevation, the sun and a map."></a>
+  <img src="https://github.com/bradleycowdrey/bearings/raw/ci-shots-ios/iphone-17-store.png" width="250" alt="Bearings on iPhone at Maroon Bells, Colorado: a slim location bar, a large compass dial reading 228° SW, a Targets card with a bearing locked at 240° and a marked spot, and tiles for position, elevation, the sun and an Apple map.">
+  &nbsp;
+  <img src="https://github.com/bradleycowdrey/bearings/raw/ci-shots-android/android-16-store.png" width="250" alt="Bearings on Android: the same screen, with an OpenStreetMap map tile.">
+  &nbsp;
+  <img src="https://github.com/bradleycowdrey/bearings/raw/ci-shots/mac-main.png" width="250" alt="Bearings on the Mac: the same screen in a window.">
 </p>
+<p align="center"><sub>iPhone · Android · Mac. These pictures are retaken by CI from the latest build on every push to <code>main</code>.</sub></p>
+
+<p align="center">
+  <img src="https://github.com/bradleycowdrey/bearings/raw/ci-shots-ios/widget-large.png" width="300" alt="The large Home Screen widget: a north-up compass with the marked spot, elevation, sunrise and sunset, the moon, position and the marked spot's distance.">
+  &nbsp;
+  <img src="https://github.com/bradleycowdrey/bearings/raw/ci-shots/widget-medium.png" width="300" alt="The medium desktop widget on the Mac: a small compass, elevation, and sunrise and sunset.">
+  &nbsp;
+  <img src="https://github.com/bradleycowdrey/bearings/raw/ci-shots-ios/widget-lock-rectangular.png" width="160" alt="The Lock Screen widget: the town, elevation in feet and metres, and coordinates.">
+</p>
+<p align="center"><sub>Widgets: Home Screen, Mac desktop and Lock Screen.</sub></p>
 
 ---
 
@@ -91,10 +105,9 @@ cd android && ./gradlew assembleDebug testDebugUnitTest   # Android (JDK 17 and 
 
 ## Tests in CI
 
-Every push runs the Swift unit tests and the web tests (phone, small phone, tablet and desktop). The web
-tests also retake the picture at the top of this page when asked
-(`README_SHOT=docs/screenshot-app.png node tests/web.test.js`), so it shows the screen they have just
-checked. On `main`:
+Every push runs the Swift unit tests and the web tests (phone, small phone, tablet and desktop). The pictures
+at the top of this page come straight from the shot branches below, so they always show the latest build.
+The web tests can also retake the web app's picture (`README_SHOT=docs/screenshot-app.png node tests/web.test.js`). On `main`:
 
 - **Mac**: builds the app and runs `Bearings --selftest` on a real Mac, with a live elevation lookup. Report
   and pictures (every layout, wide windows, no compass) on the [`ci-shots`](https://github.com/bradleycowdrey/bearings/tree/ci-shots) branch.
