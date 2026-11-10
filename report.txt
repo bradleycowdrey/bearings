@@ -1,0 +1,47 @@
+ALL PASSED (46 checks)
+PASS Decimal degrees
+PASS Degrees, minutes, seconds
+PASS Degrees, decimal minutes
+PASS UTM
+PASS MGRS
+PASS Plus Code
+PASS Compass points
+PASS Short way round
+PASS Smoothing across north
+PASS Elevation in feet and metres
+PASS Sun's position
+PASS Sunrise and sunset
+PASS Midnight sun
+PASS Moon's position
+PASS Moon's phase
+PASS Distance and bearing
+PASS Distance in words
+PASS Speed and pressure
+PASS Nearest listed place (34191 places: 66 mi NE of Montrose, Colorado)
+PASS Place name at Maroon Bells (Aspen, Colorado)
+PASS Widget data saved and read back (Maroon Bells, Colorado, 9,587 ft, 53% · Last quarter)
+PASS Widget entry: spot 9.2 mi · 46° NE, lock 240.0, sun 144°, moon 265° (53% Last quarter), header "Maroon Bells" / "Sun, Nov 1 · as of 9:00 AM"
+PASS Widget layouts by size (small, medium, large, medium, small) and dials 124 / 120 / 212 dp
+PASS Widget dials drawn north-up (large 424 px, medium, small half dial with edge marks)
+PASS Location fix (39.09898, -106.94117)
+PASS Elevation 2939 m (GPS ±2 ft)
+PASS Compass state (LIVE, heading 8)
+PASS Declination at Maroon Bells (8.3°)
+PASS Header names the place (Aspen, Colorado)
+PASS Sunrise and sunset for the fix (6:46 – 4:59)
+PASS Layout planner golden table (all cases)
+PASS Layout plan for this screen (layout medium: dial 372 · 2 × 2 · map tile (floor 366), tiles 88 / 176, location bar at 8 (40 tall), dial top 60, bottom 24 dp, H 914 dp)
+PASS Owner's rule: dial ≥ 40% of H on this screen (dial 372 = 40.6% of H 914, floor 366)
+PASS Location bar first at safe top + 8, 40 tall; dial 12 under it at 60; Targets under the status line; gaps 12 / 6 × k / 12 / 8 / 8
+PASS Four distinct layouts on this screen (small: dial 368 · band · map card 300; medium: dial 372 · 2 × 2 · map tile; large: dial 395 · 3 × 2 · map button; extraLarge: dial 395 · strip · map button)
+PASS Owner's rule: dial ≥ 40% of H in every portrait plan (least 40.0% of H, Mac 420x840 medium sample k1.15)
+PASS Tile rows add up to the column (all; six at C = 370: 118 | 118 | 118)
+PASS No … in the location bar's time or the Sun times at 1.0, 1.3 and 2.0, times whole (all devices and layouts; 10 shorten or drop AM to 11 instead)
+PASS "No heading" in words, rendered (ink 183 × 25 at 11 under the dial, white 0.55)
+PASS Both Position lines at one size (scale 0.95)
+PASS Lock row: label and cue never split or cut (all plans)
+PASS Map labels #C9D3D6 in [Noto Sans Regular]
+PASS Coordinates never contain … (all formats)
+PASS Night secondary text contrast 4.70:1 (4.5 or better)
+PASS No layout overflows as drawn (medium +1.5 dp; large +1.5 dp; extraLarge +1.5 dp; small +1.5 dp; medium with targets +1.5 dp; large with targets +1.5 dp; extraLarge with targets +1.5 dp; small with targets +1.5 dp)
+PASS Map draws no blocks where place names should be (this GPU drew labels as blocks (at 140, 132), so they are hidden; the picture is clean now (996 × 786 px))
