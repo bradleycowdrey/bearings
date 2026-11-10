@@ -8,7 +8,9 @@ name: Release
 # take hours: this workflow builds and signs the app, submits it to Apple without waiting, and keeps
 # the build as a "pending-release-<tag>" artifact. finish-release.yml checks Apple every 30 minutes
 # and, once Apple accepts, staples the ticket, builds the DMG, checks Gatekeeper and publishes.
-# Without the secrets the app is ad-hoc signed and published right away, as before.
+# Without the secrets the app is ad-hoc signed and published right away, so the download links on
+# bradcowdrey.com/bearings and the README never 404. After publishing, the Android workflow is started
+# so it attaches Bearings.apk to the new release.
 on:
   push:
     branches: [main]
@@ -17,7 +19,12 @@ on:
 
 permissions:
   contents: write
-  actions: read
+  actions: write
+
+# One release run at a time, so two runs never both try to publish the same version.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -36,12 +43,7 @@ jobs:
         run: |
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then TAG="$GITHUB_REF_NAME"; else TAG="v$(tr -d '[:space:]' < VERSION)"; fi
           echo "TAG=$TAG" >> "$GITHUB_ENV"
-          # No public release without a Developer ID: until the signing secrets are added, pushes to main
-          # only build (run this workflow by hand, or push a v* tag, to publish an ad-hoc signed one).
-          if [[ "$HAS_SIGNING_CERT" != "true" && "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "branch" ]]; then
-            echo "::notice::No Developer ID secrets yet, so $TAG isn't published. Add them, or run Release by hand."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          elif gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists; nothing to do. Bump VERSION to release new code."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           elif [[ -n "$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=pending-release-$TAG" -q '.artifacts[]|select(.expired|not)|.id')" ]]; then
@@ -69,6 +71,10 @@ jobs:
           scripts/make-dmg.sh "$TAG"
           cp dist/Bearings-*.dmg dist/Bearings.dmg
           scripts/publish-release.sh "$TAG" "$GITHUB_SHA"
+
+      - name: Attach the Android APK to the new release
+        if: steps.state.outputs.skip != 'true' && env.HAS_SIGNING_CERT != 'true'
+        run: gh workflow run android.yml --repo "$GITHUB_REPOSITORY" --ref main
 
       # Signed path: submit the app to Apple and keep the build until Apple accepts it.
       - name: Submit to Apple for notarization

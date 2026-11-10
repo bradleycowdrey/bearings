@@ -128,3 +128,4 @@ jobs:
           scripts/publish-release.sh "$TAG" "$SHA" signed
           gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID"
           echo "::notice::Published $TAG, signed and notarized."
+          gh workflow run android.yml --repo "$GITHUB_REPOSITORY" --ref main
