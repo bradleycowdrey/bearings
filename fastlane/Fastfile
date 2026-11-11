@@ -124,6 +124,51 @@ platform :ios do
     File.write(File.join(root, "testflight-link.txt"), "#{link}\n") if link
   end
 
+  # Submits the App Store version for App Review: attaches the newest processed build, then creates a
+  # review submission with the version and submits it. Apple's reasons are printed if it refuses (for
+  # example App Privacy not yet answered in App Store Connect). Run only by app-store-submit.yml, by hand.
+  lane :submit_review do |options|
+    login
+    attach_build(options)
+    _, apps = asc(:get, "v1/apps?filter[bundleId]=#{BUNDLE_ID}")
+    app = apps.dig("data", 0, "id")
+    _, versions = asc(:get, "v1/apps/#{app}/appStoreVersions?filter[platform]=IOS&filter[versionString]=#{options[:version]}")
+    version = versions.dig("data", 0)
+    UI.user_error!("No App Store version #{options[:version]}; run the App Store listing workflow first") unless version
+    state = version.dig("attributes", "appStoreState") || version.dig("attributes", "appVersionState")
+    UI.message("Version #{options[:version]} is #{state}")
+    if %w[WAITING_FOR_REVIEW IN_REVIEW PENDING_DEVELOPER_RELEASE READY_FOR_SALE READY_FOR_DISTRIBUTION ACCEPTED].include?(state)
+      UI.success("Already submitted (#{state}); nothing to do")
+      next
+    end
+    _, build = asc(:get, "v1/appStoreVersions/#{version["id"]}/build")
+    UI.user_error!("No build attached to #{options[:version]}") unless build["data"]
+    UI.message("Build attached: #{build.dig("data", "attributes", "version")}")
+
+    _, open = asc(:get, "v1/reviewSubmissions?filter[app]=#{app}&filter[platform]=IOS&filter[state]=READY_FOR_REVIEW")
+    submission = (open["data"] || []).first
+    unless submission
+      code, body = asc(:post, "v1/reviewSubmissions", { data: { type: "reviewSubmissions", attributes: { platform: "IOS" },
+        relationships: { app: { data: { type: "apps", id: app } } } } })
+      report("Review submission", code, body)
+      UI.user_error!("Couldn't create a review submission") unless code.between?(200, 299)
+      submission = body["data"]
+    end
+    _, items = asc(:get, "v1/reviewSubmissions/#{submission["id"]}/items")
+    if (items["data"] || []).empty?
+      code, body = asc(:post, "v1/reviewSubmissionItems", { data: { type: "reviewSubmissionItems", relationships: {
+        reviewSubmission: { data: { type: "reviewSubmissions", id: submission["id"] } },
+        appStoreVersion: { data: { type: "appStoreVersions", id: version["id"] } } } } })
+      report("Add version #{options[:version]} to the submission", code, body)
+      UI.user_error!("Apple refused to add the version (see above)") unless code.between?(200, 299)
+    end
+    code, body = asc(:patch, "v1/reviewSubmissions/#{submission["id"]}", { data: { type: "reviewSubmissions", id: submission["id"], attributes: { submitted: true } } })
+    report("Submit for App Review", code, body)
+    (body["errors"] || []).each { |e| UI.error("#{e["code"]}: #{e["detail"] || e["title"]} #{e.dig("meta", "associatedErrors").to_json if e.dig("meta", "associatedErrors")}") }
+    UI.user_error!("Apple refused the submission (see above)") unless code.between?(200, 299)
+    UI.success("Bearings #{options[:version]} is submitted for App Review")
+  end
+
   # Signs in to App Store Connect with the API key the workflow wrote to fastlane/api_key.json.
   private_lane :login do
     root = File.basename(Dir.pwd) == "fastlane" ? File.dirname(Dir.pwd) : Dir.pwd

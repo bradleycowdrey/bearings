@@ -1,0 +1,29 @@
+name: App Store submit
+
+# Submits the current VERSION for App Review (fastlane lane submit_review): attaches the newest processed
+# build and submits the App Store version. Run by hand only. Secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Submit for App Review
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          gem install fastlane --no-document --silent
+          python3 -c 'import json, os; json.dump({"key_id": os.environ["ASC_KEY_ID"], "issuer_id": os.environ["ASC_ISSUER_ID"], "key": os.environ["ASC_KEY_P8"], "in_house": False}, open("fastlane/api_key.json", "w"))'
+          fastlane submit_review version:"$(tr -d '[:space:]' < VERSION)" 2>&1 | grep -v -i -E "BEGIN PRIVATE|issuer_id|key_id"; rc=${PIPESTATUS[0]}
+          rm -f fastlane/api_key.json; exit $rc
