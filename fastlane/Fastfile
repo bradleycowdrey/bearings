@@ -160,11 +160,12 @@ platform :ios do
         reviewSubmission: { data: { type: "reviewSubmissions", id: submission["id"] } },
         appStoreVersion: { data: { type: "appStoreVersions", id: version["id"] } } } } })
       report("Add version #{options[:version]} to the submission", code, body)
+      explain(body)
       UI.user_error!("Apple refused to add the version (see above)") unless code.between?(200, 299)
     end
     code, body = asc(:patch, "v1/reviewSubmissions/#{submission["id"]}", { data: { type: "reviewSubmissions", id: submission["id"], attributes: { submitted: true } } })
     report("Submit for App Review", code, body)
-    (body["errors"] || []).each { |e| UI.error("#{e["code"]}: #{e["detail"] || e["title"]} #{e.dig("meta", "associatedErrors").to_json if e.dig("meta", "associatedErrors")}") }
+    explain(body)
     UI.user_error!("Apple refused the submission (see above)") unless code.between?(200, 299)
     UI.success("Bearings #{options[:version]} is submitted for App Review")
   end
@@ -201,6 +202,16 @@ platform :ios do
     request.body = body.to_json if body
     response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(request) }
     [response.code.to_i, (JSON.parse(response.body) rescue {})]
+  end
+
+  # Prints every reason Apple gives, including the per-item "associatedErrors" (what's still missing).
+  def explain(body)
+    (body["errors"] || []).each do |e|
+      UI.error("#{e["code"]}: #{e["detail"] || e["title"]}")
+      (e.dig("meta", "associatedErrors") || {}).each do |where, list|
+        Array(list).each { |a| UI.error("  #{where}: #{a["code"]}: #{a["detail"] || a["title"]}") }
+      end
+    end
   end
 
   def report(label, code, body)
