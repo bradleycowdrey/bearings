@@ -74,7 +74,9 @@ jobs:
 
       - name: Attach the Android APK to the new release
         if: steps.state.outputs.skip != 'true' && env.HAS_SIGNING_CERT != 'true'
-        run: gh workflow run android.yml --repo "$GITHUB_REPOSITORY" --ref main
+        run: |
+          gh workflow run android.yml --repo "$GITHUB_REPOSITORY" --ref main
+          gh workflow run ios-sideload.yml --repo "$GITHUB_REPOSITORY" --ref main
 
       # Signed path: submit the app to Apple and keep the build until Apple accepts it.
       - name: Submit to Apple for notarization

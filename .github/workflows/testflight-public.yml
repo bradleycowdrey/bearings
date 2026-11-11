@@ -1,0 +1,42 @@
+name: TestFlight public beta
+
+# Lets anyone install the iPhone app before it's on the App Store: after each TestFlight upload
+# (or on demand) it adds the new build to the external "Public" group, which has a public TestFlight
+# link, and submits it for Beta App Review (fastlane lane public_beta). Apple reviews the first build of
+# a version, usually within a day; after that the link installs it. The link is printed in the run.
+# Secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8.
+on:
+  workflow_run:
+    workflows: [iPhone TestFlight]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-beta:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HAS_KEY: ${{ secrets.ASC_KEY_P8 != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        if: env.HAS_KEY == 'true'
+        with:
+          ruby-version: "3.3"
+      - name: Add the build to the public beta
+        if: env.HAS_KEY == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          gem install fastlane --no-document --silent
+          python3 -c 'import json, os; json.dump({"key_id": os.environ["ASC_KEY_ID"], "issuer_id": os.environ["ASC_ISSUER_ID"], "key": os.environ["ASC_KEY_P8"], "in_house": False}, open("fastlane/api_key.json", "w"))'
+          fastlane public_beta version:"$(tr -d '[:space:]' < VERSION)" 2>&1 | grep -v -i -E "BEGIN PRIVATE|issuer_id|key_id"; rc=${PIPESTATUS[0]}
+          rm -f fastlane/api_key.json
+          if [[ -s testflight-link.txt ]]; then echo "::notice::Public TestFlight link: $(cat testflight-link.txt)"; fi
+          exit $rc

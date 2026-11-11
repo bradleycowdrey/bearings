@@ -30,6 +30,107 @@ platform :ios do
     attach_build(options)
   end
 
+  # Public TestFlight beta, so anyone can install the iPhone app before it's on the App Store: makes
+  # sure there's an external group "Public" with a public link, the beta's description and contact,
+  # adds the newest processed build of this version and submits it for Beta App Review (Apple reviews
+  # the first build of a version; later builds usually go out without waiting). Prints the public link.
+  lane :public_beta do |options|
+    login
+    _, apps = asc(:get, "v1/apps?filter[bundleId]=#{BUNDLE_ID}")
+    app = apps.dig("data", 0, "id")
+    UI.user_error!("No app with bundle ID #{BUNDLE_ID} in App Store Connect") unless app
+    root = File.basename(Dir.pwd) == "fastlane" ? File.dirname(Dir.pwd) : Dir.pwd
+    read = ->(name) { path = File.join(root, "fastlane/metadata/#{name}.txt"); File.exist?(path) ? File.read(path).strip : nil }
+    email = read.call("review_information/email_address")
+
+    # What testers see in TestFlight, and where their feedback goes.
+    description = "Bearings: the compass, where you are, your coordinates and elevation, the sun and moon, and a map, on one screen. Free, no ads, no account."
+    _, locs = asc(:get, "v1/apps/#{app}/betaAppLocalizations")
+    loc = (locs["data"] || []).find { |l| l.dig("attributes", "locale") == "en-US" }
+    attrs = { description: description, feedbackEmail: email, privacyPolicyUrl: read.call("en-US/privacy_url"), marketingUrl: read.call("en-US/marketing_url") }.compact
+    if loc
+      code, body = asc(:patch, "v1/betaAppLocalizations/#{loc["id"]}", { data: { type: "betaAppLocalizations", id: loc["id"], attributes: attrs } })
+    else
+      code, body = asc(:post, "v1/betaAppLocalizations", { data: { type: "betaAppLocalizations", attributes: attrs.merge(locale: "en-US"),
+        relationships: { app: { data: { type: "apps", id: app } } } } })
+    end
+    report("Beta description", code, body)
+
+    # Contact for Beta App Review (same as the App Store review contact). Its id is the app's id.
+    code, body = asc(:patch, "v1/betaAppReviewDetails/#{app}", { data: { type: "betaAppReviewDetails", id: app, attributes: {
+      contactFirstName: read.call("review_information/first_name"), contactLastName: read.call("review_information/last_name"),
+      contactEmail: email, contactPhone: read.call("review_information/phone_number"),
+      demoAccountRequired: false, notes: read.call("review_information/notes") }.compact } })
+    report("Beta review contact", code, body)
+
+    # The external group with a public link (up to 10,000 testers).
+    _, groups = asc(:get, "v1/betaGroups?filter[app]=#{app}&limit=200")
+    group = (groups["data"] || []).find { |g| g.dig("attributes", "name") == "Public" }
+    unless group
+      code, body = asc(:post, "v1/betaGroups", { data: { type: "betaGroups", attributes: { name: "Public",
+        publicLinkEnabled: true, publicLinkLimitEnabled: false, feedbackEnabled: true },
+        relationships: { app: { data: { type: "apps", id: app } } } } })
+      report("Public group", code, body)
+      group = body["data"]
+    end
+    UI.user_error!("Couldn't create the Public group") unless group
+    unless group.dig("attributes", "publicLinkEnabled")
+      code, body = asc(:patch, "v1/betaGroups/#{group["id"]}", { data: { type: "betaGroups", id: group["id"],
+        attributes: { publicLinkEnabled: true, publicLinkLimitEnabled: false } } })
+      report("Public link", code, body)
+      group = body["data"] || group
+    end
+
+    # The newest build of this version, once Apple has processed it (waits up to 40 minutes).
+    build = nil
+    16.times do |i|
+      _, builds = asc(:get, "v1/builds?filter[app]=#{app}&filter[preReleaseVersion.version]=#{options[:version]}&sort=-uploadedDate&limit=1")
+      b = builds.dig("data", 0)
+      state = b && b.dig("attributes", "processingState")
+      if state == "VALID" then build = b; break end
+      UI.message("Build of #{options[:version]}: #{state || "not uploaded yet"}; checking again in 2.5 minutes (#{i + 1}/16)")
+      sleep(150)
+    end
+    UI.user_error!("No processed build of #{options[:version]} yet; upload one with the iPhone TestFlight workflow, then run this again") unless build
+    number = build.dig("attributes", "version")
+
+    # What to test, shown to testers for this build.
+    notes = "Bearings #{options[:version]}. Try the compass outdoors away from metal, the coordinate formats (tap the position tile), marking a spot and the widgets. Send feedback with a screenshot from TestFlight."
+    _, bl = asc(:get, "v1/builds/#{build["id"]}/betaBuildLocalizations")
+    existing = (bl["data"] || []).find { |l| l.dig("attributes", "locale") == "en-US" }
+    if existing
+      code, body = asc(:patch, "v1/betaBuildLocalizations/#{existing["id"]}", { data: { type: "betaBuildLocalizations", id: existing["id"], attributes: { whatsNew: notes } } })
+    else
+      code, body = asc(:post, "v1/betaBuildLocalizations", { data: { type: "betaBuildLocalizations", attributes: { locale: "en-US", whatsNew: notes },
+        relationships: { build: { data: { type: "builds", id: build["id"] } } } } })
+    end
+    report("What to test (build #{number})", code, body)
+
+    code, body = asc(:post, "v1/betaGroups/#{group["id"]}/relationships/builds", { data: [{ type: "builds", id: build["id"] }] })
+    report("Build #{number} added to Public", code, body)
+
+    code, body = asc(:post, "v1/betaAppReviewSubmissions", { data: { type: "betaAppReviewSubmissions",
+      relationships: { build: { data: { type: "builds", id: build["id"] } } } } })
+    if code == 409
+      UI.message("Build #{number} is already submitted or approved for external testing")
+    else
+      report("Build #{number} submitted for Beta App Review", code, body)
+    end
+    _, detail = asc(:get, "v1/builds/#{build["id"]}/buildBetaDetail")
+    UI.message("External testing state: #{detail.dig("data", "attributes", "externalBuildState")}")
+
+    link = group.dig("attributes", "publicLink")
+    UI.success("Public TestFlight link: #{link}")
+    File.write(File.join(root, "testflight-link.txt"), "#{link}\n") if link
+  end
+
+  # Signs in to App Store Connect with the API key the workflow wrote to fastlane/api_key.json.
+  private_lane :login do
+    root = File.basename(Dir.pwd) == "fastlane" ? File.dirname(Dir.pwd) : Dir.pwd
+    key = JSON.parse(File.read(File.join(root, API_KEY)))
+    app_store_connect_api_key(key_id: key["key_id"], issuer_id: key["issuer_id"], key_content: key["key"])
+  end
+
   # Picks the newest processed build of this version for the App Store version, which is also what
   # makes App Store Connect show the app's icon. Choosing a build doesn't submit anything.
   private_lane :attach_build do |options|
