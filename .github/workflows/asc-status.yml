@@ -4,7 +4,7 @@ name: App Store Connect status
 on: workflow_dispatch
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   status:
@@ -18,4 +18,11 @@ jobs:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
           python3 -m pip install --quiet "pyjwt[crypto]"
-          python3 scripts/asc-builds.py
+          ASC_ICONS_DIR="$RUNNER_TEMP/icons" python3 scripts/asc-builds.py
+      - name: Publish the build icons to the ci-asc-icons branch
+        run: |
+          [ -d "$RUNNER_TEMP/icons" ] || exit 0
+          cd "$RUNNER_TEMP/icons"
+          git init -q -b ci-asc-icons && git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Build icons as App Store Connect sees them"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-asc-icons

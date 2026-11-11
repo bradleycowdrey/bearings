@@ -43,3 +43,14 @@ for b in builds["data"]:
     print(f'  {v} ({a.get("version")}): processing={a.get("processingState")} expired={a.get("expired")} '
           f'encryption-answered={a.get("usesNonExemptEncryption") is not None} '
           f'internal={d.get("internalBuildState")} external={d.get("externalBuildState")} uploaded={a.get("uploadedDate")}')
+
+# Each build's icon as App Store Connect sees it (saved to asc-icons/ when ASC_ICONS_DIR is set).
+out = os.environ.get("ASC_ICONS_DIR")
+for b in builds["data"]:
+    tok = (b["attributes"].get("iconAssetToken") or {}).get("templateUrl")
+    print(f'  icon of build {b["attributes"].get("version")}: {tok or "none"}')
+    if out and tok:
+        os.makedirs(out, exist_ok=True)
+        url = tok.replace("{w}", "512").replace("{h}", "512").replace("{f}", "png")
+        with urllib.request.urlopen(url, timeout=30) as r, open(f'{out}/build-{b["attributes"].get("version")}.png', "wb") as f:
+            f.write(r.read())
