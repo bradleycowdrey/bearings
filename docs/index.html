@@ -44,6 +44,7 @@
   .card p { margin: 0 0 14px; color: var(--body); font-size: 15px; }
   .card p:last-child { margin: auto 0 0; }
   .card .note { color: var(--muted); font-size: 14px; }
+  .card .note a { color: inherit; text-decoration: underline; }
   ul.features { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 28px; }
   ul.features li { color: var(--body); font-size: 16px; padding-left: 20px; position: relative; }
   ul.features li::before { content: ""; position: absolute; left: 0; top: 9px; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
@@ -76,7 +77,7 @@
 
   <h2 id="download">Get Bearings.</h2>
   <div class="grid">
-    <div class="card"><div class="k">iPhone and iPad</div><h3>The full compass</h3><p>True north, the level, four layouts, Apple Maps, compass widgets for the Home Screen and elevation widgets for the Lock Screen.</p><p class="note">In beta on TestFlight; the App Store release follows.</p></div>
+    <div class="card"><div class="k">iPhone and iPad</div><h3>The full compass</h3><p>True north, the level, four layouts, Apple Maps, compass widgets for the Home Screen and elevation widgets for the Lock Screen.</p><p><a class="pill" href="https://testflight.apple.com/join/b2g6WgZb">Join the TestFlight beta</a></p><p class="note">Install Apple’s free TestFlight app, then tap the link on your iPhone or iPad. Coming to the App Store. Or sideload <a href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.ipa">Bearings.ipa</a> with AltStore or Sideloadly.</p></div>
     <div class="card"><div class="k">Android</div><h3>The same screen</h3><p>The same four layouts and compass widgets, with OpenStreetMap maps. No Google Play services needed.</p><p><a class="pill" href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.apk">Download the APK</a></p></div>
     <div class="card"><div class="k">Mac</div><h3>Two panes</h3><p>Where you are, the sun and moon, your elevation and a map beside the dial, with compass widgets for the desktop. Macs have no compass, so the dial stays north-up.</p><p><a class="pill" href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.dmg">Download for Mac</a></p></div>
     <div class="card"><div class="k">Web</div><h3>Nothing to install</h3><p>The same screen in your phone’s browser, compass included. Add it to your Home Screen. On a computer it shows your position, the sun and the map.</p><p><a class="pill" href="app.html">Open Bearings</a></p></div>

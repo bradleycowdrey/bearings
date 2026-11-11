@@ -8,6 +8,7 @@ Made by <a href="https://bradcowdrey.com">Bradley Cowdrey · bradcowdrey.com</a>
 
 <p align="center">
   <a href="https://bradcowdrey.com/bearings"><b>Try it in your browser</b></a> ·
+  <a href="https://testflight.apple.com/join/b2g6WgZb"><b>iPhone and iPad (TestFlight beta)</b></a> ·
   <a href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.apk"><b>Android APK</b></a> ·
   <a href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.dmg"><b>Download for Mac</b></a> ·
   <a href="CHANGELOG.md">What's new</a> ·
@@ -36,6 +37,17 @@ Made by <a href="https://bradcowdrey.com">Bradley Cowdrey · bradcowdrey.com</a>
 
 Everything you'd want from a compass app, on one screen: which way you're facing, where you are and
 when, exactly where on the map, how high you are, and where the sun and moon are.
+
+## iPhone and iPad before the App Store
+
+Bearings is on its way to the App Store. Until then:
+
+- **TestFlight (recommended):** install Apple's free [TestFlight](https://apps.apple.com/app/testflight/id899247664)
+  app, then open the [public beta link](https://testflight.apple.com/join/b2g6WgZb) on your iPhone or iPad and tap
+  Install. Updates arrive through TestFlight; each build works for 90 days.
+- **Sideload:** download [Bearings.ipa](https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.ipa)
+  (unsigned) and install it with [AltStore](https://altstore.io) or [Sideloadly](https://sideloadly.io), which
+  sign it with your own Apple ID. With a free Apple ID it has to be refreshed every 7 days.
 
 ## Features
 
