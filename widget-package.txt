@@ -1,0 +1,25 @@
+== entitlements
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>2XV97FZ86G.com.bradcowdrey.bearings</string>
+	</array>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.personal-information.location</key>
+	<true/>
+</dict>
+</plist>
+== extension point
+com.apple.widgetkit-extension
+== places
+-rw-r--r--  1 runner  staff  1497423 Nov 13 19:18 dist/Bearings.app/Contents/PlugIns/BearingsWidget.appex/Contents/Resources/Cities.tsv
+-rw-r--r--  1 runner  staff  1497423 Nov 13 19:18 dist/Bearings.app/Contents/Resources/Cities.tsv
+== pluginkit
+     com.bradcowdrey.bearings.widget(0.0.0-selftest)	C53F3A04-F01C-4C04-84E8-2173F7E6F791	2026-11-13 19:18:32 +0000	/Users/runner/work/bearings/bearings/dist/Bearings.app/Contents/PlugIns/BearingsWidget.appex
+ (1 plug-in)
