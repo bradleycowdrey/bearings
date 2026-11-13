@@ -54,3 +54,8 @@ for b in builds["data"]:
         url = tok.replace("{w}", "512").replace("{h}", "512").replace("{f}", "png")
         with urllib.request.urlopen(url, timeout=30) as r, open(f'{out}/build-{b["attributes"].get("version")}.png', "wb") as f:
             f.write(r.read())
+
+# App Store versions and their review state.
+for v in get(f'/v1/apps/{app["id"]}/appStoreVersions', limit="5").get("data", []):
+    a = v["attributes"]
+    print(f'version {a.get("versionString")}: {a.get("appStoreState") or a.get("appVersionState")} (release: {a.get("releaseType")})')
