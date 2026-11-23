@@ -174,6 +174,15 @@ enum PhoneSelfTest {
             }
         }
 
+        // The widgets for the App Store screenshots (app-store.yml): the store sample itself, Maroon Bells today at
+        // the sample's time, so they agree with the other frames whatever the simulator's location fix is.
+        var storeSnapshot = WidgetSnapshot.sample
+        storeSnapshot.time = Navigator.storeTime()
+        let storeEntry = WidgetTimeline.entries(snapshot: storeSnapshot)[0]
+        for (family, size, name) in sizes {
+            check(render(widget(storeEntry, family, size), to: docs.appendingPathComponent("store-widget-\(name).png")), "\(name) store widget draws")
+        }
+
         let checks = lines.filter { !$0.hasPrefix("INFO") }.count
         let head = failed == 0 ? "ALL PASSED (\(checks) checks)" : "FAILED \(failed) of \(checks) checks"
         try? ([head] + lines).joined(separator: "\n").appending("\n").write(to: docs.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)

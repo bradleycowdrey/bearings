@@ -83,13 +83,14 @@ jobs:
           PHONE="$(pick 'iPhone 1[6-9] Pro Max$')"
           shoot "$PHONE" iphone xl:extraLarge small:small medium:medium large:large map:map
           # The widgets for the iPhone's last frame, drawn by the self-test as in the iPhone workflow (ios.yml),
-          # from a real location fix. Without them the iPhone set has 5 frames.
+          # as the store sample. Without them the iPhone set has 5 frames.
           DOCS="$(xcrun simctl get_app_container "$PHONE" $ID data)/Documents"; mkdir -p "$DOCS"; rm -f "$DOCS/report.txt"
           xcrun simctl launch "$PHONE" $ID --selftest
           for i in $(seq 1 150); do [ -f "$DOCS/report.txt" ] && break; sleep 1; done
           sleep 2
           for W in widget-large widget-lock-rectangular widget-lock-circular; do
-            cp "$DOCS/$W.png" "$RAW/" || echo "::warning::The self-test drew no $W.png, so there is no widgets frame"
+            # store-widget-*: the store sample (Maroon Bells, today at 9:41), so the widgets agree with the other frames.
+            cp "$DOCS/store-$W.png" "$RAW/$W.png" || echo "::warning::The self-test drew no store-$W.png, so there is no widgets frame"
           done
           xcrun simctl terminate "$PHONE" $ID 2>/dev/null || true
           xcrun simctl shutdown "$PHONE" || true
