@@ -23,7 +23,7 @@ const root = path.resolve(__dirname, '..');
 const LOOKS = {
   light: { sky: ['#4A82C0', '#3D74B0', '#14243B'], ring: '#FFFFFF', north: '#E8578A', northShade: '#C93A6C', south: '#FFFFFF', southShade: '#D9E3EF', hub: '#14243B' },
   dark: { sky: ['#1E2836', '#141B26', '#05070B'], ring: '#F2F5FA', north: '#EC5F91', northShade: '#CC4373', south: '#F2F5FA', southShade: '#C4CEDB', hub: '#05070B' },
-  tinted: { sky: ['#000000', '#000000', '#000000'], ring: '#FFFFFF', north: '#8E8E93', northShade: '#727277', south: '#FFFFFF', southShade: '#D6D6D6', hub: '#000000' },
+  tinted: { sky: ['#000000', '#000000', '#000000'], ring: '#FFFFFF', north: '#8E8E8E', northShade: '#727272', south: '#FFFFFF', southShade: '#D6D6D6', hub: '#000000' },
 };
 
 // The glyph in a 1024 box, centred on (512, 512).
