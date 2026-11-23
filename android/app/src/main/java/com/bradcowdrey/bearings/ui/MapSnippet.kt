@@ -2,7 +2,6 @@ package com.bradcowdrey.bearings.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -114,8 +113,8 @@ fun MapSnippet(
     bottomInset: Dp = 0.dp,
     attribution: Boolean = true,
 ) {
-    // A rounded card on black: the tile fill before the map loads, a 1 dp edge over it.
-    BoxWithConstraints(modifier.clip(shape).background(Palette.tileFill)) {
+    // A rounded card on black: the card fill before the map loads; no edge ([edge] is kept for callers, and draws nothing).
+    BoxWithConstraints(modifier.clip(shape).background(Palette.cardFill)) {
         if (fix == null) {
             Text(if (controls) "The map appears once Bearings knows where you are." else "—", style = text(13f, color = secondary()),
                 textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.Center).padding(16.dp))
@@ -164,8 +163,6 @@ fun MapSnippet(
             }
             if (attribution) Attribution(controls, night, bottomInset)
         }
-        // The card's edge, drawn over the map.
-        if (edge) Box(Modifier.matchParentSize().border(Look.stroke, Palette.tileStroke, shape))
     }
 }
 
@@ -188,7 +185,7 @@ private fun MapOverflow(follow: Boolean, night: Boolean, onToggleFollow: () -> U
 }
 
 /**
- * The map's attribution, always visible (C3.4 #8): on a card or sheet one pill, "© OpenStreetMap ⓘ", 8 in from
+ * The map's attribution, always visible (C3.4 #8): on a card or sheet one pill, "© OpenStreetMap ⓘ", 12 in from
  * the bottom-leading corner at 11 sp white on a dark scrim (well over 4.5:1), the whole pill a 48 dp target for
  * the sources; on a tile without the band (the Map tile draws its own), "© OSM" bottom-trailing.
  */
@@ -197,15 +194,16 @@ private fun BoxScope.Attribution(full: Boolean, night: Boolean, bottomInset: Dp)
     val scrim = Color.Black.copy(alpha = 0.6f)
     if (!full) {
         Text("© OSM", style = text(10f, FontWeight.Medium, white(Op.STRONG)),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 8.dp).clip(RoundedCornerShape(4.dp))
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp).clip(RoundedCornerShape(4.dp))
                 .background(scrim).padding(horizontal = 4.dp, vertical = 1.dp)
                 .semantics { contentDescription = "Map data from OpenStreetMap contributors" })
         return
     }
     var open by remember { mutableStateOf(false) }
     val uri = LocalUriHandler.current
-    // A 48 dp high target around a 24 dp pill; nudged down 4 so the pill's edge is 8 from the corner.
-    Box(Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = bottomInset).offset(y = 4.dp)) {
+    // A 48 dp high target around a 24 dp pill; nudged down 4 so the pill's edge is 8 from the bottom, 12 from the side
+    // (clear of the card's 20 corner).
+    Box(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = bottomInset).offset(y = 4.dp)) {
         Box(
             Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = "Show the map's sources") { open = true }
                 .semantics(mergeDescendants = true) { contentDescription = "Map data from OpenStreetMap contributors. Map sources" },

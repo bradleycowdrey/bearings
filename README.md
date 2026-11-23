@@ -150,6 +150,8 @@ Ground elevation: [Open-Meteo](https://open-meteo.com) (CC BY 4.0), Copernicus D
 Places: [GeoNames](https://www.geonames.org) (CC BY 4.0). Sun and moon: after [SunCalc](https://github.com/mourner/suncalc)
 by Vladimir Agafonkin (BSD-2-Clause). Magnetic declination on the web: the World Magnetic Model 2025 (NOAA and BGS).
 Maps on Android and the web: [OpenFreeMap](https://openfreemap.org), © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright),
-drawn with [MapLibre](https://maplibre.org) (BSD). Inter typeface (SIL Open Font License).
+drawn with [MapLibre](https://maplibre.org) (BSD). Inter typeface (SIL Open Font License). The place name is set in
+[Fraunces](https://github.com/undercasetype/Fraunces) by Undercase Type, Phaedra Charles and Flavia Zimbardi (SIL Open
+Font License; the licence is in `Resources/Fonts/Fraunces-LICENSE.txt`).
 
 MIT License © 2026 Bradley Cowdrey

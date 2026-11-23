@@ -24,6 +24,8 @@
     <string>public.app-category.navigation</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>ATSApplicationFontsPath</key>
+    <string>.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSLocationUsageDescription</key>

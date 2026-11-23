@@ -27,6 +27,11 @@ targets:
       - path: Sources/Bearings
       - path: Resources/Cities.tsv
         buildPhase: resources
+      # The place name's typeface and its SIL Open Font License (Info.plist's ATSApplicationFontsPath).
+      - path: Resources/Fonts/Fraunces-SemiBold.ttf
+        buildPhase: resources
+      - path: Resources/Fonts/Fraunces-LICENSE.txt
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: Bearings
@@ -73,6 +78,11 @@ targets:
       - path: Sources/Bearings/Model
       - path: Sources/Bearings/Views
       - path: Resources/Cities.tsv
+        buildPhase: resources
+      # The place name's typeface and its SIL Open Font License (Info.plist's UIAppFonts).
+      - path: Resources/Fonts/Fraunces-SemiBold.ttf
+        buildPhase: resources
+      - path: Resources/Fonts/Fraunces-LICENSE.txt
         buildPhase: resources
       - path: Resources/iOS/Assets.xcassets
       - path: Resources/iOS/PrivacyInfo.xcprivacy

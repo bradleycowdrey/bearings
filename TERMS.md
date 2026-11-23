@@ -344,7 +344,7 @@ The apps include open-source software from other people, each used under its own
 - in Cowdrey.MD: CodeMirror, markdown-it, MathJax, Mermaid, highlight.js, DOMPurify and Lucide;
 - on Android: Kotlin and Google's AndroidX and Jetpack Compose libraries, under the Apache License 2.0;
 - in Bearings for Android and on the web: MapLibre, under the BSD 2-Clause and 3-Clause licences;
-- fonts such as Inter, under the SIL Open Font License.
+- fonts such as Inter and Fraunces, under the SIL Open Font License.
 
 Nothing in these terms limits your rights under those licences.
 

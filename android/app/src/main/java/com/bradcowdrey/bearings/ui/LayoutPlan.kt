@@ -248,7 +248,7 @@ object LayoutPlan {
     const val OWNER_SHARE = 0.40f
     const val LARGE_SHARE = 0.42f
 
-    /** The location bar (owner's mod): 40 high, 4 above and below a 15 sp place on an 18 line and a 12 sp date on a 14 line. */
+    /** The location bar (owner's mod): 40 high, 4 above and below a 17 sp Fraunces place on an 18 line and a 12 sp date on a 14 line. */
     const val LOCATION = 40f
     const val BAR_PAD = 4f
     const val TITLE_LINE = 18f

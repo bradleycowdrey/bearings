@@ -25,7 +25,7 @@ the app they are replaced by the new tokens below, except where this page says t
   | body | 0.85 | text in a card or tile body, the date on the sky card |
   | label | 0.80 | – |
   | sub | 0.70 | a value beside the main one (metres beside feet), the spot pill's details |
-  | caption | 0.60 | captions, details, the subline, the dial's numbers, the heading's point (SW) |
+  | caption | 0.60 | the dial's numbers, the heading's point (SW); captions, details and the subline use the secondary-label grey below |
   | noHeading | 0.55 | the "No heading" words in place of the readout (`Op.noHeading` / `NO_HEADING`) |
   | points | 0.45 | NE, SE, SW, NW on the dial |
   | faint | 0.35 | the dots between parts of a line, disabled text |
@@ -35,22 +35,35 @@ the app they are replaced by the new tokens below, except where this page says t
 
 - **No accent colour inside the app. Highlights are white.** White capsules carry black text. The one
   exception is **north**: the N and its tick on the dial and the N on the widget's rose stay pink
-  `#E04A7A` (`Palette.north`), because the app icon's needle is pink to the north. Pink means north and
-  nothing else. The marked spot, the locked bearing and your position on the map are white.
+  `#E04A7A` (`Palette.north`), because the app icon's needle is pink to the north. Pink means north, and
+  the one thing to do: the Targets card's "turn 12° right" / "turn 12° left" is the same pink at the N's
+  semibold (`Palette.turn`), as it points the way towards the needle ("on bearing" stays white). The marked
+  spot, the locked bearing and your position on the map are white.
+- **Secondary text** (tile captions and second lines, the status line, the ✕): iOS's secondaryLabel in
+  dark, `#EBEBF5` at 60% (`Palette.secondaryLabel`, `secondary()`); at night white at 90%, as before.
 - **Functional colours stay**: the sun `#F5B03C` (`SkyMarks.sun`), the moon cream `#FFF1E5`, the level's
   green `#8FC89A` (`Palette.level`), and warnings in amber `#F2A65A` (`Palette.notice`, the same as `warn`).
 - **The warm brand colours stay outside the app's main screen**: on the Terms screen and in the app
   mark. Since 2.3.0 the Home Screen, desktop and Android widgets are black like the app, with no crimson
   rule, and the icon has no crimson band.
-- **Shapes**: tiles, the Targets card and the map are rounded 16 (the location bar 12) with continuous corners (`Look.radius`), on
-  every platform. Tiles are flat white at 8% with a 1-point edge of white at 12% (`frostedTile()`). They
-  aren't a blur material, so they draw the same in the self-tests' ImageRenderer and on Android. The
+- **The finish: Apple's own** (since the Apple Native finish). Tiles, the Targets card, the map card and
+  the update banner are iOS's grouped cards: flat `#1C1C1E` (secondarySystemGroupedBackground in dark,
+  `Palette.cardFill`) with **no edge** (`groupedCard()`), rounded **20** with continuous corners
+  (`Look.radius`), on every platform. The location bar is rounded **14** (`Look.headerRadius`,
+  `LayoutPlan.cardRadius`), with a 0.5-point highlight along its top and a soft shadow in the sky's own
+  colour. They aren't a blur material, so they draw the same in the self-tests' ImageRenderer and on Android.
+  The dial and the widgets keep the frosted look (white at 8% with a 1-point edge at 12%, `frostedTile()`). The
   only material is behind the map's buttons on Apple devices (`.ultraThinMaterial`, dark). Android uses
   black at 60% there (`Palette.mapControl`).
 - **Type**: SF Pro on Apple devices, Inter on Android (as now; Inter has no Light, so where this page
-  says light, Android uses Normal). Sizes below are at the default text size and scale with the
+  says light, Android uses Normal), the system fonts on the web. One exception: the **place name** in the
+  location bar is **Fraunces SemiBold** (Cowdrey One's title face, as a static 18 pt optical size), 17, on
+  every platform, and nothing else is. It is bundled under the SIL Open Font License:
+  `Resources/Fonts/Fraunces-SemiBold.ttf` (iOS `UIAppFonts`, Mac `ATSApplicationFontsPath`),
+  `android/app/src/main/res/font/fraunces_semibold.ttf`, and on the web `web/fonts/fraunces-semibold.woff2`
+  embedded in the page. If it can't load, the system font stands in. Sizes below are at the default text size and scale with the
   column's `k` (DESIGN.md) as they do now.
-- **Captions**: 11 semibold, uppercase, tracking 0.6, white at 60%, **text only** (no symbol), in tiles,
+- **Captions**: 11 semibold, uppercase, tracking 0.6, secondary-label grey, **text only** (no symbol), in tiles,
   sheets and widgets alike (`CardCaption`). Captions are stored in normal case ("Latitude") and only shown in capitals, so
   VoiceOver and TalkBack still read the tile's own label.
 - **Buttons**: a white capsule with black text (`LookButtonStyle`). The full-width primary is 50 high,
@@ -116,14 +129,15 @@ The gaps are the planner's frozen tokens × k, never widened by spare height (do
    With no compass: "Position, sun and map still work", same style.
 4. **Location bar** (the sky card, slim, and since 2.3.0 the first thing on the screen, above the dial;
    the sizes that follow are the older, taller card's where they differ from docs/LAYOUTS.md §1: 40 high,
-   radius 12, place 15 semibold, date 12, pill 10, 28 circles): full column width, on the sky gradient
-   (`skyCard(altitude:)`'s colours, unchanged), no shadow. Padding 14 leading (16 dp), 4 trailing. White type:
+   radius 14, place 17 Fraunces SemiBold, date 12, Sample 11, 28 circles, the ⋯ circle 12 from the end as
+   the place is 12 from the start): full column width, on the sky gradient (`skyCard(altitude:)`'s colours,
+   unchanged), with a 0.5-point top highlight and a soft shadow in the sky's colour (`barFinish`). Padding 14 leading (16 dp), 4 trailing. White type:
    - Line 1: the full place (`nav.placeTitle`), 17 semibold, line 20 (18 sp; 20 on iPad and Mac), never
      truncated; at k ≥ 1.3 it may wrap.
    - Line 2: "Sun, Nov 1 · 9:41 AM", 13 regular, line 18 (15 on iPad and Mac, at 85%), white at 75%,
-     tabular figures, then the **Sample** pill trailing it: 12 semibold (13 on iPad and Mac) in a 17
-     capsule (20 dp; 19 on iPad and Mac), padding 7, black on `Palette.notice`; at night an outline (black
-     fill, 1.5 white inset, white text, which the night multiply turns red).
+     tabular figures, then the **Sample** capsule trailing it: semibold, amber `Palette.notice` text on
+     the same amber at 20% (`Palette.noticeFill`), a tinted capsule rather than a solid chip; at night an
+     outline (black fill, 1.5 white inset, white text, which the night multiply turns red).
    - Trailing, fixed order on every layout: the sky symbol (22, white at 85%, decorative, in a 32-wide
      slot), then the **map button** (Large and Extra Large; a 24 glyph in a 44 × 44 target, 48 dp; in two
      panes it is hidden but keeps its slot, because a map card is on screen), then **⋯**: Apple
@@ -133,28 +147,28 @@ The gaps are the planner's frozen tokens × k, never widened by spare height (do
      the Mac window's title says Bearings, and Android sets `paneTitle = "Bearings"`.
    - One accessibility element ("Maroon Bells, Colorado, Sunday November 1, 9:41 AM, sample data"), with
      the buttons as separate elements after it.
-5. **Targets card** (only when a lock or a spot exists; only the rows that exist): radius 16,
-   `Palette.tileFill`, a 1-point `Palette.tileStroke` edge, clipped. Rows 44 (48 dp); Extra Large 52 (64 dp);
-   iPad 52; compact under pressure 36 (40 dp). A 1-point white-at-8% hairline between rows.
-   - **Lock row** (always first): fill `Palette.lockFill` `#3D2128` (night: red at about 15% luminance),
-     1-point inset `Palette.lockBorder` `#5A2C38`; top corners 16, or all four if it is the only row. The
-     lock glyph (14 × 16, white at 85%) in a 16 column (18 dp), "Locked 240°" 17 regular, a flexible space,
-     "turn 12° right" 17 semibold, then ✕. Gap 8, padding 14 leading (16 dp), 4 trailing.
+5. **Targets card** (only when a lock or a spot exists; only the rows that exist): radius 20,
+   `Palette.cardFill`, no edge, clipped. Rows 44 (48 dp); Extra Large 52 (64 dp); iPad 52; compact under
+   pressure 36 (40 dp). No rule between the rows: the lock row's maroon over the spot row's grey divides them.
+   - **Lock row** (always first): fill `Palette.lockFill` `#3D2128` (night: red at about 15% luminance), no
+     edge; top corners 20, or all four if it is the only row. The lock glyph (14 × 16, white at 85%) in a
+     16 column (18 dp), "Locked 240°" 17 regular, a flexible space, "turn 12° right" 17 semibold in north's
+     pink (`Palette.turn`), then ✕. Gap 8, padding 14 leading (16 dp), 4 trailing.
    - **Spot row**: the card's own fill; the pin glyph, "Marked spot" 17 regular, "9.2 mi · 46° NE" 17
      semibold tabular, ✕.
-   - ✕: a 14 glyph, white at 60% (Android `Icons.Rounded.Close`), in a 40 frame with a 44 pt / 48 dp hit
-     area, which may overlap the hairline. Night: ✕ and secondary text white at 90%.
+   - ✕: a 14 glyph in secondary-label grey (Android `Icons.Rounded.Close`), in a 40 frame with a 44 pt /
+     48 dp hit area. Night: ✕ and secondary text white at 90%.
    - Type by layout: Small 15 (16 sp); Medium and Large 17; Extra Large 17 (19 sp); iPad 19.
    - Values use non-breaking spaces and never split or end in "…": the leading text scales to 0.85 first;
      only under a 320 column does "Locked 240°" shorten to "240°".
-6. **Tiles**, one component on both ports: `frostedTile()`, radius 16, gutters 8, padding 10 × 12
+6. **Tiles**, one component on both ports: `groupedCard()`, radius 20, gutters 8, padding 10 × 12
    (Large 10 × 10; iPad 12 × 16). The caption sits at the top; the **last baseline of the value block
    sits at the bottom inset** in every tile, so values line up across a row.
-   - Caption: 11 semibold caps, tracking 0.6, line 13 (14 sp), white at 60% (90% at night), text only (13
+   - Caption: 11 semibold caps, tracking 0.6, line 13 (14 sp), secondary-label grey (white at 90% at night), text only (13
      on iPad and Mac).
    - Value: medium, tabular, white (white at 60% when stale): Medium's Position and Sun 15 (line 19),
      Elevation 17; Large's compact tiles 16 (line 20, tracking −0.2), with "AM" at 12 and units at 12, white
-     at 70%; iPad and Mac 22 (line 26). Secondary: 13, line 17 (13 sp, line 18), white at 60% (15 at 70% on
+     at 70%; iPad and Mac 22 (line 26). Secondary: 13, line 17 (13 sp, line 18), secondary-label grey (15 at 70% on
      iPad and Mac).
    - **Small's band** along the map card's foot: 68 high (72 dp), Apple `rgba(12,14,14,0.78)` with a 12
      blur, Android solid `#16191A`, a 1-point `tileStroke` top edge; padding 10 × 12; three columns
@@ -165,10 +179,10 @@ The gaps are the planner's frozen tokens × k, never widened by spare height (do
      the shared formatter: a narrow no-break space before AM/PM, a no-break space after ↑ / ↓. Nothing ever
      ends in "…": text scales to 0.85, then the planner gives way.
    - The tap, long-press, copy and context-menu behaviours are unchanged. Before location is allowed, the
-     ask-for-location tile takes the grid's place, `frostedTile()`, text 13 white at 85%, and "Use My
+     ask-for-location tile takes the grid's place, `groupedCard()`, text 13 white at 85%, and "Use My
      Location" / "Settings" as a compact `LookButtonStyle`.
-7. **Map** (tile, card and sheet), clipped to radius 16 with a 1-point `Palette.tileStroke` edge;
-   `Palette.tileFill` before it loads.
+7. **Map** (tile, card and sheet), clipped to radius 20 with no edge; `Palette.cardFill` before it loads.
+   "MAP" and the attribution sit 12 in from the sides, clear of the corners.
    - The Map tile: the snapshot full bleed (Apple `MKMapSnapshotter` with the user dot; Android the dark
      style, labels at 70%), one 24 bottom scrim (a gradient to black 65%; Android solid black 60%) with an
      11 expand glyph, `MAP` in caption style (white), and "© OpenStreetMap" trailing at 9, white at 60%. One

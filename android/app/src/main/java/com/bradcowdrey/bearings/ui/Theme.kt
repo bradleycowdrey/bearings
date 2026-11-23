@@ -13,9 +13,13 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
@@ -52,14 +56,22 @@ object Palette {
     val screen = Color.Black
     /** A frosted tile on black: white at 8%. */
     val tileFill = Color(0x14FFFFFF)
-    /** The tile's 1 dp edge: white at 12%. */
+    /** The tile's 1 dp edge: white at 12%. The dial and the widgets keep this frosted look. */
     val tileStroke = Color(0x1FFFFFFF)
+    /** The app's cards (tiles, Targets, the map card): iOS's secondarySystemGroupedBackground in dark, #1C1C1E, no edge. */
+    val cardFill = Color(0xFF1C1C1E)
+    /** Captions and second lines: iOS's secondaryLabel in dark, #EBEBF5 at 60%. */
+    val secondaryLabel = Color(0x99EBEBF5)
+    /** The Targets card's "turn 12° right": the dial's N, the same pink at the same semibold. */
+    val turn = accent
     /** A choice that is off, or a quiet round button (the ⋯ menu): white at 12%. */
     val chipOff = Color(0x1FFFFFFF)
-    /** North on the dial and the widget's rose, as on the icon: the one place pink stays inside the app. */
+    /** North on the dial and the widget's rose, as on the icon (and [turn], which points towards it). */
     val north = accent
     /** Warnings and the Sample badge (Two Degrees' notice amber, the same as warn). */
     val notice = warn
+    /** The Sample capsule's fill: the notice amber at 20%, under amber text. */
+    val noticeFill = Color(0x33F2A65A)
     /** Switches, as in Two Degrees and Meridian. */
     val switchOn = Color(0xFF30D158)
     /** A sky card before there is a location. */
@@ -68,9 +80,8 @@ object Palette {
     val menu = Color(0xFF1E1E22)
     /** Behind the map's round buttons and speed chip (Android has no blur): black at 60%. */
     val mapControl = Color(0x99000000)
-    /** The lock row (C3.4 #7): maroon, with a 1 dp edge; red through night mode's multiply. */
+    /** The lock row (C3.4 #7): maroon, no edge; red through night mode's multiply. */
     val lockFill = Color(0xFF3D2128)
-    val lockStroke = Color(0xFF5A2C38)
     /** Small's band along the map card's bottom (Concept A, A.3): solid, as Android has no blur. */
     val band = Color(0xFF16191A)
     /** The speed chip on a map tile (Concept A, A.2). */
@@ -103,9 +114,9 @@ object Op {
 /** True while night mode's red multiply is on, for colours that must stay legible through it. */
 val LocalNight = compositionLocalOf { false }
 
-/** Secondary text: white at 60% by day, at 90% at night (so it stays 4.5:1 or better through the red multiply). */
+/** Secondary text: secondaryLabel grey by day, white at 90% at night (so it stays 4.5:1 or better through the red multiply). */
 @Composable
-fun secondary(): Color = white(if (LocalNight.current) Op.NIGHT_SECONDARY else Op.CAPTION)
+fun secondary(): Color = if (LocalNight.current) white(Op.NIGHT_SECONDARY) else Palette.secondaryLabel
 
 /** Header line 2: white at 75% by day, at 90% at night. */
 @Composable
@@ -126,7 +137,8 @@ fun white(alpha: Float): Color = Color.White.copy(alpha = alpha)
 
 /** Sizes shared by every screen, as Look on Apple. */
 object Look {
-    val radius = 16.dp
+    /** The app's one card radius (tiles, Targets, the map card), as iOS's grouped cards. The widgets keep their own. */
+    val radius = 20.dp
     val padding = 14.dp
     val paddingV = 12.dp
     val skyPadding = 14.dp
@@ -139,7 +151,7 @@ object Look {
     const val TITLE_SIZE = 34f
     const val CAPTION_SIZE = 12f
     const val VALUE_SIZE = 20f
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(20.dp)
 
     // The tile component (docs/REFINE.md §3.2), shared with the widgets (which keep 10 sp captions for their size).
     const val TILE_CAPTION = 11f
@@ -154,7 +166,7 @@ object Look {
     const val WIDGET_CAPTION = 10f
     val tilePaddingH = 12.dp
     val tilePaddingV = 10.dp
-    /** The header bar's corners. */
+    /** The location bar's corners: 14, inside the cards' 20. */
     val headerShape = RoundedCornerShape(14.dp)
     /** Values may shrink this far before they wrap; they never ellipsize. */
     const val MIN_TEXT_SCALE = 0.85f
@@ -209,20 +221,41 @@ object SkyTone {
     }
 }
 
-/** A frosted tile: white at 8% with a 1 dp edge at 12%, rounded 16. Put it before click modifiers so ripples stay rounded. */
+/** One of the app's cards: #1C1C1E, no edge, rounded 20. Put it before click modifiers so ripples stay rounded. */
+fun Modifier.groupedCard(shape: Shape = Look.shape): Modifier =
+    this.clip(shape).background(Palette.cardFill)
+
+/** A frosted tile: white at 8% with a 1 dp edge at 12%, rounded 20. The Details sheet keeps it, on the menu grey (#1E1E22) where #1C1C1E would not show. */
 fun Modifier.frostedTile(shape: Shape = Look.shape): Modifier =
     this.clip(shape).background(Palette.tileFill).border(Look.stroke, Palette.tileStroke, shape)
 
-/** A sky card: the sky for the sun's altitude, rounded 16. White type on it. */
+/**
+ * The location bar's finish (before its sky background): a soft shadow in the sky's own colour under it, and a 0.5 dp
+ * highlight along its top edge, drawn over the sky.
+ */
+fun Modifier.barFinish(altitude: Double?, shape: Shape = Look.headerShape): Modifier {
+    val sky = SkyTone.colors(altitude).first
+    return this
+        // Android scales a shadow's colour by the theme's shadow alpha (about 20% for the spot), so the sky goes in whole.
+        .shadow(8.dp, shape, clip = false, ambientColor = sky, spotColor = sky)
+        .drawWithContent {
+            drawContent()
+            val outline = shape.createOutline(size, layoutDirection, this)
+            drawOutline(outline, Brush.verticalGradient(0f to Color.White.copy(alpha = 0.22f), 0.25f to Color.Transparent),
+                style = Stroke(0.5.dp.toPx()))
+        }
+}
+
+/** A sky card: the sky for the sun's altitude, rounded as [shape] (20 by default). White type on it. */
 fun Modifier.skyCard(altitude: Double?, shape: Shape = Look.shape): Modifier =
     this.clip(shape).background(SkyTone.brush(altitude))
 
-/** A tile's caption, as in Two Degrees: a small icon and the title in capitals, white at 60%. Hidden from TalkBack (the tile speaks for itself). */
+/** A tile's caption, as in Two Degrees: a small icon and the title in capitals, in secondary grey. Hidden from TalkBack (the tile speaks for itself). */
 @Composable
 fun CardCaption(title: String, icon: ImageVector?, size: Float = Look.CAPTION_SIZE, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        if (icon != null) Icon(icon, contentDescription = null, tint = white(Op.CAPTION), modifier = Modifier.size((size + 2f).dp))
-        Text(title.uppercase(), style = text(size, FontWeight.SemiBold, white(Op.CAPTION)).copy(letterSpacing = 0.3.sp), maxLines = 1)
+        if (icon != null) Icon(icon, contentDescription = null, tint = secondary(), modifier = Modifier.size((size + 2f).dp))
+        Text(title.uppercase(), style = text(size, FontWeight.SemiBold, secondary()).copy(letterSpacing = 0.3.sp), maxLines = 1)
     }
 }
 
@@ -235,6 +268,12 @@ val Inter = FontFamily(
     Font(R.font.inter_medium, FontWeight.Medium),
     Font(R.font.inter_semibold, FontWeight.SemiBold),
 )
+
+/**
+ * The place name in the location bar, and only there: Fraunces SemiBold (res/font, SIL Open Font License,
+ * android/FRAUNCES-LICENSE.txt), as Cowdrey One sets its titles. The same face as the iPhone, iPad, Mac and web.
+ */
+val Fraunces = FontFamily(Font(R.font.fraunces_semibold, FontWeight.SemiBold))
 
 fun text(size: Float, weight: FontWeight = FontWeight.Normal, color: Color = Color.White) =
     TextStyle(fontFamily = Inter, fontSize = size.sp, fontWeight = weight, color = color, letterSpacing = (-0.01 * size).sp)

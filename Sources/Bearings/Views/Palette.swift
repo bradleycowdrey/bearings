@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// bradcowdrey.com colours (warm near-black, cream, crimson) and the Two Degrees look the app wears inside
-/// (docs/LOOK.md): black, white type in steps of opacity, sky cards and frosted tiles. The warm colours stay
-/// on the widgets, the Terms screen and the app mark; inside the app the highlights are white, and pink means
-/// north and nothing else. Shared with the widget extensions, so this file needs only SwiftUI and Core/Sky.swift.
+/// (docs/LOOK.md): black, white type in steps of opacity, sky cards, and Apple's own grouped cards. The warm
+/// colours stay on the widgets, the Terms screen and the app mark; inside the app the highlights are white, and
+/// pink means north: on the dial, and in the Targets card the one thing to do ("turn 12° right"), towards it.
+/// Shared with the widget extensions, so this file needs only SwiftUI and Core/Sky.swift.
 enum Palette {
     static let bg = Color(red: 0x1A / 255, green: 0x18 / 255, blue: 0x16 / 255)
     static let tile = Color(red: 0x23 / 255, green: 0x20 / 255, blue: 0x1D / 255)
@@ -37,12 +38,22 @@ enum Palette {
     static let tileFill = Color.white.opacity(Op.tile)
     /// The tile's 1 pt edge: white at 12%.
     static let tileStroke = Color.white.opacity(Op.stroke)
+    /// The app's cards (the tiles, the Targets card, the map card): iOS's secondarySystemGroupedBackground in
+    /// dark (#1C1C1E), with no edge. Flat, not the dynamic system colour, so ImageRenderer, the Mac and Android
+    /// draw the same. The widgets and the dial keep the frosted fill above.
+    static let cardFill = rgb(0x1C1C1E)
+    /// Captions and second lines: UIKit's secondaryLabel in dark, #EBEBF5 at 60%.
+    static let secondaryLabel = Color(.sRGB, red: 235 / 255, green: 235 / 255, blue: 245 / 255, opacity: 0.6)
+    /// The Targets card's "turn 12° right": the dial's N, the same pink at the same semibold.
+    static let turn = accent
     /// A choice that is off, or a quiet round button: white at 12%.
     static let chipOff = Color.white.opacity(Op.fill)
-    /// North on the dial and on the widget's rose, as on the app icon: the one place pink stays inside the app.
+    /// North on the dial and on the widget's rose, as on the app icon (and `turn`, which points towards it).
     static let north = accent
     /// Warnings ("Magnet or metal nearby") and the Sample badge: Two Degrees' notice amber (the same as `warn`).
     static let notice = warn
+    /// The Sample capsule's fill: the notice amber at 20%, under amber text.
+    static let noticeFill = warn.opacity(0.2)
     /// Switches (white on white would hide the knob), as in Two Degrees and Meridian.
     static let switchOn = rgb(0x30D158)
     /// A sky card before there is a location to work out the sun for (Two Degrees' card with no forecast).
@@ -96,10 +107,9 @@ enum Palette {
 
     // MARK: The lock row (docs/REFINE.md C3.4 #7, the same on both ports)
 
-    /// The lock row's fill, #3D2128 (night mode's red tint takes it to a dark red of about 15% luminance).
+    /// The lock row's fill, #3D2128, with no edge (night mode's red tint takes it to a dark red of about 15%
+    /// luminance).
     static let lockFill = rgb(0x3D2128)
-    /// The lock row's 1 pt border, #5A2C38.
-    static let lockBorder = rgb(0x5A2C38)
 
     // MARK: Night (docs/REFINE.md §4.3)
 
@@ -107,10 +117,11 @@ enum Palette {
     static let nightRGB: (red: Double, green: Double, blue: Double) = (1, 0.18, 0.12)
     static let nightTint = Color(red: nightRGB.red, green: nightRGB.green, blue: nightRGB.blue)
     /// Secondary text's white at night: 0.9, which the tint turns into about #E62A1C (4.7:1 on black;
-    /// at least #E03020 is required). By day it stays white at 60%.
+    /// at least #E03020 is required). By day secondary text is `secondaryLabel`.
     static let nightSecondary = 0.9
-    /// Secondary text (tile captions and second lines, the status line): white at 60%, or 90% at night.
-    static func secondary(night: Bool) -> Color { Color.white.opacity(night ? nightSecondary : Op.caption) }
+    /// Secondary text (tile captions and second lines, the status line): secondaryLabel grey, or white at 90%
+    /// at night.
+    static func secondary(night: Bool) -> Color { night ? Color.white.opacity(nightSecondary) : secondaryLabel }
     /// The WCAG contrast of night secondary text on black, for the self-tests (it must be 4.5 or more).
     static func nightSecondaryContrast() -> Double {
         func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
@@ -122,8 +133,9 @@ enum Palette {
 
 /// Sizes shared by every screen (DESIGN.md's grid, in Two Degrees' shapes). Points on Apple, dp on Android.
 enum Look {
-    /// Tiles, sky cards, the map and the dial's surroundings: Two Degrees' 16 with continuous corners.
-    static let radius: CGFloat = 16
+    /// The app's one card radius (tiles, the Targets card, the map), continuous corners: 20, as iOS's grouped
+    /// cards. The location bar is 14 (`headerRadius`); the widgets keep their own.
+    static let radius: CGFloat = 20
     /// Inside a tile: 14 across, 12 down (DESIGN.md's tile padding).
     static let padding: CGFloat = 14
     static let paddingV: CGFloat = 12
@@ -170,7 +182,10 @@ enum Look {
     /// The widgets keep 10 pt captions because of their size.
     static let widgetCaptionSize: CGFloat = 10
     /// The location bar's corners (the slim 40 pt bar at the top; LayoutPlan.cardRadius).
-    static let headerRadius: CGFloat = 12
+    static let headerRadius: CGFloat = 14
+    /// The place name in the location bar, and only there: Fraunces SemiBold (Resources/Fonts, SIL Open Font
+    /// License), as Cowdrey One sets its titles (MainView.placeFont).
+    static let placeFontName = "Fraunces-SemiBold"
 
     /// "Last Quarter" → "Last quarter", as the Moon tile and the widgets write it.
     static func phaseName(_ phase: Sky.Phase) -> String {
@@ -349,6 +364,25 @@ struct LookButtonStyle: ButtonStyle {
 }
 
 extension View {
+    /// One of the app's cards: #1C1C1E, no edge, rounded 20 (continuous).
+    func groupedCard(radius: CGFloat = Look.radius) -> some View {
+        background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Palette.cardFill))
+    }
+
+    /// The location bar's finish over its sky: a 0.5 pt highlight along the top edge and a soft shadow in the
+    /// sky's own colour (at 20%, so what it lights beside the bar stays under the self-tests' ink threshold and
+    /// the bar still measures 40).
+    func barFinish(altitude: Double?, radius: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        return self
+            .overlay(shape.strokeBorder(LinearGradient(colors: [Color.white.opacity(0.22), Color.white.opacity(0)],
+                                                       startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.25)),
+                                        lineWidth: 0.5)
+                .allowsHitTesting(false))
+            .background(shape.fill(SkyTone.colors(altitude: altitude).top)
+                .shadow(color: SkyTone.colors(altitude: altitude).top.opacity(0.2), radius: 10, y: 5))
+    }
+
     /// A frosted tile: white at 8% with a 1 pt edge at 12%, rounded 16 (continuous).
     func frostedTile(radius: CGFloat = Look.radius) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
