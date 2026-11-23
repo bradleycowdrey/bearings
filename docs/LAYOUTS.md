@@ -18,8 +18,8 @@ One fixed screen (only accessibility text sizes scroll), top to bottom:
 
 - The **location bar** (the owner's mod: the blue sky card back at the top, slim) is first, at **safe top +
   8** (iPhone 16 Pro: 70; Android: status inset + 8 dp; Mac: 28 + 8 = 36). It is **40 pt / 40 dp** high
-  (× text size), radius 12: the place (15 semibold) over the date · time (12, white 75%) with the Sample pill
-  (10) inline, left-aligned 12 in; trailing the sun/moon glyph (16), the map button in Large and Extra Large,
+  (× text size), radius 14: the place (17 Fraunces SemiBold) over the date · time (12, white 75%) with the
+  Sample capsule (11) inline, left-aligned 12 in; trailing the sun/moon glyph (16), the map button in Large and Extra Large,
   and **⋯**, both 28 circles with 44 × 44 pt / 48 dp hit areas that reach past the bar.
 - The **dial's top is 12 under the bar** (iPhone 16 Pro: 122). The stack ends at the safe bottom
   (home-indicator inset; else 16; Android nav inset + 8).

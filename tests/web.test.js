@@ -103,7 +103,11 @@ const DENVER = { latitude: 39.7392, longitude: -104.9903, accuracy: 6 };
   check(after !== undefined && built.includes(before) && built.includes(after) && built.includes(read('web/core.js')), 'docs/app.html is the build of web/app.html and web/core.js');
   check(!fs.existsSync(path.join(__dirname, '../web/site.html')) || read('web/site.html') === read('docs/index.html'), 'docs/index.html is the build of web/site.html');
   check(!/#990F3D|crimson/i.test(read('web/app.html')) && !/#990F3D|crimson/i.test(read('docs/index.html')), 'no crimson in the web app or the product page');
-  check(!/fonts\.googleapis|Inter,/.test(read('web/app.html')), 'the web app uses the system font stack, no web fonts');
+  // System fonts, except the place name in Fraunces, embedded (no font is fetched) from web/fonts/, its one source.
+  const app = read('web/app.html'), faces = app.match(/@font-face\s*\{[^}]*\}/g) || [];
+  const embedded = fs.readFileSync(path.join(__dirname, '../web/fonts/fraunces-semibold.woff2')).toString('base64');
+  check(!/fonts\.googleapis|Inter,/.test(app) && faces.length === 1 && faces[0].includes(`base64,${embedded}"`) && (app.match(/var\(--serif\)/g) || []).length === 1
+    && /\.where h1 \{[^}]*var\(--serif\)/.test(app), 'the web app uses the system fonts, and Fraunces (embedded from web/fonts/) only for the place name');
 }
 
 /** A screenshot's pixels: Chromium writes 8-bit RGB or RGBA, not interlaced, which is all this reads. */

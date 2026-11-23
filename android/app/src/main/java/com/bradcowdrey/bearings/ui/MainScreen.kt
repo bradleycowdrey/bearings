@@ -485,15 +485,17 @@ private fun Modifier.scrollCue(state: ScrollState, cue: androidx.compose.runtime
 private const val LOCATION_FIXED = 12f + 8f + 24f + 48f + 2f
 /** A button's slot in the bar: 48 wide, its 28 circle centred, its 48 × 48 touch area overhanging the 40 bar. */
 private const val BAR_BUTTON_SLOT = 48f
-/** The bar's corners (the owner's mod: radius 12). */
-private val BAR_SHAPE = RoundedCornerShape(12.dp)
+/** The bar's corners: 14, inside the cards' 20 (Look.headerShape). */
+private val BAR_SHAPE = Look.headerShape
 
-@Composable private fun titleStyle(): TextStyle = text(15f, FontWeight.SemiBold).copy(lineHeight = LayoutPlan.TITLE_LINE.sp)
+/** The place: 17 Fraunces SemiBold on the planner's 18 line (the bar stays 40). */
+@Composable private fun titleStyle(): TextStyle =
+    TextStyle(fontFamily = Fraunces, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White, lineHeight = LayoutPlan.TITLE_LINE.sp)
 @Composable private fun dateStyle(): TextStyle = text(12f, color = headerSecondary()).copy(lineHeight = LayoutPlan.DATE_LINE.sp, fontFeatureSettings = "tnum")
-@Composable private fun pillStyle(): TextStyle = text(10f, FontWeight.SemiBold).copy(lineHeight = 12.sp)
+@Composable private fun pillStyle(): TextStyle = text(11f, FontWeight.SemiBold).copy(lineHeight = 12.sp)
 @Composable private fun statusStyle(): TextStyle = text(13f, color = secondary()).copy(lineHeight = 18.sp)
 
-/** The Sample pill's width in px: "Sample" at 10 semibold and 6 each side. */
+/** The Sample capsule's width in px: "Sample" at 11 semibold and 6 each side. */
 @Composable
 private fun pillWidth(measurer: TextMeasurer): Float {
     val style = pillStyle()
@@ -503,11 +505,11 @@ private fun pillWidth(measurer: TextMeasurer): Float {
 
 /**
  * The location bar (A.2 with the owner's mod): first on the screen in every layout, 8 under the status bar (full
- * width in two panes), 40 high with radius 12 on the sky: the whole place name, "Maroon Bells, Colorado" at 15
- * semibold (wrapped to a second line rather than shortened or cut), over "Sun, Nov 1 · 9:41 AM" at 12, white 75%,
- * and the Sample pill (10) trailing it; then, at fixed places at the trailing end, the sky's 16 symbol, the map
- * button (Large and Extra Large; its slot kept but empty in two panes, where a map card shows the map) and the ⋯
- * menu, both 28 circles whose 48 × 48 touch areas overhang the bar. Read as one heading, the buttons after it. The
+ * width in two panes), 40 high with radius 14 on the sky, a 0.5 dp highlight along its top and a soft shadow in the
+ * sky's colour: the whole place name, "Maroon Bells, Colorado" in 17 Fraunces SemiBold (wrapped to a second line rather
+ * than shortened or cut), over "Sun, Nov 1 · 9:41 AM" at 12, white 75%, and the Sample capsule (11) trailing it; then,
+ * at fixed places at the trailing end, the sky's 16 symbol, the map button (Large and Extra Large; its slot kept but
+ * empty in two panes, where a map card shows the map) and the ⋯ menu, both 28 circles whose 48 × 48 touch areas overhang the bar. Read as one heading, the buttons after it. The
  * time is never cut: the date shortens to "Nov 1", then line 2 wraps at the "·". At larger text the bar grows to fit.
  * Only at accessibility sizes does the pill move up to line 1.
  */
@@ -519,7 +521,8 @@ private fun LocationCard(nav: Navigator, plan: Plan, a: Actions, wrap: Boolean, 
     Row(
         // In the list the bar takes what its wrapped lines need (the planner's figure is only a minimum there). The
         // sky is drawn, not clipped, so the buttons' 48 touch areas can reach past the bar's 40.
-        modifier.heightIn(min = plan.location.dp).background(SkyTone.brush(sun?.altitude), BAR_SHAPE).padding(start = 12.dp, end = 2.dp),
+        modifier.heightIn(min = plan.location.dp).barFinish(sun?.altitude).background(SkyTone.brush(sun?.altitude), BAR_SHAPE)
+            .padding(start = 12.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
@@ -585,15 +588,15 @@ private fun DateTimeLines(nav: Navigator, modifier: Modifier) {
 }
 
 /**
- * The Sample pill (A.2, owner's mod): 10 semibold in a 14 high capsule, 6 each side; amber with black text by day, and at night
- * a black capsule with a white outline and white text (red through the screen's multiply), never red on red.
+ * The Sample capsule (A.2, owner's mod): 11 semibold in a 14 high capsule, 6 each side; amber text on amber at 20% by day,
+ * and at night a black capsule with a white outline and white text (red through the screen's multiply), never red on red.
  */
 @Composable
 private fun SampleBadge(night: Boolean) {
     val shape = CircleShape
     val m = if (night) Modifier.clip(shape).background(Color.Black).border(1.5.dp, Color.White, shape)
-        else Modifier.clip(shape).background(Palette.notice)
-    Text("Sample", style = pillStyle().copy(color = if (night) Color.White else Color.Black), maxLines = 1,
+        else Modifier.clip(shape).background(Palette.noticeFill)
+    Text("Sample", style = pillStyle().copy(color = if (night) Color.White else Palette.notice), maxLines = 1,
         modifier = m.heightIn(min = 14.dp).padding(horizontal = 6.dp, vertical = 1.dp))
 }
 
@@ -964,10 +967,11 @@ private fun targetsSize(plan: Plan): Float = when {
 
 /**
  * The Targets card (A.2): one card, only when a bearing is locked or a spot is marked, with only the rows that
- * exist, each [Plan.targetsRowHeight] high. The lock row comes first, on the maroon tint (#3D2128, a 1 dp #5A2C38
- * edge; red at night through the multiply), its top corners rounded (all four when it is alone): the lock glyph,
- * "Locked 240°" leading and "turn 12° right" trailing in semibold, ✕. A 1 dp hairline (white 8%), then the spot row
- * on the card's own fill: the pin, "Marked spot", "9.2 mi · 46° NE", ✕. In the list the cue drops to line 2.
+ * exist, each [Plan.targetsRowHeight] high, on the card fill (#1C1C1E) with no edge. The lock row comes first, on the
+ * maroon tint (#3D2128; red at night through the multiply), its top corners rounded (all four when it is alone): the
+ * lock glyph, "Locked 240°" leading and "turn 12° right" trailing in semibold north pink, ✕. Then the spot row on the
+ * card's own fill, with no rule between (the change of fill divides them): the pin, "Marked spot", "9.2 mi · 46° NE",
+ * ✕. In the list the cue drops to line 2.
  */
 @Composable
 private fun TargetsCard(nav: Navigator, plan: Plan, noCompass: Boolean, modifier: Modifier) {
@@ -976,14 +980,14 @@ private fun TargetsCard(nav: Navigator, plan: Plan, noCompass: Boolean, modifier
     val size = targetsSize(plan)
     val twoLines = plan.list
     val shape = Look.shape
-    Column(modifier.clip(shape).background(Palette.tileFill).border(Look.stroke, Palette.tileStroke, shape)) {
+    Column(modifier.groupedCard(shape)) {
         if (locked) {
             val lockShape = if (spot) RoundedCornerShape(topStart = Look.radius, topEnd = Look.radius) else shape
-            Box(Modifier.fillMaxWidth().clip(lockShape).background(Palette.lockFill).border(Look.stroke, Palette.lockStroke, lockShape)) {
+            Box(Modifier.fillMaxWidth().clip(lockShape).background(Palette.lockFill)) {
                 LockLine(nav, plan, size, twoLines)
             }
         }
-        if (spot) SpotLine(nav, plan, size, twoLines, hairline = locked)
+        if (spot) SpotLine(nav, plan, size, twoLines)
     }
 }
 
@@ -1009,7 +1013,9 @@ private fun LockLine(nav: Navigator, plan: Plan, size: Float, twoLines: Boolean)
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RowGlyph(Icons.Filled.Lock)
-        TwoColumns(lead, cue, size, twoLines, Modifier.weight(1f), shortLead = TextFit.shortLock(full))
+        // "turn 12° right" is the one thing to do: north's pink. "on bearing" stays white.
+        TwoColumns(lead, cue, size, twoLines, Modifier.weight(1f), shortLead = TextFit.shortLock(full),
+            trailColor = if (cue?.startsWith("turn") == true) Palette.turn else Color.White)
         CloseButton("Clear lock") { nav.lock = null }
     }
 }
@@ -1031,9 +1037,10 @@ private fun RowGlyph(icon: ImageVector) {
  * (the list), [trail] goes under [lead], 3 smaller.
  */
 @Composable
-private fun TwoColumns(lead: String, trail: String?, size: Float, twoLines: Boolean, modifier: Modifier, shortLead: String? = null) {
+private fun TwoColumns(lead: String, trail: String?, size: Float, twoLines: Boolean, modifier: Modifier, shortLead: String? = null,
+                       trailColor: Color = Color.White) {
     val leadStyle = text(size).copy(lineHeight = (size + 5f).sp, fontFeatureSettings = "tnum")
-    val trailStyle = text(if (twoLines) size - 3f else size, FontWeight.SemiBold).copy(lineHeight = (size + 5f).sp, fontFeatureSettings = "tnum")
+    val trailStyle = text(if (twoLines) size - 3f else size, FontWeight.SemiBold, trailColor).copy(lineHeight = (size + 5f).sp, fontFeatureSettings = "tnum")
     if (twoLines || trail == null) {
         Column(modifier.padding(vertical = 6.dp)) {
             Text(lead, style = leadStyle)
@@ -1069,8 +1076,8 @@ private fun TwoColumns(lead: String, trail: String?, size: Float, twoLines: Bool
 }
 
 /**
- * ✕: a 20 dp rounded glyph at white 70% (90% at night), centred in a 48 dp target 4 in from the row's trailing edge.
- * The target may overlap the hairline.
+ * ✕: a 20 dp rounded glyph in secondary grey (white 90% at night), centred in a 48 dp target 4 in from the row's
+ * trailing edge.
  */
 @Composable
 private fun CloseButton(label: String, target: Dp = 48.dp, onClick: () -> Unit) {
@@ -1080,7 +1087,7 @@ private fun CloseButton(label: String, target: Dp = 48.dp, onClick: () -> Unit) 
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Rounded.Close, null, tint = white(if (night) Op.NIGHT_SECONDARY else Op.SUB), modifier = Modifier.size(20.dp))
+        Icon(Icons.Rounded.Close, null, tint = if (night) white(Op.NIGHT_SECONDARY) else Palette.secondaryLabel, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -1092,17 +1099,12 @@ private fun spotValue(label: String): String = label.split(" · ").joinToString(
 
 /** The spot row: the pin, "Marked spot", "9.2 mi · 46° NE", ✕; tapping it opens Lock to Spot and Clear Marked Spot. */
 @Composable
-private fun SpotLine(nav: Navigator, plan: Plan, type: Float, twoLines: Boolean, hairline: Boolean) {
+private fun SpotLine(nav: Navigator, plan: Plan, type: Float, twoLines: Boolean) {
     val label = nav.markText ?: return
     var open by remember { mutableStateOf(false) }
     val night = LocalNight.current
     val value = spotValue(label)
-    Box(
-        Modifier.fillMaxWidth().drawWithContent {
-            drawContent()
-            if (hairline) drawRect(white(Op.TILE), size = Size(size.width, 1.dp.toPx()))
-        },
-    ) {
+    Box(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().targetsRow(plan)
                 .clickable(role = Role.Button, onClickLabel = "Show what you can do with the marked spot") { open = true }
@@ -1253,7 +1255,7 @@ private fun TileRow(row: TileRowPlan, total: Float, minHeight: Float, mapIndex: 
 }
 
 /**
- * One tile (A.2): radius 16, the tile fill and a 1 dp edge; the caption (caps, tracking 0.6, secondary, text only)
+ * One tile (A.2): radius 20 on the card fill (#1C1C1E), no edge; the caption (caps, tracking 0.6, secondary, text only)
  * at the top inset and the value block with its last baseline at the bottom inset, so a grown tile is never half
  * empty at the bottom. With [listRow] (the scrolling list) the caption leads and the value block trails; with [stacked]
  * too, the value block goes under the caption at the tile's full width, still trailing. TalkBack reads it as one
@@ -1263,7 +1265,7 @@ private fun TileRow(row: TileRowPlan, total: Float, minHeight: Float, mapIndex: 
 private fun Tile(caption: @Composable () -> Unit, spoken: String, r: Ramp, click: Modifier = Modifier, listRow: Boolean = false,
                  stacked: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     // Clipped before the click, so the ripple keeps the rounded corners.
-    val base = Modifier.fillMaxSize().clip(Look.shape).then(click).frostedTile()
+    val base = Modifier.fillMaxSize().clip(Look.shape).then(click).groupedCard()
         .semantics(mergeDescendants = true) { contentDescription = spoken }
         .padding(horizontal = r.padH, vertical = r.padV)
     if (listRow && stacked) {
@@ -1678,8 +1680,9 @@ private fun MapTile(nav: Navigator, a: Actions, speedChip: Boolean = false, scri
             onToggleFollow = {}, onOpen = a.openMap, modifier = Modifier.fillMaxSize(), controls = false, attribution = false,
         )
         Row(
+            // 12 in, so "MAP" and the attribution stay clear of the 20 corners.
             Modifier.align(Alignment.BottomStart).fillMaxWidth().height(scrim).background(Color.Black.copy(alpha = 0.6f))
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Filled.ZoomOutMap, null, tint = Color.White, modifier = Modifier.size(11.dp))
@@ -1779,7 +1782,7 @@ private fun Strip(nav: Navigator, plan: Plan, stale: Boolean, onLongPress: () ->
             }
         }
     }
-    Row(Modifier.fillMaxWidth().height(plan.tile.dp).frostedTile()) {
+    Row(Modifier.fillMaxWidth().height(plan.tile.dp).groupedCard()) {
         row.tiles.forEachIndexed { i, kind ->
             if (i > 0) {
                 Box(Modifier.padding(vertical = LayoutPlan.STRIP_DIVIDER_INSET.dp).width(row.gap.dp).fillMaxHeight().background(Palette.tileStroke))
@@ -1870,7 +1873,7 @@ private fun Summary(nav: Navigator, plan: Plan, kind: TileKind, band: Boolean, a
 
 @Composable
 private fun AskForLocation(denied: Boolean, onUseLocation: () -> Unit, onOpenSettings: () -> Unit, modifier: Modifier) {
-    Column(modifier.frostedTile().padding(horizontal = Look.padding, vertical = Look.paddingV),
+    Column(modifier.groupedCard().padding(horizontal = Look.padding, vertical = Look.paddingV),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)) {
         Text(if (denied) "Location is off for Bearings. Allow it in Settings to see where you are, your coordinates, elevation and map."
             else "Allow your location to see where you are, your latitude, longitude, elevation and map. It stays on this phone.",

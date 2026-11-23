@@ -314,9 +314,10 @@ struct MainView: View {
 
     // MARK: The location card
 
-    /// The location bar (the owner's mod: back at the top, slim): 40 × k high on every device, radius 12, on
-    /// the sky for the sun's altitude here. Two compact lines, left-aligned 12 in: the place, 15 semibold,
-    /// over the date and time, 12 at white 75%, with the Sample pill (10) inline; trailing, the sky glyph
+    /// The location bar (the owner's mod: back at the top, slim): 40 × k high on every device, radius 14, on
+    /// the sky for the sun's altitude here, with a 0.5 pt highlight along its top and a soft shadow in the
+    /// sky's colour. Two compact lines, left-aligned 12 in: the place, 17 Fraunces SemiBold, over the date and
+    /// time, 12 at white 75%, with the Sample capsule (11) inline; trailing, the sky glyph
     /// (16), the map button (Large and Extra Large, and wherever the map gave way; hidden with its slot kept
     /// in two panes, where a map card is on screen) and ⋯ as 28 circles whose 44 × 44 targets reach past the
     /// bar (an overlay outside the bar's clip). In the list (accessibility sizes) the text wraps and the bar
@@ -349,6 +350,7 @@ struct MainView: View {
         .padding(.vertical, plan.list ? 8 : 0)
         .frame(minHeight: plan.cardHeight, maxHeight: plan.list ? nil : plan.cardHeight)
         .skyCard(altitude: nav.sunPosition?.altitude, radius: LayoutPlan.cardRadius)
+        .barFinish(altitude: nav.sunPosition?.altitude, radius: LayoutPlan.cardRadius)
         .overlay(alignment: .trailing) { cardButtons(plan) }
     }
 
@@ -369,23 +371,23 @@ struct MainView: View {
         .padding(.trailing, 4)
     }
 
-    /// "Maroon Bells, Colorado", 15 semibold (the list: 24): the full name always, at 0.85 if it must, then
-    /// scaled further rather than cut. In the list it may wrap to two lines.
+    /// "Maroon Bells, Colorado", 17 Fraunces SemiBold (the list: 24): the full name always, at 0.85 if it must,
+    /// then scaled further rather than cut. In the list it may wrap to two lines.
     @ViewBuilder
     private func placeLine(size: CGFloat, wraps: Bool) -> some View {
         let full = nav.placeTitle
         if wraps {
             Text(full)
-                .font(.system(size: size, weight: .semibold))
+                .font(Self.placeFont(size: size))
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             ViewThatFits(in: .horizontal) {
                 Text(full).lineLimit(1).fixedSize()
-                Text(full).font(.system(size: size * Look.minScale, weight: .semibold)).lineLimit(1).fixedSize()
-                Text(full).font(.system(size: size * Look.minScale, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.6)
+                Text(full).font(Self.placeFont(size: size * Look.minScale)).lineLimit(1).fixedSize()
+                Text(full).font(Self.placeFont(size: size * Look.minScale)).lineLimit(1).minimumScaleFactor(0.6)
             }
-            .font(.system(size: size, weight: .semibold))
+            .font(Self.placeFont(size: size))
         }
     }
 
@@ -460,8 +462,8 @@ struct MainView: View {
         .accessibilityHint("Opens the map")
     }
 
-    /// The Sample pill: 10 semibold, black on the notice amber, in a 14 capsule (the list: 17 in a 26). At
-    /// night an outline: black fill, a 1.5 white edge, white text.
+    /// The Sample capsule: 11 semibold (caption 2), amber on amber at 20%, in a 14 capsule (the list: 17 in a
+    /// 26). At night an outline: black fill, a 1.5 white edge, white text.
     private func sampleBadge(_ plan: LayoutPlan) -> some View {
         let k = plan.list ? 1 : plan.k
         let size: CGFloat = plan.list ? 17 : LayoutPlan.cardPill
@@ -469,14 +471,14 @@ struct MainView: View {
         let night = nav.nightMode
         return Text("Sample")
             .font(.system(size: size * k, weight: .semibold))
-            .foregroundStyle(night ? Color.white : Color.black)
+            .foregroundStyle(night ? Color.white : Palette.notice)
             .padding(.horizontal, plan.list ? 7 : 6)
             .frame(height: height * k)
             .background {
                 if night {
                     Capsule().fill(Color.black).overlay(Capsule().strokeBorder(Color.white, lineWidth: 1.5))
                 } else {
-                    Capsule().fill(Palette.notice)
+                    Capsule().fill(Palette.noticeFill)
                 }
             }
             .fixedSize()
@@ -598,7 +600,7 @@ struct MainView: View {
         .padding(.leading, 12).padding(.trailing, 6)
         .frame(height: LayoutPlan.banner)
         .frame(maxWidth: .infinity)
-        .frostedTile()
+        .groupedCard()
     }
 
 
@@ -724,6 +726,20 @@ struct MainView: View {
         return max(0, font.ascender - font.capHeight)
     }
 
+    /// The place name's font (Look.placeFontName, Fraunces SemiBold) at `size`, fixed: the bar's ramp already
+    /// scales it with the text size. The system font stands in if Fraunces isn't registered.
+    static func placeFont(size: CGFloat) -> Font {
+        PlatformFont(name: Look.placeFontName, size: size) != nil
+            ? .custom(Look.placeFontName, fixedSize: size)
+            : .system(size: size, weight: .semibold)
+    }
+
+    /// The width of the place name at `size` in its own font, for the self-tests' fit checks.
+    fileprivate static func placeWidth(_ text: String, size: CGFloat) -> CGFloat {
+        let font = PlatformFont(name: Look.placeFontName, size: size) ?? PlatformFont.systemFont(ofSize: size, weight: .semibold)
+        return ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    }
+
     /// The width of `text` in the system font with tabular digits, for the self-tests' fit checks.
     fileprivate static func textWidth(_ text: String, size: CGFloat, weight: PlatformFont.Weight) -> CGFloat {
         let font = PlatformFont.monospacedDigitSystemFont(ofSize: size, weight: weight)
@@ -807,14 +823,13 @@ struct MainView: View {
 
     // MARK: The Targets card
 
-    /// One card for the lock and the marked spot (only the rows that exist; none, no card): radius 16 on the
-    /// tile fill with its 1 pt edge. The lock row first, on the maroon tint (#3D2128, a 1 pt #5A2C38 inset
-    /// edge), then a hairline, then the spot row. Rows 44 high (Extra Large and iPad 52; 36 under pressure),
-    /// text 17 (Small 15, iPad 19), ✕ in a 44 target. Tap a row for its menu; ✕ clears it. Each row is one
-    /// VoiceOver element with the ✕ as a named action.
+    /// One card for the lock and the marked spot (only the rows that exist; none, no card): radius 20 on the
+    /// card fill (#1C1C1E), no edge. The lock row first, on the maroon tint (#3D2128), then the spot row; no
+    /// rule between them, as the change of fill already divides them. Rows 44 high (Extra Large and iPad 52;
+    /// 36 under pressure), text 17 (Small 15, iPad 19), ✕ in a 44 target. Tap a row for its menu; ✕ clears
+    /// it. Each row is one VoiceOver element with the ✕ as a named action.
     private func targetsCard(_ plan: LayoutPlan) -> some View {
         let shape = RoundedRectangle(cornerRadius: Look.radius, style: .continuous)
-        let locked = nav.lockText != nil
         return VStack(spacing: 0) {
             if let text = nav.lockText {
                 lockRow(text, plan: plan)
@@ -824,18 +839,11 @@ struct MainView: View {
             if hasSpotRow {
                 spotRow(plan)
                     .frame(minHeight: plan.targetsRowHeight, maxHeight: plan.list ? nil : plan.targetsRowHeight)
-                    .overlay(alignment: .top) {
-                        if locked {
-                            // The hairline between the rows: white 8%.
-                            Rectangle().fill(Color.white.opacity(Palette.Op.tile)).frame(height: 1)
-                        }
-                    }
             }
         }
         .frame(width: plan.columnWidth)
-        .background(shape.fill(Palette.tileFill))
+        .background(shape.fill(Palette.cardFill))
         .clipShape(shape)
-        .overlay(shape.strokeBorder(Palette.tileStroke, lineWidth: Look.stroke).allowsHitTesting(false))
     }
 
     /// The lock row's maroon: all four corners when it is the only row, else the top two.
@@ -844,14 +852,9 @@ struct MainView: View {
         if only {
             RoundedRectangle(cornerRadius: Look.radius, style: .continuous)
                 .fill(Palette.lockFill)
-                .overlay(RoundedRectangle(cornerRadius: Look.radius, style: .continuous)
-                    .strokeBorder(Palette.lockBorder, lineWidth: Look.stroke))
         } else {
             UnevenRoundedRectangle(topLeadingRadius: Look.radius, topTrailingRadius: Look.radius, style: .continuous)
                 .fill(Palette.lockFill)
-                .overlay(UnevenRoundedRectangle(topLeadingRadius: Look.radius, topTrailingRadius: Look.radius, style: .continuous)
-                    .stroke(Palette.lockBorder, lineWidth: Look.stroke)
-                    .padding(Look.stroke / 2))
         }
     }
 
@@ -869,15 +872,16 @@ struct MainView: View {
             .accessibilityHidden(true)
     }
 
-    /// "Locked 240°" leading at regular weight, "turn 12° right" trailing at semibold, the ✕. Below a 320
-    /// column the label shortens to "240°".
+    /// "Locked 240°" leading at regular weight, "turn 12° right" trailing at semibold in north's pink (white
+    /// when it says "on bearing"), the ✕. Below a 320 column the label shortens to "240°".
     private func lockRow(_ text: String, plan: LayoutPlan) -> some View {
         let parts = Self.lockParts(text)
         let label = plan.columnWidth < 320 ? parts.label.replacingOccurrences(of: "Locked\u{00A0}", with: "") : parts.label
         let spokenText = text.replacingOccurrences(of: "°", with: " degrees").replacingOccurrences(of: " · ", with: ", ")
         return HStack(spacing: plan.tablet ? 10 : 8) {
             targetsGlyph("lock.fill", plan: plan)
-            TwoColumnText(label: label, value: parts.cue, size: targetsSize(plan), wraps: plan.list)
+            TwoColumnText(label: label, value: parts.cue, size: targetsSize(plan), wraps: plan.list,
+                          valueColor: parts.cue.hasPrefix("turn") ? Palette.turn : .white)
                 .frame(maxWidth: .infinity, alignment: .leading)
             closeButton(plan, help: "Clear the locked bearing") { nav.toggleLock() }
         }
@@ -912,7 +916,7 @@ struct MainView: View {
         Button(action: action) {
             Image(systemName: "xmark")
                 .font(.system(size: 14 * plan.k, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(nav.nightMode ? Palette.nightSecondary : Palette.Op.caption))
+                .foregroundStyle(secondary)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
@@ -1367,7 +1371,7 @@ struct MainView: View {
                          hint: "Shows the details", radius: 10, inset: 4) { showDetails = true }
             .frame(width: widths[2])
         }
-        .frostedTile()
+        .groupedCard()
     }
 
     private var stripDivider: some View {
@@ -1533,9 +1537,8 @@ struct MainView: View {
                 band(plan)
                     .frame(height: bandHeight)
             }
-            .background(Palette.tileFill)
+            .background(Palette.cardFill)
             .clipShape(shape)
-            .overlay(shape.strokeBorder(Palette.tileStroke, lineWidth: Look.stroke).allowsHitTesting(false))
         } else {
             MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
                        speed: movingSpeedText, dimmed: nav.nightMode)
@@ -1561,7 +1564,7 @@ struct MainView: View {
         .padding(.horizontal, Look.tilePaddingH)
         .padding(.vertical, Look.tilePaddingV)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frostedTile()
+        .groupedCard()
     }
 
     private func openLocationSettings() {
@@ -1926,7 +1929,7 @@ struct PanelTile<Value: View, Extra: View>: View {
             .padding(.horizontal, ramp.insetH)
             .padding(.vertical, ramp.insetV)
             .frame(maxWidth: .infinity, minHeight: LayoutPlan.listRow, alignment: .leading)
-            .frostedTile()
+            .groupedCard()
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 captionRow
@@ -1945,7 +1948,7 @@ struct PanelTile<Value: View, Extra: View>: View {
             // Exactly the planned cell (minHeight 0): content that would be taller never makes the tile
             // draw taller than its row.
             .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-            .frostedTile()
+            .groupedCard()
         }
     }
 
@@ -2060,6 +2063,8 @@ struct TwoColumnText: View {
     let value: String
     let size: CGFloat
     var wraps = false
+    /// The value's colour (the lock row's "turn 12° right" is north's pink).
+    var valueColor: Color = .white
 
     var body: some View {
         if wraps {
@@ -2068,10 +2073,12 @@ struct TwoColumnText: View {
                     Text(label).font(.system(size: size)).lineLimit(1).fixedSize()
                     Spacer(minLength: 12)
                     Text(value).font(.system(size: size, weight: .semibold)).lineLimit(1).fixedSize()
+                        .foregroundStyle(valueColor)
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     Text(label).font(.system(size: size))
                     Text(value).font(.system(size: size * 15 / 17, weight: .semibold))
+                        .foregroundStyle(valueColor)
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
@@ -2082,6 +2089,7 @@ struct TwoColumnText: View {
                 Spacer(minLength: 12)
                 FitText(text: value, size: size, weight: .semibold)
                     .multilineTextAlignment(.trailing)
+                    .foregroundStyle(valueColor)
             }
             .monospacedDigit()
         }
@@ -2262,7 +2270,7 @@ extension MainView {
                         if textWidth(dates.time, size: LayoutPlan.cardDate * k, weight: .regular) + pill * k > room + 0.5 {
                             failures.append("\(name): the location bar's time and Sample don't fit (\(Int(room)) pt)")
                         }
-                        if k == 1 && textWidth(place, size: LayoutPlan.cardPlace * Look.minScale, weight: .semibold) > room + 0.5 {
+                        if k == 1 && placeWidth(place, size: LayoutPlan.cardPlace * Look.minScale) > room + 0.5 {
                             failures.append("\(name): \"\(place)\" doesn't fit at 0.85 (\(Int(room)) pt)")
                         }
                     }

@@ -127,7 +127,7 @@ struct MapSnippet: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(Palette.tileFill)
+        .background(Palette.cardFill)
         .modifier(CardFrame(bleed: bleed))
     }
 
@@ -190,7 +190,7 @@ private struct MapThumbnail: View {
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
                 ZStack {
-                    Palette.tileFill
+                    Palette.cardFill
                     if let picture {
                         Self.image(picture)
                             .resizable()
@@ -225,7 +225,8 @@ private struct MapThumbnail: View {
                 }
                 .foregroundStyle(.white)
                 .lineLimit(1)
-                .padding(.horizontal, 8)
+                // 12 in, so "MAP" and the attribution stay clear of the 20 corners.
+                .padding(.horizontal, 12)
                 .frame(width: geo.size.width, height: MapSnippet.captionBand)
                 // A 24 pt scrim: clear to black at 65%.
                 .background(LinearGradient(colors: [Color.black.opacity(0), Color.black.opacity(0.65)],
@@ -297,7 +298,7 @@ private struct MapControlCircle: View {
     }
 }
 
-/// A card's rounded frame and faint edge; none in the map sheet, where the map runs edge to edge.
+/// A card's rounded frame (20, no edge); none in the map sheet, where the map runs edge to edge.
 private struct CardFrame: ViewModifier {
     let bleed: Bool
 
@@ -308,10 +309,6 @@ private struct CardFrame: ViewModifier {
         } else {
             content
                 .clipShape(RoundedRectangle(cornerRadius: Look.radius, style: .continuous))
-                // Two Degrees' faint edge, drawn over the map.
-                .overlay(RoundedRectangle(cornerRadius: Look.radius, style: .continuous)
-                    .strokeBorder(Palette.tileStroke, lineWidth: Look.stroke)
-                    .allowsHitTesting(false))
         }
     }
 }

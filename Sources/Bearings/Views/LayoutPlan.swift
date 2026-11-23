@@ -391,17 +391,18 @@ struct LayoutPlan: Equatable {
     static let maxColumnTablet: CGFloat = 720
     /// The location bar: 40 × k on every device (it wraps taller only in the scrolling list).
     static let card: CGFloat = 40
-    /// The bar's type: the place 15 semibold, the date and time 12 at white 75%, the Sample pill 10 in a 14
-    /// capsule; the sky glyph 16; the map button and ⋯ 28 circles in 44 targets that reach past the bar.
-    static let cardPlace: CGFloat = 15
+    /// The bar's type: the place 17 Fraunces SemiBold, the date and time 12 at white 75%, the Sample capsule 11
+    /// in a 14 capsule; the sky glyph 16; the map button and ⋯ 28 circles in 44 targets that reach past the bar.
+    static let cardPlace: CGFloat = 17
     static let cardDate: CGFloat = 12
-    static let cardPill: CGFloat = 10
+    static let cardPill: CGFloat = 11
     static let cardPillHeight: CGFloat = 14
     static let cardGlyph: CGFloat = 16
     static let cardGlyphSlot: CGFloat = 24
     static let cardButton: CGFloat = 28
     static let cardTarget: CGFloat = 44
-    static let cardRadius: CGFloat = 12
+    /// The bar's corners: 14 (Look.headerRadius), inside the cards' 20.
+    static let cardRadius: CGFloat = 14
     static let cardPaddingH: CGFloat = 12
     /// About 4 above and below the two lines, by centring them in the 40 bar.
     static let cardPaddingV: CGFloat = 4

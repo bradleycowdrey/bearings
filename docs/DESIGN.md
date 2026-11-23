@@ -45,14 +45,14 @@ no crimson rule, and the icon has no crimson band.
 
 Spacing uses frozen tokens: spare height goes to each layout's tiles or map card, then the dial, never into
 wider gaps ([REFINE.md](REFINE.md) A.1). Screen margins are 16; on iPad the column is min(W − 48, 720),
-centred; on the Mac 24. Tiles have radius 16. Every control is at least 44 × 44 (48 dp on Android).
+centred; on the Mac 24. Tiles and cards have radius 20 ([LOOK.md](LOOK.md), the Apple finish). Every control is at least 44 × 44 (48 dp on Android).
 
 The order, top to bottom: **location bar → dial → readout → status line → Targets card → the layout's
 tiles or map.** The location bar is 8 below the safe area and the dial's top 12 under the bar (iPhone 16
 Pro: 122).
 
-1. **Location bar** (40 high × text size, radius 12, first on the screen; the sky card, slim): the
-   place ("Maroon Bells, Colorado", 15 semibold) over the date and time ("Sun, Nov 1 · 9:41 AM", 12, white
+1. **Location bar** (40 high × text size, radius 14, first on the screen; the sky card, slim): the
+   place ("Maroon Bells, Colorado", 17 Fraunces SemiBold) over the date and time ("Sun, Nov 1 · 9:41 AM", 12, white
    at 75%, the device's 12- or 24-hour setting, updated each minute), on a sky that follows the sun's
    altitude where you are: deep navy at night, steel blue around sunrise and sunset, clear blue by day
    (grey before a fix). The Sample pill sits on the date line (hidden in the App Store screenshots,
