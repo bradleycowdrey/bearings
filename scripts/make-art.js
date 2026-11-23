@@ -1,9 +1,15 @@
-// Draws Bearings' icons and DMG background with Playwright (Chromium), in the style of Two Degrees:
-// the app's sky (day blue fading to night navy), white ticks and needle and pink north (the icon has no
-// crimson band; the widgets and the installer keep it). Writes:
-//   Resources/AppIcon.png (Mac, 1024, rounded with margin)  Resources/iOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png (full bleed)
-//   docs/icon.png (512)  Resources/dmg/background.png and background@2x.png  android/.../mipmap-*/ic_launcher*.png
-//   android/.../drawable-nodpi/app_mark.png and widget_preview.png (the Small widget, for Android's widget picker)
+// Draws Bearings' icons and DMG background with Playwright (Chromium). The icon is the "Open C": the
+// family's open C (the same stroke, radius and round caps as Cowdrey One, Cowdrey.MD and Cowdrey.PDF) as a
+// compass bezel on the sky (day blue at the top left to night navy at the bottom right), opening to the
+// north-east, with a pink north needle that swings out through the gap, a white south half and a navy hub.
+// It is flat, with no drop shadow, like its siblings. Writes:
+//   Resources/iOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png, AppIcon-dark.png and AppIcon-tinted.png
+//     (full bleed, 1024; the dark and tinted appearances are for iOS 18 and later)
+//   Resources/AppIcon.png (Mac, 1024 canvas, 824 body with continuous corners and a soft shadow)
+//   docs/icon.png (512)  Resources/dmg/background.png and background@2x.png
+//   android/.../mipmap-*/ic_launcher.png (legacy, full bleed) and ic_launcher_foreground.png (adaptive; the
+//     background is drawable/ic_launcher_bg.xml)  android/.../drawable-nodpi/app_mark.png and widget_preview.png
+//     (the Small widget, for Android's widget picker)
 // Usage: node scripts/make-art.js
 const path = require('path');
 const fs = require('fs');
@@ -11,42 +17,62 @@ let playwright;
 try { playwright = require('playwright'); } catch { playwright = require(path.join(require('child_process').execSync('npm root -g').toString().trim(), 'playwright')); }
 const root = path.resolve(__dirname, '..');
 
-// The compass needle on a ring of ticks, in a 1024 box, centred at (cx, cy) with radius r. The full drawing
-// (a tick every 15°, a fine ring) is the icon everywhere it is shown large. `small` (art drawn at 72 px and
-// under: Android's mdpi and hdpi launcher icons) keeps the same icon legible (docs/REVIEW-2.3.0.md, 38): only
-// the four cardinal ticks, a thicker ring and a slightly wider needle.
-function needle(cx, cy, r, small) {
-  const step = small ? 90 : 15;
-  const ring = r * (small ? 0.085 : 0.03);
-  const inset = small ? ring * 0.9 : 0;
-  let ticks = '';
-  for (let d = 0; d < 360; d += step) {
-    const major = d % 90 === 0;
-    const len = major ? r * (small ? 0.12 : 0.16) : r * 0.08;
-    const width = major ? r * (small ? 0.085 : 0.045) : r * 0.022;
-    ticks += `<line x1="${cx}" y1="${cy - r + inset}" x2="${cx}" y2="${cy - r + inset + len}" stroke="${d === 0 ? '#E04A7A' : major ? '#FFFFFF' : 'rgba(255,255,255,0.5)'}" stroke-width="${width}" stroke-linecap="round" transform="rotate(${d} ${cx} ${cy})"/>`;
-  }
-  const w = r * (small ? 0.3 : 0.24), len = r * (small ? 0.76 : 0.74);
-  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,${small ? 0.6 : 0.22})" stroke-width="${ring}"/>${ticks}
-    <path d="M${cx} ${cy - len} L${cx + w} ${cy} L${cx - w} ${cy} Z" fill="#E04A7A"/>
-    <path d="M${cx} ${cy + len} L${cx - w} ${cy} L${cx + w} ${cy} Z" fill="#FFFFFF"/>
-    <circle cx="${cx}" cy="${cy}" r="${r * 0.07}" fill="#14213A"/>`;
+// Colours for each appearance. Light is the icon everywhere; dark and tinted are iOS 18's other appearances.
+// Tinted is greyscale on black: iOS tints it by brightness, so the ring and the south half (white) stay
+// brightest and the north half (mid grey) stays apart from them.
+const LOOKS = {
+  light: { sky: ['#4A82C0', '#3D74B0', '#14243B'], ring: '#FFFFFF', north: '#E8578A', northShade: '#C93A6C', south: '#FFFFFF', southShade: '#D9E3EF', hub: '#14243B' },
+  dark: { sky: ['#1E2836', '#141B26', '#05070B'], ring: '#F2F5FA', north: '#EC5F91', northShade: '#CC4373', south: '#F2F5FA', southShade: '#C4CEDB', hub: '#05070B' },
+  tinted: { sky: ['#000000', '#000000', '#000000'], ring: '#FFFFFF', north: '#8E8E8E', northShade: '#727272', south: '#FFFFFF', southShade: '#D6D6D6', hub: '#000000' },
+};
+
+// The glyph in a 1024 box, centred on (512, 512).
+// Ring: Cowdrey One's C (radius 282, stroke 104, round caps) at that icon's 0.955 scale. Its gap is
+// Cowdrey One's 72° widened by 5° so the needle has clear air, and the gap's bisector lies on the needle's
+// axis (bearing 45°, north-east), so the tip passes through the middle of the gap.
+// Needle: the north tip clears the ring's outer edge by 40; the south half is 55% of the north; the hub
+// sits on the pivot, where the four facets meet.
+const C = 512, R = 282 * 0.955, STROKE = 104 * 0.955, AXIS = 45, GAP = 72 + 5;
+const NORTH = Math.round(R + STROKE / 2 + 40), SOUTH = Math.round(NORTH * 0.55), HALF_WIDTH = 106, HUB = 24;
+function glyph(look, scale = 1) {
+  const at = (bearing) => { const a = (bearing - 90) * Math.PI / 180; return [(C + R * Math.cos(a)).toFixed(1), (C + R * Math.sin(a)).toFixed(1)]; };
+  const [x0, y0] = at(AXIS + GAP / 2), [x1, y1] = at(AXIS - GAP / 2 + 360);
+  const n = C - NORTH, s = C + SOUTH, l = C - HALF_WIDTH, r = C + HALF_WIDTH;
+  return `<g transform="translate(${C} ${C}) scale(${scale}) translate(${-C} ${-C})">
+    <path d="M${x0} ${y0} A${R.toFixed(1)} ${R.toFixed(1)} 0 1 1 ${x1} ${y1}" fill="none" stroke="${look.ring}" stroke-width="${STROKE.toFixed(1)}" stroke-linecap="round"/>
+    <g transform="rotate(${AXIS} ${C} ${C})">
+      <path d="M${C} ${n} L${r} ${C} L${C} ${s} L${l} ${C} Z" fill="${look.southShade}"/>
+      <path d="M${C} ${n} L${r} ${C} L${l} ${C} Z" fill="${look.northShade}"/><path d="M${C} ${n} L${l} ${C} L${C} ${C} Z" fill="${look.north}"/>
+      <path d="M${C} ${s} L${l} ${C} L${C} ${C} Z" fill="${look.south}"/>
+    </g>
+    <circle cx="${C}" cy="${C}" r="${HUB}" fill="${look.hub}"/></g>`;
 }
 
-const glow = `<defs>
-  <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3D74B0"/><stop offset="0.5" stop-color="#1C3A5E"/><stop offset="1" stop-color="#0A0E1C"/></linearGradient>
-  <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
-  <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
-  <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-opacity=".35"/></filter></defs>`;
+// The sky runs on the diagonal, top left to bottom right, as on Cowdrey One.
+const sky = (look, id) => `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${look.sky[0]}"/><stop offset="0.38" stop-color="${look.sky[1]}"/><stop offset="1" stop-color="${look.sky[2]}"/></linearGradient>`;
 
-const mac = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${glow}
-  <g filter="url(#sh)"><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/></g>
-  <g clip-path="url(#sq)"><rect x="100" y="100" width="824" height="824" filter="url(#grain)" opacity="0.05"/></g>
-  ${needle(512, 526, 300)}</svg>`;
-const ios = (small) => `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${glow}
-  <rect width="1024" height="1024" fill="url(#g)"/><rect width="1024" height="1024" filter="url(#grain)" opacity="0.05"/>
-  ${needle(512, 522, 370, small)}</svg>`;
-const fg = (small) => `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${needle(512, 512, 250, small)}</svg>`;
+// Full bleed, for iOS (the system masks it), docs/icon.png, the app mark and Android's legacy launcher icon.
+const ios = (mode = 'light') => `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>${sky(LOOKS[mode], 'g')}</defs><rect width="1024" height="1024" fill="url(#g)"/>${glyph(LOOKS[mode])}</svg>`;
+
+// The Mac icon: Apple's 824 body on a 1024 canvas, with continuous corners (a superellipse, as in Apple's
+// template) and a soft shadow under the body only.
+function squircle(x, y, size, n = 5) {
+  const h = size / 2, pts = [];
+  for (let i = 0; i < 720; i++) {
+    const t = i / 720 * 2 * Math.PI, c = Math.cos(t), sn = Math.sin(t);
+    pts.push(`${(x + h + h * Math.sign(c) * Math.abs(c) ** (2 / n)).toFixed(2)} ${(y + h + h * Math.sign(sn) * Math.abs(sn) ** (2 / n)).toFixed(2)}`);
+  }
+  return `M${pts.join(' L')} Z`;
+}
+const mac = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>${sky(LOOKS.light, 'g')}<filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-opacity=".3"/></filter></defs>
+  <path d="${squircle(100, 100, 824)}" fill="url(#g)" filter="url(#sh)"/>${glyph(LOOKS.light, 824 / 1024)}</svg>`;
+
+// Android's adaptive icon: the glyph on a transparent 108 dp canvas (the sky is drawable/ic_launcher_bg.xml).
+// The launcher shows the middle 72 dp, so 72/108 of the full-bleed size gives the same look as iOS, and the
+// needle's tip stays inside the 66 dp safe circle.
+const fg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">${glyph(LOOKS.light, 72 / 108)}</svg>`;
 const dmg = (s) => `<html><body style="margin:0;width:660px;height:400px;background:#000;font-family:Inter,-apple-system,system-ui,sans-serif;color:#fff;position:relative;overflow:hidden;zoom:${s}">
   <div style="position:absolute;inset:0 0 auto;height:4px;background:#990F3D"></div>
   <div style="position:absolute;top:44px;width:100%;text-align:center;font-size:28px;font-weight:600;letter-spacing:-.5px">Bearings</div>
@@ -107,15 +133,17 @@ function smallWidget(px) {
     await page.screenshot({ path: out, omitBackground: !!transparent });
   }
   await svg(mac, path.join(root, 'Resources/AppIcon.png'), 1024, true);
-  await svg(ios(false), path.join(root, 'Resources/iOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png'), 1024);
-  await svg(ios(false), path.join(root, 'docs/icon.png'), 512);
+  const appicon = path.join(root, 'Resources/iOS/Assets.xcassets/AppIcon.appiconset');
+  await svg(ios('light'), path.join(appicon, 'AppIcon.png'), 1024);
+  await svg(ios('dark'), path.join(appicon, 'AppIcon-dark.png'), 1024);
+  await svg(ios('tinted'), path.join(appicon, 'AppIcon-tinted.png'), 1024);
+  await svg(ios(), path.join(root, 'docs/icon.png'), 512);
   const res = path.join(root, 'android/app/src/main/res');
   for (const [d, px] of [['mdpi', 48], ['hdpi', 72], ['xhdpi', 96], ['xxhdpi', 144], ['xxxhdpi', 192]]) {
-    // 48 and 72 px launcher icons take the small drawing (four ticks, thicker ring).
-    await svg(ios(px <= 72), path.join(res, `mipmap-${d}/ic_launcher.png`), px);
-    await svg(fg(px <= 72), path.join(res, `mipmap-${d}/ic_launcher_foreground.png`), Math.round(px * 108 / 48), true);
+    await svg(ios(), path.join(res, `mipmap-${d}/ic_launcher.png`), px);
+    await svg(fg, path.join(res, `mipmap-${d}/ic_launcher_foreground.png`), Math.round(px * 108 / 48), true);
   }
-  await svg(ios(false), path.join(res, 'drawable-nodpi/app_mark.png'), 256);
+  await svg(ios(), path.join(res, 'drawable-nodpi/app_mark.png'), 256);
   // Android's widget picker shows this before the widget is added: the small widget at the sample place.
   await page.setViewportSize({ width: 220, height: 220 });
   await page.setContent(`<html><body style="margin:0;background:transparent">${smallWidget(220)}</body></html>`);
