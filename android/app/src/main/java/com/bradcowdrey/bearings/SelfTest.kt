@@ -174,9 +174,9 @@ object SelfTest {
             val p = LayoutPlan.planFor(d, l, k, LayoutPlan.State.SAMPLE)
             val name = "${d.name} ${l.id} k$k"
             // Location bar line 2: the bar (full width in two panes) less its 12 inset, 8, the sky glyph's 24 slot, ⋯'s 48
-            // slot, 2, the map button's slot and the Sample pill (10 semibold, 6 each side, 6 before it), which trails
+            // slot, 2, the map button's slot and the Sample capsule (11 semibold, 6 each side, 6 before it), which trails
             // line 2 except in the list.
-            val pill = if (p.list) 0f else 6f + width("Sample", 10f * k, semibold) + 12f
+            val pill = if (p.list) 0f else 6f + width("Sample", 11f * k, semibold) + 12f
             val room = p.barWidth - 12f - 8f - 24f - 48f - 2f - (if (p.mapButtonSlot) 48f else 0f) - pill
             for ((long, short, time) in dates) {
                 val lines = TextFit.headerLines(long, short, time) { width(it, 12f * k, regular) <= room }

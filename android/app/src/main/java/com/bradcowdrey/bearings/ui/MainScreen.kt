@@ -232,7 +232,7 @@ fun MainScreen(nav: Navigator, onUseLocation: () -> Unit, onOpenSettings: () -> 
                     val wraps = { _: Layout, button: Boolean ->
                         val card = if (twoPane) w - 2 * LayoutPlan.PANE_MARGIN else column
                         val px = with(density) { (card - LOCATION_FIXED - (if (button) 48f else 0f)).dp.toPx() }
-                        val titleWraps = measurer.measure(AnnotatedString(title), tStyle, softWrap = false, maxLines = 1).size.width > px
+                        val titleWraps = placeStyle(tStyle, px) { measurer.measure(AnnotatedString(title), it, softWrap = false, maxLines = 1).size.width } == null
                         val dateWraps = TextFit.headerLines(dates.first, dates.second, dates.third) {
                             measurer.measure(AnnotatedString(it), dStyle, softWrap = false, maxLines = 1).size.width <= px - pill
                         }.size > 1
@@ -491,6 +491,30 @@ private val BAR_SHAPE = Look.headerShape
 /** The place: 17 Fraunces SemiBold on the planner's 18 line (the bar stays 40). */
 @Composable private fun titleStyle(): TextStyle =
     TextStyle(fontFamily = Fraunces, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White, lineHeight = LayoutPlan.TITLE_LINE.sp)
+/**
+ * The place's style for [max] px: 17 where it fits on one line, else 0.85 of it (as on Apple, where Fraunces is wider
+ * than Inter was), or null when even that won't fit and the place wraps to a second line.
+ */
+private fun placeStyle(style: TextStyle, max: Float, width: (TextStyle) -> Int): TextStyle? {
+    if (width(style) <= max) return style
+    val small = style.copy(fontSize = style.fontSize * Look.MIN_TEXT_SCALE)
+    return if (width(small) <= max) small else null
+}
+
+/** Line 1: the whole place name, at 17 or 0.85 of it on one line, else wrapped at 17 (always wrapped in the list). */
+@Composable
+private fun PlaceTitle(title: String, wrap: Boolean, modifier: Modifier) {
+    val style = titleStyle()
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(modifier) {
+        val max = constraints.maxWidth
+        val fitted = remember(title, max, style, wrap) {
+            if (wrap || !constraints.hasBoundedWidth) style
+            else placeStyle(style, max.toFloat()) { measurer.measure(AnnotatedString(title), it, softWrap = false, maxLines = 1).size.width } ?: style
+        }
+        Text(title, style = fitted)
+    }
+}
 @Composable private fun dateStyle(): TextStyle = text(12f, color = headerSecondary()).copy(lineHeight = LayoutPlan.DATE_LINE.sp, fontFeatureSettings = "tnum")
 @Composable private fun pillStyle(): TextStyle = text(11f, FontWeight.SemiBold).copy(lineHeight = 12.sp)
 @Composable private fun statusStyle(): TextStyle = text(13f, color = secondary()).copy(lineHeight = 18.sp)
@@ -532,7 +556,7 @@ private fun LocationCard(nav: Navigator, plan: Plan, a: Actions, wrap: Boolean, 
             },
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(nav.title, style = titleStyle(), modifier = Modifier.weight(1f, fill = false))
+                PlaceTitle(nav.title, wrap, Modifier.weight(1f, fill = false))
                 if (pillUp) {
                     Spacer(Modifier.width(6.dp))
                     SampleBadge(night)

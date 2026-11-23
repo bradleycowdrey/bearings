@@ -1,6 +1,7 @@
 package com.bradcowdrey.bearings.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
@@ -223,6 +224,10 @@ object SkyTone {
 /** One of the app's cards: #1C1C1E, no edge, rounded 20. Put it before click modifiers so ripples stay rounded. */
 fun Modifier.groupedCard(shape: Shape = Look.shape): Modifier =
     this.clip(shape).background(Palette.cardFill)
+
+/** A frosted tile: white at 8% with a 1 dp edge at 12%, rounded 20. The Details sheet keeps it, on the menu grey (#1E1E22) where #1C1C1E would not show. */
+fun Modifier.frostedTile(shape: Shape = Look.shape): Modifier =
+    this.clip(shape).background(Palette.tileFill).border(Look.stroke, Palette.tileStroke, shape)
 
 /**
  * The location bar's finish (before its sky background): a soft shadow in the sky's own colour under it, and a 0.5 dp
