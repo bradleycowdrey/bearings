@@ -119,11 +119,11 @@ jobs:
       - name: Publish the screenshots for review (ci-appstore branch)
         run: |
           D="$RUNNER_TEMP/pub"; mkdir -p "$D/raw"; cp fastlane/screenshots/en-US/*.png "$D/"; cp "$RUNNER_TEMP"/raw/*.png "$D/raw/"
-          cd "$D"; git init -q -b ci-appstore; git add .
+          cd "$D"; B="ci-appstore"; [ "$GITHUB_REF" = refs/heads/main ] || B="ci-appstore-preview"; git init -q -b "$B"; git add .
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "App Store screenshots for ${GITHUB_SHA::7}"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-appstore
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" "$B"
       - name: Upload the listing to App Store Connect
-        if: inputs.upload
+        if: inputs.upload && github.ref == 'refs/heads/main'   # never from a review branch
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}

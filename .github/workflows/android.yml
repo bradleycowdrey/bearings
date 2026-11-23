@@ -98,11 +98,11 @@ jobs:
           [ -f "$REPORT" ] && grep -E "^FAIL" "$REPORT" | while IFS= read -r line; do echo "::error::${line}"; done
           [ -f "$REPORT" ] && echo "::notice::Android self-test: $(head -1 "$REPORT")"
           cd "$OUT"
-          git init -q && git checkout -q -b ci-shots-android
+          git init -q && B="ci-shots-android"; [ "$GITHUB_REF" = refs/heads/main ] || B="ci-shots-android-preview"; git checkout -q -b "$B"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A && git commit -qm "Android CI screenshots for $(cat commit.txt)"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-shots-android
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "$B"
           # Every layout, the map sheet, the no-compass states and larger and accessibility text photographed
           # (docs/LAYOUTS.md §8).
           for F in android-3-sample android-7-small android-8-large android-9-xl android-11-map-sheet android-12-no-compass android-14-no-compass-xl android-6-large-text android-10-xl-large-text android-13-ax-text; do
