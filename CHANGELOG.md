@@ -3,6 +3,21 @@
 On a Mac, Bearings shows a banner when a new version is out. Every version is on
 [Releases](https://github.com/bradleycowdrey/bearings/releases).
 
+## [2.4.0] - 2026-11-24
+
+A new icon and Apple's own finish, to match the rest of Bradley Cowdrey's apps.
+
+- **New icon**: a bold open compass ring with the pink north needle breaking out, in the family style of
+  Cowdrey One, Cowdrey.MD and Cowdrey.PDF. It stays clear at small sizes, with dark and tinted versions for
+  the iPhone and iPad Home Screen, a new Mac icon and new Android launcher icons.
+- **A cleaner screen**: tiles and the Targets card use the system's own dark grey without outlines, with
+  matching rounded corners, grey captions, and the "turn 12° right" instruction in north pink.
+- **The place name** in the top bar is set in Fraunces, the same serif as Cowdrey One. The Sample label is
+  a soft tinted capsule.
+- The same finish on iPhone, iPad, Mac, Android and the web app. Night mode stays all red.
+- **App Store**: new screenshots that show each feature: the compass, place and time, elevation, the sun
+  and moon, the map and the widgets.
+
 ## [2.3.1] - 2026-11-09
 
 Fixes and polish for the new instrument panel, and the Mac and web apps brought up to the same design.
