@@ -9,7 +9,7 @@ Made by <a href="https://bradcowdrey.com">Bradley Cowdrey · bradcowdrey.com</a>
 <p align="center">
   <a href="https://bradcowdrey.com/bearings"><b>Try it in your browser</b></a> ·
   <a href="https://apps.apple.com/app/id6831731564"><b>App Store (iPhone and iPad)</b></a> ·
-  <a href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.apk"><b>Android APK</b></a> ·
+  <a href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.apk"><b>Android APK</b></a> (Google Play: closed test, coming soon) ·
   <a href="https://github.com/bradleycowdrey/bearings/releases/latest/download/Bearings.dmg"><b>Download for Mac</b></a> ·
   <a href="CHANGELOG.md">What's new</a> ·
   <a href="https://github.com/bradleycowdrey/bearings/issues">Report an issue</a>
@@ -140,9 +140,10 @@ is newer than the last.
 
 Bump `VERSION` and add a `CHANGELOG.md` entry. On `main`, `release.yml` builds the Mac app and publishes
 `Bearings.dmg` (signed and notarized when the Developer ID secrets are set), `android.yml` attaches the
-signed `Bearings.apk` (with the `ANDROID_KEYSTORE_*` secrets), and `ios-testflight.yml` uploads the iPhone
-app to TestFlight (with the `ASC_*` App Store Connect key). Secrets are added in GitHub settings, never in
-the repository.
+signed `Bearings.apk` (with the `ANDROID_KEYSTORE_*` secrets) and sends the App Bundle to the Google Play closed
+test (with `PLAY_SERVICE_ACCOUNT_JSON`; see [docs/play/README.md](docs/play/README.md)), and `ios-testflight.yml`
+uploads the iPhone app to TestFlight (with the `ASC_*` App Store Connect key). Secrets are added in GitHub
+settings, never in the repository.
 
 ## Credits
 

@@ -5,8 +5,10 @@ name: Android
 # emulator placed at Maroon Bells, Colorado (the self-test: location fix, live ground elevation, place
 # name, compass and declination, the widget's data, the layout planner's golden table) and photographs the
 # terms, the live screen, the sample place, night mode, larger and accessibility text, every layout, the map
-# sheet, the no-compass state ("No heading", Medium and Extra Large) and the sample with nothing locked. Results go
-# to the ci-shots-android branch; the job fails if any check fails. The APKs are kept as an artifact.
+# sheet, the no-compass state ("No heading", Medium and Extra Large), the sample with nothing locked and the store
+# screenshots. Results go to the ci-shots-android branch; the job fails if any check fails. The APKs and the App
+# Bundle are kept as an artifact. Runs started by hand or by the release workflows (workflow_dispatch on main)
+# then send the signed App Bundle to Google Play's closed test (docs/play/README.md).
 on:
   push:
     branches: [main]
@@ -21,6 +23,9 @@ jobs:
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+      HAS_UPLOAD_KEY: ${{ secrets.ANDROID_KEYSTORE_B64 != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -109,3 +114,21 @@ jobs:
             [ -s "$F.png" ] || { echo "::error::No $F.png"; exit 1; }
           done
           head -1 report.txt | grep -q "^ALL PASSED"
+      - name: Google Play closed test
+        # Only builds meant for testers: runs on main started by hand or by release.yml / finish-release.yml after a
+        # new version is published (both are workflow_dispatch), signed with the upload key, and only after the
+        # self-test passed. Never a branch: the version code is main's commit count, which goes up with every
+        # commit, so each new build is higher than the last; a second run of the same commit is skipped.
+        if: env.HAS_PLAY == 'true' && env.HAS_UPLOAD_KEY == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_PACKAGE: com.bradcowdrey.bearings
+          PLAY_AAB: android/app/build/outputs/bundle/release/app-release.aab
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          export PLAY_RELEASE_NAME="$VERSION ($(git rev-list --count HEAD))"
+          # What's new: the first paragraph of this version's CHANGELOG entry.
+          export PLAY_RELEASE_NOTES="$(awk -v v="## [$VERSION]" 'index($0, v) == 1 { f = 1; next } f && /^## / { exit } f && NF { p = p (p ? " " : "") $0; next } f && p { exit } END { print p }' CHANGELOG.md | sed 's/\*\*//g')"
+          echo "Release $PLAY_RELEASE_NAME: $PLAY_RELEASE_NOTES"
+          pip install --quiet pyjwt cryptography
+          python3 .github/scripts/play_publish.py

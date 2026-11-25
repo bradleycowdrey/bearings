@@ -8,8 +8,9 @@
 # coordinate formats, night mode, larger text, every layout (the "layout" extra: small, medium, large,
 # extraLarge; never saved, so the other shots stay on the Medium default), the map sheet (the "mapSheet"
 # extra), the no-compass state (the "noCompass" extra) in Medium and Extra Large, the sample with nothing
-# locked or marked (the "lock" and "spot" extras, false) and an accessibility font size (1.5, the
-# scrolling list); docs/LAYOUTS.md §8. The self-test also draws the widget's dials (android-widget-*.png).
+# locked or marked (the "lock" and "spot" extras, false), an accessibility font size (1.5, the
+# scrolling list) and the store screenshots (the "store" extra: no Sample pill) used for Google Play;
+# docs/LAYOUTS.md §8. The self-test also draws the widget's dials (android-widget-*.png).
 # Usage: scripts/android-selftest.sh <apk> <output folder>
 set -uo pipefail
 APK="$1"; OUT="$2"; mkdir -p "$OUT"
@@ -87,6 +88,12 @@ launch --ez sample true --es format dd --ez noCompass true --es layout extraLarg
 launch --ez sample true --es format dd --ez lock false --ez spot false; sleep 8; shot android-15-unlocked; stop
 # 8. The store screenshot's state (the "store" extra, Apple's --store): the sample with no Sample pill, dated today.
 launch --ez sample true --es format dd --ez store true; sleep 8; shot android-16-store; stop
+# The same for the rest of the Google Play listing's story (docs/play/README.md): Extra Large (the compass),
+# Small (place and time), Large (the sun and moon) and night mode. Medium (elevation) is android-16-store.
+launch --ez sample true --es format dd --ez store true --es layout extraLarge; sleep 8; shot android-17-store-xl; stop
+launch --ez sample true --es format dd --ez store true --es layout small; sleep 14; shot android-18-store-small; stop
+launch --ez sample true --es format dd --ez store true --es layout large; sleep 8; shot android-19-store-large; stop
+launch --ez sample true --es format dd --ez store true --ez night true; sleep 8; shot android-20-store-night; stop
 adb shell getprop ro.build.version.release > "$OUT/device.txt"
 adb shell getprop ro.product.model >> "$OUT/device.txt"
 cat "$OUT/report.txt"
