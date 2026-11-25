@@ -3,9 +3,11 @@ name: App Store listing
 # Takes the App Store screenshots (6.9-inch iPhone and 13-inch iPad) in the Simulator, each launched with
 # --store (the sample place without its Sample pill, on today's date, so the location bar agrees with the
 # date in the status bar): the layouts the listing's story needs and the map sheet, plus, on iPhone, the
-# widgets as the self-test draws them. scripts/store-frames.js then sets each capture in a drawn device on
-# the Bearings sky under its headline (6 iPhone frames, 4 iPad). The raw captures are kept apart (raw/);
-# the framed screenshots are what is uploaded. If asked, it then uploads them with the listing in
+# widgets as the self-test draws them. scripts/store-frames.mjs then composes each picture with the Cowdrey
+# family template (scripts/app-store/store-frame.mjs, a copy of design/app-store/store-frame.mjs in
+# bradleycowdrey/cowdrey-one): a Fraunces headline and an Instrument Sans line above the capture in a plain
+# device, on Bearings' blue (6 iPhone pictures, 4 iPad). The raw captures are kept apart (raw/);
+# the composed screenshots are what is uploaded. If asked, it then uploads them with the listing in
 # fastlane/metadata: name, subtitle, description, keywords, links,
 # categories, plus content rights, age rating, price (Free) and availability. Never uploads a build
 # and never submits for review. The screenshots, and the raw captures in raw/, also go to the
@@ -78,8 +80,8 @@ jobs:
             done
             xcrun simctl terminate "$D" $ID 2>/dev/null || true
           }
-          # What scripts/store-frames.js frames: Extra Large (Compass), Small (Place & time), Medium
-          # (Elevation; on iPad also Sun & moon), Large (Sun & moon on iPhone) and the map sheet (Map).
+          # What scripts/store-frames.mjs composes: Extra Large (Compass), Small (Place & time, iPhone only),
+          # Medium (Elevation), Large (Sun & moon) and the map sheet (Map).
           PHONE="$(pick 'iPhone 1[6-9] Pro Max$')"
           shoot "$PHONE" iphone xl:extraLarge small:small medium:medium large:large map:map
           # The widgets for the iPhone's last frame, drawn by the self-test as in the iPhone workflow (ios.yml),
@@ -95,16 +97,16 @@ jobs:
           xcrun simctl terminate "$PHONE" $ID 2>/dev/null || true
           xcrun simctl shutdown "$PHONE" || true
           PAD="$(pick 'iPad Pro 13')"
-          shoot "$PAD" ipad xl:extraLarge medium:medium map:map
+          shoot "$PAD" ipad xl:extraLarge medium:medium large:large map:map
           xcrun simctl shutdown "$PAD" || true
           sips -g pixelWidth -g pixelHeight "$RAW"/*.png
-          [ "$(ls "$RAW"/iphone-*.png "$RAW"/ipad-*.png | wc -l)" -eq 8 ] || { echo "::error::Expected 8 raw screenshots"; exit 1; }
-      - name: Frame the screenshots
+          [ "$(ls "$RAW"/iphone-*.png "$RAW"/ipad-*.png | wc -l)" -eq 9 ] || { echo "::error::Expected 9 raw screenshots"; exit 1; }
+      - name: Compose the screenshots (the Cowdrey family template)
         run: |
           npm install --no-save playwright@1.56.1
-          npx playwright install chromium
+          npx playwright install --with-deps chromium
           SHOTS=fastlane/screenshots/en-US; rm -rf fastlane/screenshots; mkdir -p "$SHOTS"
-          node scripts/store-frames.js --in "$RUNNER_TEMP/raw" --out "$SHOTS"
+          node scripts/store-frames.mjs --in "$RUNNER_TEMP/raw" --out "$SHOTS"
           # The sizes App Store Connect takes: 6.9-inch iPhone 1320 x 2868, 13-inch iPad 2064 x 2752.
           for F in "$SHOTS"/*.png; do
             S="$(sips -g pixelWidth -g pixelHeight "$F" | awk '/pixel/ {printf "%s ", $2}')"
