@@ -73,15 +73,12 @@ async function build(cfg) {
   const phone = cfg.kind === 'iphone';
   const head = el('div', `position:absolute;left:${phone ? 70 : 140}px;right:${phone ? 70 : 140}px;top:${phone ? 150 : 160}px;text-align:center;color:#fff`, root);
   el('div', `font:600 ${phone ? 38 : 46}px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:rgba(214,230,250,.82)`, head, cfg.frame.eyebrow.replace('&', '&amp;'));
-  // Two lines on iPhone, one on iPad; a line that would run wider than the frame is set a little smaller
-  // instead of wrapping, so every frame's device sits at the same height.
-  const fit = (e, size) => { e.style.fontSize = size + 'px'; for (const l of e.children) { while (l.scrollWidth > head.clientWidth && size > 40) { size -= 2; e.style.fontSize = size + 'px'; } } };
-  const title = el('div', `font-family:Fraunces,serif;font-weight:560;font-variation-settings:"opsz" 72;line-height:1.04;letter-spacing:-.004em;margin-top:${phone ? 28 : 34}px`, head,
+  // Two lines on iPhone, one on iPad, never wrapped, at the one headline size and the one subhead size the
+  // whole set shares (sizes(), below), so every frame's words and device sit at the same heights.
+  el('div', `font-family:Fraunces,serif;font-weight:560;font-variation-settings:"opsz" 72;font-size:${cfg.sizes.head}px;line-height:1.04;letter-spacing:-.004em;margin-top:${phone ? 28 : 34}px`, head,
     (phone ? cfg.frame.head : [cfg.frame.head.join(' ')]).map((l) => `<div style="white-space:nowrap;width:max-content;margin:0 auto">${l}</div>`).join(''));
-  fit(title, phone ? 124 : 150);
-  const sub = el('div', `font:600 1px/1.2 var(--sans);letter-spacing:-.01em;color:rgba(255,255,255,.9);margin-top:${phone ? 32 : 36}px`, head,
+  el('div', `font:600 ${cfg.sizes.sub}px/1.2 var(--sans);letter-spacing:-.01em;color:rgba(255,255,255,.9);margin-top:${phone ? 32 : 36}px`, head,
     `<div style="white-space:nowrap;width:max-content;margin:0 auto">${cfg.frame.sub}</div>`);
-  fit(sub, phone ? 52 : 62);
 
   // The device: body (rim), bezel, screen at the capture's own pixels scaled to fit, buttons, island.
   function device(left, top, capW, capH) {
@@ -277,6 +274,42 @@ async function build(cfg) {
   }
 }
 
+// The page every frame is drawn in: Fraunces for the headlines, the system font (SF Pro on macOS; Inter
+// SemiBold where there is no SF, as on Linux) for everything else.
+const PAGE = `<!doctype html><html><head><meta charset="utf-8"><style>
+  @font-face { font-family: Fraunces; src: url(${dataURL(font)}) format("woff2"); font-weight: 100 900; }
+  :root { --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, sans-serif; }
+  * { box-sizing: border-box; } body { -webkit-font-smoothing: antialiased; }
+  img { display: block; }</style></head><body></body></html>`;
+
+// One headline size and one subhead size for the whole set of a device: the largest (from 124 px on iPhone,
+// 150 on iPad, and 52 / 62 for the subhead, in 2 px steps) at which every line of every frame fits the
+// caption block (1180 px on iPhone, 1784 on iPad) without wrapping. A headline never goes below 96 px:
+// one that would has too many words.
+async function sizes(page, kind) {
+  const phone = kind === 'iphone', frames = STORY.filter((f) => !(f.phoneOnly && !phone));
+  await page.setContent(PAGE);
+  return page.evaluate(({ box, heads, subs, head, sub, floor }) => {
+    const line = (css, text) => { const e = document.createElement('div'); e.style.cssText = `position:absolute;white-space:nowrap;width:max-content;${css}`; e.textContent = text; document.body.appendChild(e); return e; };
+    const fit = (css, lines, max, min) => {
+      const els = lines.map((t) => line(css, t));
+      let size = max;
+      const wide = () => els.some((e) => { e.style.fontSize = size + 'px'; return e.getBoundingClientRect().width > box; });
+      while (wide() && size > min) size -= 2;
+      if (wide()) throw new Error(`"${lines.find((t, i) => els[i].getBoundingClientRect().width > box)}" is wider than ${box} px even at ${size} px`);
+      return size;
+    };
+    return document.fonts.load('560 100px Fraunces').then(() => document.fonts.ready).then(() => ({
+      head: fit('font-family:Fraunces,serif;font-weight:560;font-variation-settings:"opsz" 72;line-height:1.04;letter-spacing:-.004em', heads, head, floor),
+      sub: fit('font-family:var(--sans);font-weight:600;line-height:1.2;letter-spacing:-.01em', subs, sub, 24),
+    }));
+  }, {
+    box: DEVICES[kind].W - 2 * (phone ? 70 : 140),
+    heads: frames.flatMap((f) => (phone ? f.head : [f.head.join(' ')])), subs: frames.map((f) => f.sub),
+    head: phone ? 124 : 150, sub: phone ? 52 : 62, floor: 96,
+  });
+}
+
 (async () => {
   const has = (f) => fs.existsSync(path.join(IN, f));
   fs.mkdirSync(OUT, { recursive: true });
@@ -287,6 +320,8 @@ async function build(cfg) {
     const D = DEVICES[kind];
     const page = await browser.newPage({ viewport: { width: D.W, height: D.H }, deviceScaleFactor: 1 });
     page.on('console', (m) => console.log(`  [${kind}] ${m.text()}`));
+    const size = await sizes(page, kind);
+    console.log(`${kind}: headline ${size.head} px, subhead ${size.sub} px`);
     let n = 1;
     for (const frame of STORY) {
       if (frame.phoneOnly && kind !== 'iphone') continue;
@@ -305,13 +340,8 @@ async function build(cfg) {
         images.shot = dataURL(path.join(IN, file));
         seeds = (SEEDS[kind] || {})[id] || null;
       }
-      const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-        @font-face { font-family: Fraunces; src: url(${dataURL(font)}) format("woff2"); font-weight: 100 900; }
-        :root { --sans: -apple-system, "SF Pro Display", "SF Pro Text", Inter, "Helvetica Neue", Arial, sans-serif; }
-        * { box-sizing: border-box; } body { -webkit-font-smoothing: antialiased; }
-        img { display: block; }</style></head><body></body></html>`;
-      await page.setContent(html);
-      await page.evaluate(build, { kind, device: D, frame, images, seeds, date: DATE });
+      await page.setContent(PAGE);
+      await page.evaluate(build, { kind, device: D, frame, images, seeds, sizes: size, date: DATE });
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(200);
       const out = path.join(OUT, `${kind}-${n}-${frame.id}.png`);
