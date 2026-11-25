@@ -16,8 +16,8 @@ before it can apply for production.
   order: the compass (Extra Large, `android-17-store-xl`), place and time (Small, `android-18-store-small`), elevation
   (Medium, `android-16-store`), the sun and moon (Large, `android-19-store-large`), the map (`android-11-map-sheet`)
   and night mode (`android-20-store-night`). The status and navigation bars are cropped off and the sides padded
-  with the app's black, because Play allows at most 2:1. There's no Android widget picture on a Home Screen yet, so
-  the widgets aren't shown.
+  with the app's black, because Play allows at most 2:1. There's no picture of the Android widget on a home
+  screen yet, so the widgets aren't shown.
 
 ## How it gets to Play
 
