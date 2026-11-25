@@ -203,6 +203,28 @@ async function drawScreen(cfg) {
     return null;
   }
 
+  if (f.map) {
+    // iPad: the map is a sheet with the app dimmed behind it, and the dimmed app's own map tile (with a second Maps
+    // credit) shows as a strip below the sheet. Cover that strip, between the sheet's edges, with the screen's black,
+    // so only the sheet and its own credit show.
+    const px = pixels(shot), at = (x, y) => { const i = (y * capW + x) * 4; return [px.data[i], px.data[i + 1], px.data[i + 2]]; };
+    const lit = (c) => Math.max(...c) > 12;
+    const midY = Math.round(capH * 0.6);
+    let x0 = 0; while (x0 < capW / 2 && !lit(at(x0, midY))) x0++;
+    let x1 = capW - 1; while (x1 > capW / 2 && !lit(at(x1, midY))) x1--;
+    // The sheet's bottom: going down several columns, the first row much darker than the sheet just above it.
+    const bottoms = [0.3, 0.4, 0.5, 0.6, 0.7].map((fx) => {
+      const x = Math.round(x0 + (x1 - x0) * fx), ref = at(x, Math.round(capH * 0.85));
+      for (let y = Math.round(capH * 0.85); y < capH; y++) {
+        const c = at(x, y); if (c[0] + c[1] + c[2] < 0.65 * (ref[0] + ref[1] + ref[2])) return y;
+      }
+      return capH;
+    }).sort((a, b) => a - b);
+    const bottom = bottoms[2];
+    if (bottom < capH) el('div', `position:absolute;left:${x0}px;top:${bottom}px;width:${x1 - x0 + 1}px;height:${capH - bottom}px;background:#000`, root);
+    return null;
+  }
+
   if (f.lift && cfg.seeds) {
     const px = pixels(shot), parts = [];
     for (const name of f.lift) {
