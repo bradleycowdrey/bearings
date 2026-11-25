@@ -18,6 +18,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Bearings">
 
+        <!-- Portrait on phones. Android 16 ignores the lock on large screens (600 dp and wider): there the layout
+             planner's tablet and two-pane layouts apply, and the heading is remapped to the display's rotation. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
