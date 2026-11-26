@@ -1,0 +1,173 @@
+{
+ "app": "Bearings",
+ "slug": "bearings",
+ "sky": [
+  "#3D74B0",
+  "#14243B"
+ ],
+ "captures": "../../../build/store-raw",
+ "out": "../../../fastlane/screenshots/en-US",
+ "iphone": [
+  {
+   "id": "compass",
+   "eyebrow": "Compass",
+   "headline": [
+    "Get your",
+    "bearings."
+   ],
+   "subhead": "A clear compass, true north or magnetic.",
+   "capture": "iphone-xl.png"
+  },
+  {
+   "id": "place",
+   "eyebrow": "Place & time",
+   "headline": [
+    "Know where.",
+    "Know when."
+   ],
+   "subhead": "Where you are, the date and the time.",
+   "capture": "iphone-small.png",
+   "lift": [
+    [
+     0.5,
+     0.092
+    ]
+   ]
+  },
+  {
+   "id": "elevation",
+   "eyebrow": "Altitude",
+   "headline": [
+    "Elevation in",
+    "feet and metres."
+   ],
+   "subhead": "With air pressure, from GPS or terrain.",
+   "capture": "iphone-medium.png",
+   "lift": [
+    [
+     0.73,
+     0.79
+    ]
+   ]
+  },
+  {
+   "id": "sky",
+   "eyebrow": "Sun & moon",
+   "headline": [
+    "Your sky,",
+    "on one screen."
+   ],
+   "subhead": "Sunrise, sunset and the moon’s phase.",
+   "capture": "iphone-large-night.png",
+   "lift": [
+    [
+     0.18,
+     0.915
+    ],
+    [
+     0.5,
+     0.915
+    ]
+   ]
+  },
+  {
+   "id": "map",
+   "eyebrow": "Map",
+   "headline": [
+    "See which",
+    "way you face."
+   ],
+   "subhead": "A map with your heading on it.",
+   "capture": "iphone-map.png",
+   "zoom": {
+    "x": 0.5,
+    "y": 0.532,
+    "scale": 1.2,
+    "below": 0.1235,
+    "keep": [
+     [
+      0.87,
+      0.13,
+      0.13,
+      0.19
+     ],
+     [
+      0,
+      0.968,
+      0.25,
+      0.032,
+      0.035,
+      0.935
+     ]
+    ]
+   }
+  },
+  {
+   "id": "widgets",
+   "eyebrow": "Widgets",
+   "headline": [
+    "Bearings,",
+    "at a glance."
+   ],
+   "subhead": "On the Home Screen and the Lock Screen.",
+   "widgets": [
+    {
+     "file": "widget-large.png",
+     "scale": 1.42
+    },
+    [
+     {
+      "file": "widget-lock-rectangular.png",
+      "scale": 2
+     },
+     {
+      "file": "widget-lock-circular.png",
+      "scale": 2
+     }
+    ]
+   ]
+  }
+ ],
+ "ipad": [
+  {
+   "id": "compass",
+   "eyebrow": "Compass",
+   "headline": [
+    "Get your",
+    "bearings."
+   ],
+   "subhead": "A clear compass, true north or magnetic.",
+   "capture": "ipad-xl.png"
+  },
+  {
+   "id": "elevation",
+   "eyebrow": "Altitude",
+   "headline": [
+    "Elevation in",
+    "feet and metres."
+   ],
+   "subhead": "With air pressure, from GPS or terrain.",
+   "capture": "ipad-medium.png"
+  },
+  {
+   "id": "sky",
+   "eyebrow": "Sun & moon",
+   "headline": [
+    "Your sky,",
+    "on one screen."
+   ],
+   "subhead": "Sunrise, sunset and the moon’s phase.",
+   "capture": "ipad-large-night.png"
+  },
+  {
+   "id": "map",
+   "eyebrow": "Map",
+   "headline": [
+    "See which",
+    "way you face."
+   ],
+   "subhead": "A map with your heading on it.",
+   "capture": "ipad-map.png"
+  }
+ ]
+}

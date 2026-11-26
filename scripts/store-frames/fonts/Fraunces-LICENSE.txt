@@ -1,9 +1,6 @@
-The two fonts in this folder set the App Store screenshots (store-frame.mjs). They are not part of the app.
+Copyright 2020 The Fraunces Project Authors (github.com/undercasetype/Fraunces) Fraunces-Italic[SOFT,WONK,opsz,wght].ttf: Copyright 2020 The Fraunces Project Authors (github.com/undercasetype/Fraunces)
 
-fraunces.woff2         Fraunces, Copyright 2020 The Fraunces Project Authors (github.com/undercasetype/Fraunces)
-instrument-sans.woff2  Instrument Sans, Copyright 2022 The Instrument Sans Project Authors (github.com/Instrument/instrument-sans)
-
-Both are licensed under the SIL Open Font License, Version 1.1.
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
 
