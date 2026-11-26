@@ -1597,11 +1597,16 @@ struct MainView: View {
     /// baseline), with the same control cluster and speed chip as the map card below the bar, and the
     /// attribution in the bottom safe area. Full height on iPhone; a page-sized sheet on iPad.
     private var mapSheet: some View {
-        MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
-                   speed: nav.speed.map { Geo.speedText($0, feet: nav.feet) }, dimmed: nav.nightMode,
-                   bleed: true, topInset: Self.sheetBarHeight)
-            // The map runs to the sheet's bottom edge; Apple Maps keeps its logo and Legal link in the safe area.
-            .ignoresSafeArea(edges: .bottom)
+        GeometryReader { geo in
+            MapSnippet(fix: nav.fix, heading: nav.heading, followHeading: $nav.followHeading, satellite: nav.satellite,
+                       speed: nav.speed.map { Geo.speedText($0, feet: nav.feet) }, dimmed: nav.nightMode,
+                       bleed: true, topInset: Self.sheetBarHeight, bottomInset: geo.safeAreaInsets.bottom)
+                // The map runs to the sheet's bottom edge. Ignoring the safe area takes it from the map too, which
+                // put Apple's logo and Legal link at the edge, under the screen's rounded corner; the sheet's
+                // bottom safe area (34 on iPhone, none under iPad's floating page sheet) goes back to the map
+                // as `bottomInset`, so they sit above the home indicator.
+                .ignoresSafeArea(edges: .bottom)
+        }
             .overlay(alignment: .top) {
                 sheetBar("Map") { nav.mapSheet = false }
                     .padding(.bottom, 4)

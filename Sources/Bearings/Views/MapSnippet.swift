@@ -7,7 +7,8 @@ import SwiftUI
 /// top-trailing corner: +, −, follow heading, open in Maps, or on a card under 192 tall +, − and ⋯ (follow
 /// and open in Maps in its menu), in a row on a card under 148 (Small's map tile). Your speed shows top left while you're moving; the bottom stays clear for
 /// Apple Maps' logo and Legal link. In the map sheet (`bleed`) it runs edge to edge under the sheet's
-/// translucent bar (`topInset`). As a **thumbnail** (the Map tile, C3.4 #9) it is a still picture
+/// translucent bar (`topInset`) and down under the home indicator, with the logo and Legal link kept above
+/// it (`bottomInset`). As a **thumbnail** (the Map tile, C3.4 #9) it is a still picture
 /// (MKMapSnapshotter) north up with your dot and heading cone, no controls and no gestures, on a 24 pt
 /// bottom scrim (clear to black at 65%) with "MAP" and an expand glyph leading and the Maps attribution trailing
 /// (the snapshot's own baked-in logo is cropped off, so it never sits under "MAP"); the
@@ -30,6 +31,9 @@ struct MapSnippet: View {
     /// The map sheet: the height of the translucent bar over the map's top; the controls and the speed
     /// sit under it.
     var topInset: CGFloat = 0
+    /// The map sheet: the sheet's bottom safe area (the home indicator), which the map runs under. Apple
+    /// Maps sets its logo and Legal link this far up, clear of the screen's rounded corners.
+    var bottomInset: CGFloat = 0
     @Environment(\.openURL) private var openURL
     /// The column's type scale (Text Size), so the speed and caption grow with the rest.
     @Environment(\.uiScale) private var k
@@ -73,6 +77,11 @@ struct MapSnippet: View {
                     .annotationTitles(.hidden)
                 }
                 .mapStyle(satellite ? MapStyle.imagery(elevation: .flat) : MapStyle.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+                // The map draws under its whole frame but sets its logo and Legal link inside its safe area.
+                // The sheet runs the map under the home indicator (ignoresSafeArea), which leaves it no bottom
+                // safe area, so the credit sat at the very edge, under the screen's rounded corner. This gives
+                // that safe area back to the map alone; nothing else in the stack moves.
+                .safeAreaPadding(.bottom, bottomInset)
                 .grayscale(dimmed ? 1 : 0)
                 .colorMultiply(dimmed ? Color(white: Self.nightBrightness) : Color.white)
                 .onAppear { move(to: here, animated: false) }

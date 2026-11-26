@@ -156,7 +156,10 @@ on its side):
 
 - **Apple:** `MainView.swift` reads `LayoutPlan.plan(...)` from the root `GeometryReader`. The Map tile's
   snapshot is drawn 40 taller at each end and cropped, so Apple's baked-in logo and Legal link never sit under "MAP" (the
-  caption band keeps the Apple-logo "Maps" attribution). `\.flatDetails`
+  caption band keeps the Apple-logo "Maps" attribution). The map sheet runs the map under the home indicator
+  (`ignoresSafeArea`), which also takes the map's bottom safe area away; `MapSnippet`'s `bottomInset` gives it
+  back to the `Map` alone (`safeAreaPadding`), so Apple's logo and Legal link sit above the home indicator, clear
+  of the screen's rounded corners (34 pt on iPhone; 0 under iPad's floating page sheet). `\.flatDetails`
   (set by `Mac/SelfTest.swift`) draws plain stacks, which ImageRenderer can draw. `PhoneLaunch`
   (`BearingsPhoneApp.swift`) and `BearingsMacApp.swift` read the launch arguments.
 - **Android:** `MainScreen.kt` uses `BoxWithConstraints` and `LayoutPlan.plan(...)`; `MainActivity.kt` reads
