@@ -3,11 +3,13 @@ name: App Store listing
 # Takes the App Store screenshots (6.9-inch iPhone and 13-inch iPad) in the Simulator, each launched with
 # --store (the sample place without its Sample pill, on today's date, so the location bar agrees with the
 # date in the status bar): the layouts the listing's story needs and the map sheet, plus, on iPhone, the
-# widgets as the self-test draws them. scripts/store-frames.mjs then composes each picture with the Cowdrey
-# family template (scripts/app-store/store-frame.mjs, a copy of design/app-store/store-frame.mjs in
-# bradleycowdrey/cowdrey-one): a Fraunces headline and an Instrument Sans line above the capture in a plain
-# device, on Bearings' blue (6 iPhone pictures, 4 iPad). The raw captures are kept apart (raw/);
-# the composed screenshots are what is uploaded. If asked, it then uploads them with the listing in
+# widgets as the self-test draws them. The Sun & moon capture is taken in night mode (-nightMode YES, this launch
+# only), so it does not look like its neighbours at thumbnail size. scripts/store-frames/store-frames.js (the
+# Cowdrey family compositor, with Bearings' frames in scripts/store-frames/apps/bearings.json) then sets each
+# capture on the family standard: an eyebrow, a Fraunces headline and an Inter line above the capture in a drawn
+# iPhone or iPad on Bearings' sky, with the lifted tiles, the zoomed map and the floating widgets (6 iPhone
+# pictures, 4 iPad), and checks every picture's type against the standard (measure.json). The raw captures are
+# kept apart (raw/); the composed screenshots are what is uploaded. If asked, it then uploads them with the listing in
 # fastlane/metadata: name, subtitle, description, keywords, links,
 # categories, plus content rights, age rating, price (Free) and availability. Never uploads a build
 # and never submits for review. The screenshots, and the raw captures in raw/, also go to the
@@ -51,7 +53,7 @@ jobs:
               for dev in d[rt]:
                   if re.match(sys.argv[1], dev["name"]): print(dev["udid"]); sys.exit()' "$1"
           }
-          shoot() {   # $1 device, $2 prefix, then one name:layout per capture (layout "map" = the map sheet)
+          shoot() {   # $1 device, $2 prefix, then one name:layout[:night] per capture (layout "map" = the map sheet)
             D="$1"; P="$2"; shift 2
             xcrun simctl boot "$D"; xcrun simctl bootstatus "$D" -b
             # A fresh Simulator shows first-boot banners (Apple Intelligence and the like) for a while;
@@ -65,8 +67,11 @@ jobs:
             # --store is the sample without its Sample pill and on today's date; layout and format are named
             # so a stored choice can't change them.
             for shot in "$@"; do
-              NAME="${shot%%:*}"; LAYOUT="${shot#*:}"
+              NAME="${shot%%:*}"; LAYOUT="${shot#*:}"; NIGHT="-nightMode NO"
+              case "$LAYOUT" in *:night) LAYOUT="${LAYOUT%:night}"; NIGHT="-nightMode YES" ;; esac
               if [ "$LAYOUT" = map ]; then args="--store --layout medium --format dd --map-sheet"; else args="--store --layout $LAYOUT --format dd"; fi
+              # Night mode as a launch argument (UserDefaults' argument domain): this launch only, never saved.
+              args="$args $NIGHT"
               F="$RAW/$P-$NAME.png"
               # A frame taken before the app has drawn is nearly empty (a small file): relaunch and retake it.
               for try in 1 2 3; do
@@ -80,10 +85,10 @@ jobs:
             done
             xcrun simctl terminate "$D" $ID 2>/dev/null || true
           }
-          # What scripts/store-frames.mjs composes: Extra Large (Compass), Small (Place & time, iPhone only),
-          # Medium (Elevation), Large (Sun & moon) and the map sheet (Map).
+          # What scripts/store-frames/apps/bearings.json frames: Extra Large (Compass), Small (Place & time, iPhone
+          # only), Medium (Altitude), Large in night mode (Sun & moon) and the map sheet (Map).
           PHONE="$(pick 'iPhone 1[6-9] Pro Max$')"
-          shoot "$PHONE" iphone xl:extraLarge small:small medium:medium large:large map:map
+          shoot "$PHONE" iphone xl:extraLarge small:small medium:medium large-night:large:night map:map
           # The widgets for the iPhone's last frame, drawn by the self-test as in the iPhone workflow (ios.yml),
           # as the store sample. Without them the iPhone set has 5 frames.
           DOCS="$(xcrun simctl get_app_container "$PHONE" $ID data)/Documents"; mkdir -p "$DOCS"; rm -f "$DOCS/report.txt"
@@ -92,21 +97,34 @@ jobs:
           sleep 2
           for W in widget-large widget-lock-rectangular widget-lock-circular; do
             # store-widget-*: the store sample (Maroon Bells, today at 9:41), so the widgets agree with the other frames.
-            cp "$DOCS/store-$W.png" "$RAW/$W.png" || echo "::warning::The self-test drew no store-$W.png, so there is no widgets frame"
+            cp "$DOCS/store-$W.png" "$RAW/$W.png" || { echo "::error::The self-test drew no store-$W.png for the widgets frame"; exit 1; }
           done
           xcrun simctl terminate "$PHONE" $ID 2>/dev/null || true
           xcrun simctl shutdown "$PHONE" || true
           PAD="$(pick 'iPad Pro 13')"
-          shoot "$PAD" ipad xl:extraLarge medium:medium large:large map:map
+          shoot "$PAD" ipad xl:extraLarge medium:medium large-night:large:night map:map
           xcrun simctl shutdown "$PAD" || true
           sips -g pixelWidth -g pixelHeight "$RAW"/*.png
           [ "$(ls "$RAW"/iphone-*.png "$RAW"/ipad-*.png | wc -l)" -eq 9 ] || { echo "::error::Expected 9 raw screenshots"; exit 1; }
-      - name: Compose the screenshots (the Cowdrey family template)
+      - name: Compose the screenshots (the Cowdrey family standard)
         run: |
           npm install --no-save playwright@1.56.1
           npx playwright install --with-deps chromium
           SHOTS=fastlane/screenshots/en-US; rm -rf fastlane/screenshots; mkdir -p "$SHOTS"
-          node scripts/store-frames.mjs --in "$RUNNER_TEMP/raw" --out "$SHOTS"
+          node scripts/store-frames/store-frames.js --config scripts/store-frames/apps/bearings.json --captures "$RUNNER_TEMP/raw" --out "$SHOTS"
+          # The type as drawn must be the standard's: eyebrow, headline and subhead sizes, the eyebrow's baseline,
+          # the headline's top and the device's top (iPhone 39/108/51, 184/213/640; iPad 52/144/68, 204/244/600).
+          mv "$SHOTS/measure.json" "$RUNNER_TEMP/measure.json"
+          node -e '
+            const S = { iphone: [39, 108, 51, 184, 213, 640, 2], ipad: [52, 144, 68, 204, 244, 600, 1] };
+            let bad = 0;
+            for (const f of require(process.argv[1])) {
+              const got = [f.eyebrow.fontSize, f.headline.fontSize, f.subhead.fontSize, f.eyebrowBaseline, f.headline.top, f.deviceTop, f.headline.lines];
+              const ok = JSON.stringify(got) === JSON.stringify(S[f.kind]);
+              if (!ok) bad++;
+              console.log(`${ok ? "ok" : "::error::off the standard:"} ${f.file} ${got.join("/")}`);
+            }
+            process.exit(bad ? 1 : 0);' "$RUNNER_TEMP/measure.json"
           # The sizes App Store Connect takes: 6.9-inch iPhone 1320 x 2868, 13-inch iPad 2064 x 2752.
           for F in "$SHOTS"/*.png; do
             S="$(sips -g pixelWidth -g pixelHeight "$F" | awk '/pixel/ {printf "%s ", $2}')"
@@ -117,11 +135,11 @@ jobs:
             esac || { echo "::error::$F is $S"; exit 1; }
           done
           NP=$(ls "$SHOTS"/iphone-*.png | wc -l); NI=$(ls "$SHOTS"/ipad-*.png | wc -l)
-          [ "$NP" -ge 5 ] && [ "$NI" -eq 4 ] || { echo "::error::Expected 6 (or 5) iPhone and 4 iPad screenshots, got $NP and $NI"; exit 1; }
+          [ "$NP" -eq 6 ] && [ "$NI" -eq 4 ] || { echo "::error::Expected 6 iPhone and 4 iPad screenshots, got $NP and $NI"; exit 1; }
           ls -l "$SHOTS"
       - name: Publish the screenshots for review (ci-appstore branch)
         run: |
-          D="$RUNNER_TEMP/pub"; mkdir -p "$D/raw"; cp fastlane/screenshots/en-US/*.png "$D/"; cp "$RUNNER_TEMP"/raw/*.png "$D/raw/"
+          D="$RUNNER_TEMP/pub"; mkdir -p "$D/raw"; cp fastlane/screenshots/en-US/*.png "$D/"; cp "$RUNNER_TEMP"/raw/*.png "$D/raw/"; cp "$RUNNER_TEMP/measure.json" "$D/"
           cd "$D"; B="ci-appstore"; [ "$GITHUB_REF" = refs/heads/main ] || B="ci-appstore-preview"; git init -q -b "$B"; git add .
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "App Store screenshots for ${GITHUB_SHA::7}"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" "$B"
